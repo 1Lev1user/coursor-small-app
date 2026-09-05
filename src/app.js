@@ -206,6 +206,41 @@ function setError(field, message) {
     field.control.setAttribute('aria-describedby', field.error.id);
 }
 
+const DUE_FOCUSABLE = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function attachDueTrap(overlay, onEscape) {
+    const nodes = [...overlay.querySelectorAll(DUE_FOCUSABLE)];
+    overlay.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            onEscape();
+            return;
+        }
+        if (event.key !== 'Tab' || nodes.length === 0) {
+            if (event.key === 'Tab') event.preventDefault();
+            return;
+        }
+        const current = nodes.indexOf(document.activeElement);
+        let next;
+        if (current === -1) {
+            next = event.shiftKey ? nodes.length - 1 : 0;
+        } else if (event.shiftKey) {
+            next = current === 0 ? nodes.length - 1 : current - 1;
+        } else {
+            next = current === nodes.length - 1 ? 0 : current + 1;
+        }
+        event.preventDefault();
+        nodes[next].focus();
+    });
+}
+
 function renderDuePrompt(subscription) {
     removeDueOverlay();
 
@@ -266,6 +301,11 @@ function renderDuePrompt(subscription) {
         card.append(title, name, meta, confirmBox);
         overlay.append(card);
         document.body.append(overlay);
+        attachDueTrap(overlay, () => {
+            if (!duePrompt.deleting) return;
+            duePrompt.deleting = false;
+            render();
+        });
         confirmDelete.focus();
         return;
     }
@@ -318,6 +358,11 @@ function renderDuePrompt(subscription) {
     card.append(title, name, meta, form);
     overlay.append(card);
     document.body.append(overlay);
+    attachDueTrap(overlay, () => {
+        if (!duePrompt.deleting) return;
+        duePrompt.deleting = false;
+        render();
+    });
     amountInput.focus();
     amountInput.select();
 }
