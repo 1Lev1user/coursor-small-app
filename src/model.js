@@ -191,8 +191,16 @@ export function normalise(raw) {
         const hasOthers = data.categories.some(
             (category) => category?.system !== true && /^others$/i.test(category?.name ?? ''),
         );
-        if (!hasOthers && data.settings.othersSeeded !== true) {
-            data.categories.push(newOthersCategory());
+        if (hasOthers) {
+            data.settings.othersSeeded = true;
+        } else if (data.settings.othersSeeded !== true) {
+            const uncategorisedIndex = data.categories.findIndex(
+                (category) => category?.id === UNCATEGORISED_ID,
+            );
+            const insertIndex = uncategorisedIndex === -1
+                ? data.categories.length
+                : uncategorisedIndex;
+            data.categories.splice(insertIndex, 0, newOthersCategory());
             data.settings.othersSeeded = true;
         }
 

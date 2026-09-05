@@ -339,6 +339,30 @@ test('normalise fills limitMode and limitCents and seeds Others when missing', (
     assert.equal(savings.limitCents, 10000);
     assert.ok(result.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
     assert.equal(result.data.settings.othersSeeded, true);
+    const uncategorisedIndex = result.data.categories.findIndex(({ id }) => id === UNCATEGORISED_ID);
+    assert.equal(result.data.categories[uncategorisedIndex - 1]?.id, 'others');
+    assert.equal(result.data.categories.at(-1)?.id, UNCATEGORISED_ID);
+});
+
+test('normalise backfills othersSeeded when Others already present', () => {
+    const raw = defaultData();
+    delete raw.settings.othersSeeded;
+
+    const result = normalise(raw);
+    assert.equal(result.ok, true);
+    assert.equal(result.data.settings.othersSeeded, true);
+    assert.equal(
+        result.data.categories.filter(({ name }) => name.toLowerCase() === 'others').length,
+        1,
+    );
+
+    const afterDelete = structuredClone(result.data);
+    afterDelete.categories = afterDelete.categories.filter(
+        ({ name }) => name.toLowerCase() !== 'others',
+    );
+    const second = normalise(afterDelete);
+    assert.equal(second.ok, true);
+    assert.ok(!second.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
 });
 
 test('normalise does not recreate Others if user deleted it', () => {
