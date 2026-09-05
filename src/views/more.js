@@ -55,6 +55,11 @@ let renameSubKey = null;
 let confirmIncomeCategoryId = null;
 let renameIncomeCategoryId = null;
 let confirmSubscriptionId = null;
+let editIncomeId = null;
+let confirmIncomeEntryId = null;
+let incomeEntryDraft = null;
+let incomeEntrySaveError = '';
+let focusIncomeEntryError = false;
 let focusId = null;
 
 function element(tagName, className, text) {
@@ -181,7 +186,300 @@ function closeTransientUi() {
     confirmIncomeCategoryId = null;
     renameIncomeCategoryId = null;
     confirmSubscriptionId = null;
+    editIncomeId = null;
+    confirmIncomeEntryId = null;
+    incomeEntryDraft = null;
+    incomeEntrySaveError = '';
+    focusIncomeEntryError = false;
     renameDrafts.clear();
+}
+
+function option(value, text) {
+    const node = document.createElement('option');
+    node.value = value;
+    node.textContent = text;
+    return node;
+}
+
+function openEditIncomeEntry(ctx, income) {
+    closeTransientUi();
+    editIncomeId = income.id;
+    incomeEntryDraft = {
+        incomeCategoryId: income.incomeCategoryId,
+        amount: formatPlain(income.amountCents),
+        note: typeof income.note === 'string' ? income.note : '',
+        date: income.date,
+    };
+    ctx.render();
+}
+
+function saveIncomeEntryEdit(ctx, income, fields) {
+    const draft = incomeEntryDraft;
+    incomeEntrySaveError = '';
+
+    for (const field of Object.values(fields)) {
+        clearError(field);
+    }
+
+    const incomeCategoryId = fields.category.control.value;
+    const amountCents = parseAmount(fields.amount.control.value);
+    const date = fields.date.control.value;
+    let firstInvalid = null;
+
+    draft.incomeCategoryId = incomeCategoryId;
+    draft.amount = fields.amount.control.value;
+    draft.note = fields.note.control.value;
+    draft.date = date;
+
+    if (incomeCategoryId === '') {
+        setError(fields.category, 'Choose an income category.');
+        firstInvalid ??= fields.category.control;
+    }
+    if (amountCents === null) {
+        setError(fields.amount, 'Enter an amount above zero, like 12.50 or 12,50.');
+        firstInvalid ??= fields.amount.control;
+    }
+    if (monthKeyOf(date) === null) {
+        setError(fields.date, 'Choose a date.');
+        firstInvalid ??= fields.date.control;
+    }
+
+    if (firstInvalid !== null) {
+        firstInvalid.focus();
+        return;
+    }
+
+    const snapshot = {
+        incomeCategoryId: income.incomeCategoryId,
+        amountCents: income.amountCents,
+        note: income.note,
+        date: income.date,
+    };
+    const oldMonthKey = monthKeyOf(snapshot.date);
+    const newMonthKey = monthKeyOf(date);
+    const monthChanged = newMonthKey !== oldMonthKey;
+    const planWasAlreadyFrozen = Object.hasOwn(ctx.data.monthPlans, newMonthKey);
+
+    income.incomeCategoryId = incomeCategoryId;
+    income.amountCents = amountCents;
+    income.note = fields.note.control.value.trim();
+    income.date = date;
+    if (monthChanged) {
+        freezeMonthPlan(ctx.data, newMonthKey);
+    }
+
+    if (ctx.save() === false) {
+        income.incomeCategoryId = snapshot.incomeCategoryId;
+        income.amountCents = snapshot.amountCents;
+        income.note = snapshot.note;
+        income.date = snapshot.date;
+        if (monthChanged && !planWasAlreadyFrozen) {
+            delete ctx.data.monthPlans[newMonthKey];
+        }
+
+        incomeEntrySaveError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        focusIncomeEntryError = true;
+        ctx.render();
+        return;
+    }
+
+    closeTransientUi();
+    ctx.render();
+    ctx.toast('Updated');
+}
+
+function confirmDeleteIncomeEntry(ctx, income) {
+    const index = ctx.data.incomes.findIndex(({ id }) => id === income.id);
+    if (index === -1) {
+        closeTransientUi();
+        ctx.render();
+        return;
+    }
+
+    const [removed] = ctx.data.incomes.splice(index, 1);
+    if (ctx.save() === false) {
+        ctx.data.incomes.splice(index, 0, removed);
+        incomeEntrySaveError = 'Could not save to this device. Nothing was deleted \u2014 try again.';
+        focusIncomeEntryError = true;
+        ctx.render();
+        return;
+    }
+
+    closeTransientUi();
+    ctx.render();
+    ctx.toast('Deleted');
+}
+
+function renderIncomeEntryEditor(ctx, income) {
+    const draft = incomeEntryDraft;
+    if (!ctx.data.incomeCategories.some(({ id }) => id === draft.incomeCategoryId)) {
+        draft.incomeCategoryId = '';
+    }
+
+    const form = element('form', 'inline-form entry-edit-form');
+    form.noValidate = true;
+
+    const categorySelect = document.createElement('select');
+    categorySelect.required = true;
+    categorySelect.setAttribute('aria-required', 'true');
+    categorySelect.append(
+        option('', 'Choose a category'),
+        ...ctx.data.incomeCategories.map(({ id, name }) => option(id, name)),
+    );
+    categorySelect.value = draft.incomeCategoryId;
+    const categoryField = buildField(
+        `more-edit-inc-category-${income.id}`,
+        'Income category',
+        categorySelect,
+    );
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.placeholder = '12.50 or 12,50';
+    amountInput.required = true;
+    amountInput.setAttribute('aria-required', 'true');
+    amountInput.value = draft.amount;
+    const amountField = buildField(
+        `more-edit-inc-amount-${income.id}`,
+        'Amount (EUR)',
+        amountInput,
+    );
+
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.autocomplete = 'off';
+    noteInput.placeholder = 'Optional';
+    noteInput.value = draft.note;
+    const noteField = buildField(`more-edit-inc-note-${income.id}`, 'Note (optional)', noteInput);
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.required = true;
+    dateInput.setAttribute('aria-required', 'true');
+    dateInput.value = draft.date;
+    const dateField = buildField(`more-edit-inc-date-${income.id}`, 'Date', dateInput);
+
+    const formError = element('p', 'error-text');
+    formError.id = `more-edit-inc-form-error-${income.id}`;
+    formError.setAttribute('role', 'alert');
+    formError.tabIndex = -1;
+    formError.hidden = true;
+
+    categorySelect.addEventListener('change', () => {
+        draft.incomeCategoryId = categorySelect.value;
+        clearError(categoryField);
+    });
+    amountInput.addEventListener('input', () => {
+        draft.amount = amountInput.value;
+        clearError(amountField);
+    });
+    noteInput.addEventListener('input', () => {
+        draft.note = noteInput.value;
+    });
+    dateInput.addEventListener('change', () => {
+        draft.date = dateInput.value;
+        clearError(dateField);
+    });
+
+    const saveButton = element('button', 'btn btn-primary', 'Save');
+    saveButton.type = 'submit';
+    const cancelButton = actionButton('btn', 'Cancel', () => {
+        closeTransientUi();
+        ctx.render();
+    });
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveIncomeEntryEdit(ctx, income, {
+            category: categoryField,
+            amount: amountField,
+            note: noteField,
+            date: dateField,
+        });
+    });
+
+    form.append(
+        categoryField.wrapper,
+        amountField.wrapper,
+        noteField.wrapper,
+        dateField.wrapper,
+        formError,
+        saveButton,
+        cancelButton,
+    );
+
+    if (incomeEntrySaveError !== '') {
+        formError.textContent = incomeEntrySaveError;
+        formError.hidden = false;
+    }
+
+    if (focusIncomeEntryError) {
+        focusIncomeEntryError = false;
+        queueMicrotask(() => formError.focus());
+    }
+
+    return form;
+}
+
+function renderIncomeEntryRow(ctx, income) {
+    const wrap = element('div', 'entry-item');
+    const row = element('div', 'entry-row');
+    const description = element('div', 'entry-description');
+    description.append(
+        element('p', 'entry-name', incomeCategoryName(ctx.data, income.incomeCategoryId)),
+    );
+    if (typeof income.note === 'string' && income.note.trim() !== '') {
+        description.append(element('p', 'muted', income.note));
+    }
+    const values = element('div', 'entry-values');
+    values.append(element('time', 'muted', income.date));
+    values.append(element('p', 'entry-amount is-ok', `+${formatEuro(income.amountCents)}`));
+    row.append(description, values);
+    wrap.append(row);
+
+    if (editIncomeId === income.id) {
+        wrap.append(renderIncomeEntryEditor(ctx, income));
+        return wrap;
+    }
+
+    if (confirmIncomeEntryId === income.id) {
+        const box = renderConfirm(
+            'Delete this income? This cannot be undone.',
+            () => confirmDeleteIncomeEntry(ctx, income),
+            () => {
+                closeTransientUi();
+                ctx.render();
+            },
+        );
+        if (incomeEntrySaveError !== '') {
+            const formError = element('p', 'error-text', incomeEntrySaveError);
+            formError.setAttribute('role', 'alert');
+            formError.tabIndex = -1;
+            box.insertBefore(formError, box.children[1] ?? null);
+            if (focusIncomeEntryError) {
+                focusIncomeEntryError = false;
+                queueMicrotask(() => formError.focus());
+            }
+        }
+        wrap.append(box);
+        return wrap;
+    }
+
+    const actions = element('div', 'entry-actions');
+    actions.append(
+        actionButton('btn btn-ghost', 'Edit', () => {
+            openEditIncomeEntry(ctx, income);
+        }),
+        actionButton('btn btn-ghost-danger', 'Delete', () => {
+            closeTransientUi();
+            confirmIncomeEntryId = income.id;
+            ctx.render();
+        }),
+    );
+    wrap.append(actions);
+    return wrap;
 }
 
 function parseDayOfMonth(value) {
@@ -964,19 +1262,7 @@ function renderIncomeSection(ctx) {
             return 0;
         });
         for (const income of sorted) {
-            const row = element('div', 'entry-row');
-            const description = element('div', 'entry-description');
-            description.append(
-                element('p', 'entry-name', incomeCategoryName(ctx.data, income.incomeCategoryId)),
-            );
-            if (typeof income.note === 'string' && income.note.trim() !== '') {
-                description.append(element('p', 'muted', income.note));
-            }
-            const values = element('div', 'entry-values');
-            values.append(element('time', 'muted', income.date));
-            values.append(element('p', 'entry-amount is-ok', `+${formatEuro(income.amountCents)}`));
-            row.append(description, values);
-            list.append(row);
+            list.append(renderIncomeEntryRow(ctx, income));
         }
     }
     section.append(list);

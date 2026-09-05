@@ -248,19 +248,19 @@ body.is-setup .tabbar {
 }
 
 .category-item,
-.entry-row {
+.entry-item {
     padding-block: var(--s3);
     border-top: 1px solid var(--border);
 }
 
 .category-item:first-child,
-.entry-row:first-child {
+.entry-item:first-child {
     padding-top: 0;
     border-top: 0;
 }
 
 .category-item:last-child,
-.entry-row:last-child {
+.entry-item:last-child {
     padding-bottom: 0;
 }
 
@@ -316,6 +316,7 @@ body.is-setup .tabbar {
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--s3);
+    width: 100%;
 }
 
 .entry-description {
@@ -333,6 +334,26 @@ body.is-setup .tabbar {
 
 .entry-values time {
     display: block;
+}
+
+.entry-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    width: 100%;
+    margin-top: var(--s2);
+}
+
+.entry-edit-form {
+    width: 100%;
+}
+
+.entry-edit-form .error-text[role='alert'] {
+    flex: 1 1 100%;
+}
+
+.entry-edit-form .btn {
+    min-height: var(--tap);
 }
 
 .empty-state .btn {
