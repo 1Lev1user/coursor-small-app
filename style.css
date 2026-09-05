@@ -2,11 +2,11 @@
     --bg: #f3f4f6;
     --surface: #ffffff;
     --text: #1f2937;
-    --muted: #6b7280;
+    --muted: #4b5563;
     --accent: #2563eb;
     --accent-ink: #ffffff;
     --danger: #dc2626;
-    --ok: #059669;
+    --ok: #047857;
     --border: #e5e7eb;
 
     --radius: 14px;
@@ -306,7 +306,7 @@ body.is-setup .tabbar {
 }
 
 .pill-danger {
-    color: var(--danger);
+    color: #b91c1c;
     background: #fef2f2;
     border-color: #fecaca;
 }
