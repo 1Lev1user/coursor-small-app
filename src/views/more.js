@@ -115,7 +115,7 @@ function parsePercent(value) {
 
 function limitHelperText(amountRaw, limitUnit, budgetCents) {
     if (limitUnit === 'euro') {
-        const cents = parseAmount(amountRaw);
+        const cents = parseAmount(amountRaw, { allowZero: true });
         if (cents === null || budgetCents <= 0) {
             return '';
         }
@@ -123,7 +123,7 @@ function limitHelperText(amountRaw, limitUnit, budgetCents) {
     }
 
     const percent = parsePercent(amountRaw);
-    if (percent === null || budgetCents <= 0) {
+    if (percent === null || percent < 0 || budgetCents <= 0) {
         return '';
     }
     return formatEuro(euroCentsFromPercent(percent, budgetCents));
@@ -190,7 +190,7 @@ function buildLimitAmountField(id, labelText, draft, ctx, onInput) {
                 draft.amount = formatPlain(euroCentsFromPercent(percent, budget));
             }
         } else {
-            const cents = parseAmount(draft.amount);
+            const cents = parseAmount(draft.amount, { allowZero: true });
             if (cents !== null && budget > 0) {
                 draft.amount = String(Math.round(percentFromEuroCents(cents, budget) * 10) / 10);
             }
@@ -1782,9 +1782,13 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
             return;
         }
 
-        const cents = parseAmount(draft.amount);
+        const cents = parseAmount(draft.amount, {
+            allowZero: category.id === SAVINGS_ID,
+        });
         if (cents === null) {
-            draft.error = 'Enter a valid amount greater than zero.';
+            draft.error = category.id === SAVINGS_ID
+                ? 'Enter a valid amount of zero or more.'
+                : 'Enter a valid amount greater than zero.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;
@@ -1810,8 +1814,15 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
             return;
         }
 
-        if (category.id === SAVINGS_ID && percent > 100) {
-            draft.error = 'Savings cannot exceed 100% of the monthly spend budget.';
+        if (category.id === SAVINGS_ID && (percent < 0 || percent > 100)) {
+            draft.error = 'Savings must be from 0% to 100% of the monthly spend budget.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
+        if (percent < 0) {
+            draft.error = 'Enter a percentage of zero or more.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;

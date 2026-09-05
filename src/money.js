@@ -5,10 +5,12 @@ const euroFormatter = new Intl.NumberFormat('en-IE', {
 
 /**
  * Parses user typed money into integer cents. Returns null for invalid input.
+ * By default requires a positive amount; pass `{ allowZero: true }` to accept 0.
  * @param {unknown} input
+ * @param {{ allowZero?: boolean }} [options]
  * @returns {number | null}
  */
-export function parseAmount(input) {
+export function parseAmount(input, options = {}) {
     if (typeof input !== 'string') {
         return null;
     }
@@ -25,8 +27,9 @@ export function parseAmount(input) {
 
     const [wholePart, decimalPart = ''] = normalized.split('.');
     const cents = Number(wholePart) * 100 + Number(decimalPart.padEnd(2, '0'));
+    const allowZero = options.allowZero === true;
 
-    if (cents <= 0 || !Number.isSafeInteger(cents)) {
+    if (!Number.isSafeInteger(cents) || cents < 0 || (!allowZero && cents === 0)) {
         return null;
     }
 

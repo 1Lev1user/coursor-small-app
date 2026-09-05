@@ -63,6 +63,13 @@ test('parseAmount rejects zero with decimals', () => {
     assert.equal(parseAmount('0.00'), null);
 });
 
+test('parseAmount allowZero accepts zero and rejects negatives', () => {
+    assert.equal(parseAmount('0', { allowZero: true }), 0);
+    assert.equal(parseAmount('0.00', { allowZero: true }), 0);
+    assert.equal(parseAmount('0,50', { allowZero: true }), 50);
+    assert.equal(parseAmount('-1', { allowZero: true }), null);
+});
+
 test('parseAmount rejects multiple dot separators', () => {
     assert.equal(parseAmount('1.2.3'), null);
 });

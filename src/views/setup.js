@@ -71,7 +71,7 @@ function draftBudgetCents() {
 
 function savingsHelperText(amountRaw, unit, budgetCents) {
     if (unit === 'euro') {
-        const cents = parseAmount(amountRaw);
+        const cents = parseAmount(amountRaw, { allowZero: true });
         if (cents === null || budgetCents <= 0) {
             return '';
         }
@@ -79,7 +79,7 @@ function savingsHelperText(amountRaw, unit, budgetCents) {
     }
 
     const percent = parsePercent(amountRaw);
-    if (percent === null || budgetCents <= 0) {
+    if (percent === null || percent < 0 || budgetCents <= 0) {
         return '';
     }
     return formatEuro(euroCentsFromPercent(percent, budgetCents));
@@ -144,7 +144,7 @@ function buildSavingsField(ctx) {
                 draft.savingsAmount = formatPlain(euroCentsFromPercent(percent, budgetCents));
             }
         } else {
-            const cents = parseAmount(draft.savingsAmount);
+            const cents = parseAmount(draft.savingsAmount, { allowZero: true });
             if (cents !== null && budgetCents > 0) {
                 draft.savingsAmount = String(Math.round(percentFromEuroCents(cents, budgetCents) * 10) / 10);
             }
@@ -192,9 +192,9 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
             return;
         }
 
-        const cents = parseAmount(savingsRaw);
+        const cents = parseAmount(savingsRaw, { allowZero: true });
         if (cents === null) {
-            setError(savingsField, 'Enter a valid amount greater than zero.');
+            setError(savingsField, 'Enter a valid amount of zero or more.');
             savingsField.control.focus();
             return;
         }
@@ -264,10 +264,10 @@ export function render(root, ctx) {
     if (draft.savingsAmount === '') {
         const savings = savingsCategory(ctx.data);
         if (savings !== undefined) {
-            if (savings.limitMode === 'euro' && savings.limitCents > 0) {
+            if (savings.limitMode === 'euro') {
                 draft.savingsAmount = formatPlain(savings.limitCents);
                 draft.savingsUnit = 'euro';
-            } else if (savings.percent > 0) {
+            } else {
                 draft.savingsAmount = String(savings.percent);
                 draft.savingsUnit = 'percent';
             }
