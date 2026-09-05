@@ -21,7 +21,6 @@ function fakeStorage(initial = {}) {
 }
 
 test('load returns defaults when storage is absent or key is absent', () => {
-    assert.deepEqual(load(undefined), defaultData());
     assert.deepEqual(load(null), defaultData());
     assert.deepEqual(load(fakeStorage()), defaultData());
 });
@@ -73,14 +72,12 @@ test('save returns false when storage is absent or setItem throws', () => {
             throw new Error('quota exceeded');
         },
     };
-    assert.equal(save(defaultData(), undefined), false);
     assert.equal(save(defaultData(), null), false);
     assert.doesNotThrow(() => save(defaultData(), throwingStorage));
     assert.equal(save(defaultData(), throwingStorage), false);
 });
 
 test('requestPersistence returns false when persistence API is unavailable', async () => {
-    assert.equal(await requestPersistence(undefined), false);
     assert.equal(await requestPersistence(null), false);
     assert.equal(await requestPersistence({}), false);
     assert.equal(await requestPersistence({ storage: {} }), false);

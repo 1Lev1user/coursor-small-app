@@ -174,6 +174,31 @@ test('normalise fills optional fields, adds system category, and clones input', 
     assert.equal(raw.categories[0].name, 'Necessary expenses');
 });
 
+test('normalise canonicalises every protected system-category field', () => {
+    const corruptions = [
+        { name: 'Renamed safety net' },
+        { percent: 75 },
+        { pinned: false },
+        { system: false },
+    ];
+
+    for (const corruption of corruptions) {
+        const raw = defaultData();
+        Object.assign(
+            raw.categories.find(({ id }) => id === UNCATEGORISED_ID),
+            corruption,
+        );
+
+        const result = normalise(raw);
+
+        assert.equal(result.ok, true);
+        assert.deepEqual(
+            result.data.categories.find(({ id }) => id === UNCATEGORISED_ID),
+            expectedCategories.at(-1),
+        );
+    }
+});
+
 test('normalise never throws on hostile or uncloneable input', () => {
     const throwing = {};
     Object.defineProperty(throwing, 'version', {
@@ -222,6 +247,19 @@ test('deleteCategory refuses missing and system categories without mutation', ()
     assert.deepEqual(data, before);
 
     const result = deleteCategory(data, UNCATEGORISED_ID);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /cannot be deleted/i);
+    assert.deepEqual(data, before);
+});
+
+test('deleteCategory refuses the protected id even if its system flag is corrupt', () => {
+    const data = defaultData();
+    const category = data.categories.find(({ id }) => id === UNCATEGORISED_ID);
+    category.system = false;
+    const before = structuredClone(data);
+
+    const result = deleteCategory(data, UNCATEGORISED_ID);
+
     assert.equal(result.ok, false);
     assert.match(result.reason, /cannot be deleted/i);
     assert.deepEqual(data, before);

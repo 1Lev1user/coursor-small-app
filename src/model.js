@@ -138,8 +138,13 @@ export function normalise(raw) {
         if (!Object.hasOwn(data.settings, 'lastBackupISO')) {
             data.settings.lastBackupISO = null;
         }
-        if (!data.categories.some(({ id }) => id === UNCATEGORISED_ID)) {
+        const uncategorisedIndex = data.categories.findIndex(
+            (category) => category?.id === UNCATEGORISED_ID,
+        );
+        if (uncategorisedIndex === -1) {
             data.categories.push(newUncategorisedCategory());
+        } else {
+            data.categories[uncategorisedIndex] = newUncategorisedCategory();
         }
 
         return { ok: true, data };
@@ -154,7 +159,10 @@ export function deleteCategory(data, categoryId) {
         return { ok: false, reason: 'Category does not exist.' };
     }
 
-    if (data.categories[categoryIndex].system === true) {
+    if (
+        categoryId === UNCATEGORISED_ID
+        || data.categories[categoryIndex].system === true
+    ) {
         return { ok: false, reason: 'System category cannot be deleted.' };
     }
 
