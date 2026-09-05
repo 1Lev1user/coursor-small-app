@@ -3,21 +3,15 @@ import { currentMonthKey } from './months.js';
 import { render as renderAdd } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
+import { render as renderMore } from './views/more.js';
 
 const TOAST_MS = 2000;
-
-function comingNext(root) {
-    const message = document.createElement('p');
-    message.className = 'empty-state';
-    message.textContent = 'Coming next';
-    root.append(message);
-}
 
 const views = {
     add: { title: 'Add expense', render: renderAdd },
     month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: renderChart },
-    more: { title: 'More', render: comingNext },
+    more: { title: 'More', render: renderMore },
 };
 
 const app = {
