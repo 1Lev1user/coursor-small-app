@@ -1,9 +1,14 @@
-import { parseAmount, formatPlain } from '../money.js';
-import { canSetPinned, refreshCurrentMonthPlan } from '../budget.js';
+import { parseAmount, formatPlain, formatEuro } from '../money.js';
+import {
+    refreshCurrentMonthPlan,
+    percentFromEuroCents,
+    euroCentsFromPercent,
+} from '../budget.js';
 
 const draft = {
     budget: '',
-    savingsPercent: '',
+    savingsAmount: '',
+    savingsUnit: 'percent',
     income: '',
 };
 
@@ -56,6 +61,104 @@ function parsePercent(value) {
     return Number.isFinite(percent) ? percent : null;
 }
 
+function displayPercent(percent) {
+    return `${Math.round(percent * 10) / 10}%`;
+}
+
+function draftBudgetCents() {
+    return parseAmount(draft.budget) ?? 0;
+}
+
+function savingsHelperText(amountRaw, unit, budgetCents) {
+    if (unit === 'euro') {
+        const cents = parseAmount(amountRaw);
+        if (cents === null || budgetCents <= 0) {
+            return '';
+        }
+        return `${displayPercent(percentFromEuroCents(cents, budgetCents))} of budget`;
+    }
+
+    const percent = parsePercent(amountRaw);
+    if (percent === null || budgetCents <= 0) {
+        return '';
+    }
+    return formatEuro(euroCentsFromPercent(percent, budgetCents));
+}
+
+function buildSavingsField(ctx) {
+    const wrapper = element('div', 'field limit-amount-field');
+    const label = document.createElement('label');
+    label.htmlFor = 'setup-savings';
+    label.textContent = 'Savings';
+
+    const row = element('div', 'limit-amount-row');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.autocomplete = 'off';
+    input.placeholder = draft.savingsUnit === 'euro' ? '100' : '10';
+    input.value = draft.savingsAmount;
+    input.id = 'setup-savings';
+    input.required = true;
+
+    const unitBtn = element('button', 'unit-toggle', draft.savingsUnit === 'euro' ? '\u20AC' : '%');
+    unitBtn.type = 'button';
+    unitBtn.setAttribute(
+        'aria-label',
+        draft.savingsUnit === 'euro' ? 'Switch to percent' : 'Switch to euro',
+    );
+
+    const error = element('p', 'error-text');
+    error.id = 'setup-savings-error';
+    error.hidden = true;
+
+    const helper = element(
+        'p',
+        'muted',
+        savingsHelperText(draft.savingsAmount, draft.savingsUnit, draftBudgetCents()),
+    );
+
+    const field = { wrapper, control: input, error, helper, row, unitBtn };
+
+    input.addEventListener('input', () => {
+        draft.savingsAmount = input.value;
+        clearError(field);
+        helper.textContent = savingsHelperText(
+            draft.savingsAmount,
+            draft.savingsUnit,
+            draftBudgetCents(),
+        );
+    });
+
+    unitBtn.addEventListener('click', () => {
+        const budgetCents = draftBudgetCents();
+        const nextUnit = draft.savingsUnit === 'euro' ? 'percent' : 'euro';
+        if (nextUnit === 'euro' && budgetCents <= 0) {
+            setError(field, 'Enter a monthly spend budget first.');
+            return;
+        }
+
+        if (draft.savingsUnit === 'percent') {
+            const percent = parsePercent(draft.savingsAmount);
+            if (percent !== null && budgetCents > 0) {
+                draft.savingsAmount = formatPlain(euroCentsFromPercent(percent, budgetCents));
+            }
+        } else {
+            const cents = parseAmount(draft.savingsAmount);
+            if (cents !== null && budgetCents > 0) {
+                draft.savingsAmount = String(Math.round(percentFromEuroCents(cents, budgetCents) * 10) / 10);
+            }
+        }
+
+        draft.savingsUnit = nextUnit;
+        ctx.render();
+    });
+
+    row.append(input, unitBtn);
+    wrapper.append(label, row, error, helper);
+    return field;
+}
+
 function savingsCategory(data) {
     return data.categories.find(({ id }) => id === 'savings');
 }
@@ -66,7 +169,7 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
     clearError(incomeField);
 
     draft.budget = budgetField.control.value;
-    draft.savingsPercent = savingsField.control.value;
+    draft.savingsAmount = savingsField.control.value;
     draft.income = incomeField.control.value;
 
     const budgetCents = parseAmount(draft.budget);
@@ -76,18 +179,39 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
         return;
     }
 
-    const savingsPercent = parsePercent(draft.savingsPercent);
-    if (savingsPercent === null) {
-        setError(savingsField, 'Enter a savings percentage from 0 to 100.');
-        savingsField.control.focus();
-        return;
-    }
+    const savingsRaw = draft.savingsAmount;
+    const unit = draft.savingsUnit;
+    let limitMode;
+    let savingsPercent;
+    let savingsLimitCents;
 
-    const pinCheck = canSetPinned(ctx.data.categories, 'savings', savingsPercent);
-    if (pinCheck.ok !== true) {
-        setError(savingsField, pinCheck.reason);
-        savingsField.control.focus();
-        return;
+    if (unit === 'euro') {
+        if (budgetCents <= 0) {
+            setError(budgetField, 'Enter a valid amount greater than zero.');
+            budgetField.control.focus();
+            return;
+        }
+
+        const cents = parseAmount(savingsRaw);
+        if (cents === null) {
+            setError(savingsField, 'Enter a valid amount greater than zero.');
+            savingsField.control.focus();
+            return;
+        }
+
+        limitMode = 'euro';
+        savingsLimitCents = cents;
+        savingsPercent = percentFromEuroCents(cents, budgetCents);
+    } else {
+        savingsPercent = parsePercent(savingsRaw);
+        if (savingsPercent === null || savingsPercent < 0 || savingsPercent > 100) {
+            setError(savingsField, 'Enter a savings percentage from 0 to 100.');
+            savingsField.control.focus();
+            return;
+        }
+
+        limitMode = 'percent';
+        savingsLimitCents = euroCentsFromPercent(savingsPercent, budgetCents);
     }
 
     const incomeCents = parseAmount(draft.income);
@@ -107,12 +231,15 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     savings.pinned = true;
+    savings.limitMode = limitMode;
     savings.percent = savingsPercent;
+    savings.limitCents = savingsLimitCents;
     ctx.data.settings.setupComplete = true;
     refreshCurrentMonthPlan(ctx.data);
 
     draft.budget = '';
-    draft.savingsPercent = '';
+    draft.savingsAmount = '';
+    draft.savingsUnit = 'percent';
     draft.income = '';
 
     if (ctx.save() !== false) {
@@ -129,10 +256,16 @@ export function render(root, ctx) {
     if (draft.income === '' && settings.usualMonthlyIncomeCents > 0) {
         draft.income = formatPlain(settings.usualMonthlyIncomeCents);
     }
-    if (draft.savingsPercent === '') {
+    if (draft.savingsAmount === '') {
         const savings = savingsCategory(ctx.data);
-        if (savings !== undefined && savings.percent > 0) {
-            draft.savingsPercent = String(savings.percent);
+        if (savings !== undefined) {
+            if (savings.limitMode === 'euro' && savings.limitCents > 0) {
+                draft.savingsAmount = formatPlain(savings.limitCents);
+                draft.savingsUnit = 'euro';
+            } else if (savings.percent > 0) {
+                draft.savingsAmount = String(savings.percent);
+                draft.savingsUnit = 'percent';
+            }
         }
     }
 
@@ -157,22 +290,17 @@ export function render(root, ctx) {
     budgetInput.required = true;
     budgetInput.value = draft.budget;
     const budgetField = buildField('setup-budget', 'Monthly spend budget (EUR)', budgetInput);
+
+    const savingsField = buildSavingsField(ctx);
+
     budgetInput.addEventListener('input', () => {
         draft.budget = budgetInput.value;
         clearError(budgetField);
-    });
-
-    const savingsInput = document.createElement('input');
-    savingsInput.type = 'text';
-    savingsInput.inputMode = 'decimal';
-    savingsInput.autocomplete = 'off';
-    savingsInput.placeholder = '10';
-    savingsInput.required = true;
-    savingsInput.value = draft.savingsPercent;
-    const savingsField = buildField('setup-savings', 'Savings %', savingsInput);
-    savingsInput.addEventListener('input', () => {
-        draft.savingsPercent = savingsInput.value;
-        clearError(savingsField);
+        savingsField.helper.textContent = savingsHelperText(
+            draft.savingsAmount,
+            draft.savingsUnit,
+            draftBudgetCents(),
+        );
     });
 
     const incomeInput = document.createElement('input');
