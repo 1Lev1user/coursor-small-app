@@ -1,5 +1,9 @@
 import { load, save as saveToStorage, requestPersistence } from './storage.js';
-import { currentMonthKey } from './months.js';
+import { currentMonthKey, monthKeyOf, todayISO } from './months.js';
+import { parseAmount, formatEuro, formatPlain } from './money.js';
+import { createId } from './model.js';
+import { freezeMonthPlan } from './budget.js';
+import { dueSubscriptions } from './subscriptions.js';
 import { render as renderAdd } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
@@ -27,6 +31,13 @@ const tabbarElement = document.getElementById('tabbar');
 const tabButtons = [...tabbarElement.querySelectorAll('[data-tab]')];
 
 let toastTimer = null;
+
+const duePrompt = {
+    subscriptionId: null,
+    amount: null,
+    error: '',
+    deleting: false,
+};
 
 function toast(message) {
     let node = document.getElementById('toast');
@@ -83,6 +94,234 @@ function context() {
     };
 }
 
+function resetDuePrompt(subscription) {
+    duePrompt.subscriptionId = subscription?.id ?? null;
+    duePrompt.amount = subscription === undefined
+        ? null
+        : formatPlain(subscription.amountCents, '.');
+    duePrompt.error = '';
+    duePrompt.deleting = false;
+}
+
+function matchingSubcategoryId(name) {
+    const category = app.data.categories.find(({ id }) => id === 'subscriptions');
+    if (category === undefined) {
+        return '';
+    }
+    const match = category.subcategories.find((sub) => sub.name === name);
+    return match?.id ?? '';
+}
+
+function removeDueOverlay() {
+    document.getElementById('due-subscription-overlay')?.remove();
+}
+
+function confirmDueSubscription(subscription, amountField) {
+    const amountCents = parseAmount(amountField.control.value);
+    if (amountCents === null) {
+        duePrompt.amount = amountField.control.value;
+        duePrompt.error = 'Enter a valid amount greater than zero.';
+        render();
+        return;
+    }
+
+    const date = todayISO();
+    const monthKey = monthKeyOf(date);
+    const planWasAlreadyFrozen = Object.hasOwn(app.data.monthPlans, monthKey);
+    const expense = {
+        id: createId('exp'),
+        categoryId: 'subscriptions',
+        subcategoryId: matchingSubcategoryId(subscription.name),
+        amountCents,
+        note: subscription.name,
+        date,
+        subscriptionId: subscription.id,
+    };
+
+    app.data.expenses.push(expense);
+    freezeMonthPlan(app.data, monthKey);
+
+    if (save() === false) {
+        const index = app.data.expenses.indexOf(expense);
+        if (index !== -1) {
+            app.data.expenses.splice(index, 1);
+        }
+        if (!planWasAlreadyFrozen) {
+            delete app.data.monthPlans[monthKey];
+        }
+        duePrompt.subscriptionId = subscription.id;
+        duePrompt.amount = amountField.control.value;
+        duePrompt.error = '';
+        duePrompt.deleting = false;
+        render();
+        return;
+    }
+
+    toast('Subscription logged');
+}
+
+function deleteDueSubscription(subscription) {
+    const index = app.data.subscriptions.findIndex(({ id }) => id === subscription.id);
+    if (index === -1) {
+        resetDuePrompt();
+        render();
+        return;
+    }
+
+    const removed = app.data.subscriptions.splice(index, 1)[0];
+
+    if (save() === false) {
+        app.data.subscriptions.splice(index, 0, removed);
+        duePrompt.subscriptionId = subscription.id;
+        duePrompt.deleting = true;
+        render();
+        return;
+    }
+
+    toast('Subscription deleted');
+}
+
+function buildField(id, labelText, control) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = labelText;
+
+    const error = document.createElement('p');
+    error.className = 'error-text';
+    error.id = `${id}-error`;
+    error.hidden = true;
+
+    control.id = id;
+    wrapper.append(label, control, error);
+    return { wrapper, control, error };
+}
+
+function setError(field, message) {
+    field.error.textContent = message;
+    field.error.hidden = false;
+    field.control.setAttribute('aria-invalid', 'true');
+    field.control.setAttribute('aria-describedby', field.error.id);
+}
+
+function renderDuePrompt(subscription) {
+    removeDueOverlay();
+
+    if (duePrompt.subscriptionId !== subscription.id) {
+        resetDuePrompt(subscription);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'due-subscription-overlay';
+    overlay.className = 'due-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'due-subscription-title');
+
+    const card = document.createElement('div');
+    card.className = 'due-card stack';
+
+    const title = document.createElement('h2');
+    title.id = 'due-subscription-title';
+    title.className = 'section-title';
+    title.textContent = 'Subscription due';
+
+    const name = document.createElement('p');
+    name.className = 'due-name';
+    name.textContent = subscription.name;
+
+    const meta = document.createElement('p');
+    meta.className = 'muted';
+    meta.textContent = `Usual ${formatEuro(subscription.amountCents)} · day ${subscription.dayOfMonth}`;
+
+    if (duePrompt.deleting) {
+        const confirmBox = document.createElement('div');
+        confirmBox.className = 'confirm-box';
+        confirmBox.setAttribute('role', 'group');
+
+        const copy = document.createElement('p');
+        copy.className = 'confirm-copy';
+        copy.textContent = `Delete ${subscription.name}? Past charges stay in your history.`;
+
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => {
+            duePrompt.deleting = false;
+            render();
+        });
+
+        const confirmDelete = document.createElement('button');
+        confirmDelete.type = 'button';
+        confirmDelete.className = 'btn btn-danger';
+        confirmDelete.textContent = 'Delete';
+        confirmDelete.addEventListener('click', () => {
+            deleteDueSubscription(subscription);
+        });
+
+        confirmBox.append(copy, cancel, confirmDelete);
+        card.append(title, name, meta, confirmBox);
+        overlay.append(card);
+        document.body.append(overlay);
+        confirmDelete.focus();
+        return;
+    }
+
+    const form = document.createElement('form');
+    form.className = 'stack';
+    form.noValidate = true;
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.value = duePrompt.amount ?? formatPlain(subscription.amountCents, '.');
+    const amountField = buildField('due-subscription-amount', 'Amount (EUR)', amountInput);
+    if (duePrompt.error !== '') {
+        setError(amountField, duePrompt.error);
+    }
+    amountInput.addEventListener('input', () => {
+        duePrompt.amount = amountInput.value;
+        duePrompt.error = '';
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'due-actions';
+
+    const confirmButton = document.createElement('button');
+    confirmButton.type = 'submit';
+    confirmButton.className = 'btn btn-primary';
+    confirmButton.textContent = 'Confirm';
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn btn-danger';
+    deleteButton.textContent = 'Delete subscription';
+    deleteButton.addEventListener('click', () => {
+        duePrompt.amount = amountInput.value;
+        duePrompt.deleting = true;
+        duePrompt.error = '';
+        render();
+    });
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        duePrompt.amount = amountInput.value;
+        confirmDueSubscription(subscription, amountField);
+    });
+
+    actions.append(confirmButton, deleteButton);
+    form.append(amountField.wrapper, actions);
+    card.append(title, name, meta, form);
+    overlay.append(card);
+    document.body.append(overlay);
+    amountInput.focus();
+    amountInput.select();
+}
+
 function render() {
     const setupComplete = app.data.settings.setupComplete === true;
     document.body.classList.toggle('is-setup', !setupComplete);
@@ -95,6 +334,8 @@ function render() {
     viewElement.replaceChildren();
 
     if (!setupComplete) {
+        removeDueOverlay();
+        resetDuePrompt();
         titleElement.textContent = 'Setup';
         document.title = 'Setup - My Expenses';
         renderSetup(viewElement, context());
@@ -117,6 +358,14 @@ function render() {
     }
 
     view.render(viewElement, context());
+
+    const due = dueSubscriptions(app.data);
+    if (due.length > 0) {
+        renderDuePrompt(due[0]);
+    } else {
+        removeDueOverlay();
+        resetDuePrompt();
+    }
 }
 
 tabbarElement.addEventListener('click', (event) => {

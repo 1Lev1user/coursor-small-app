@@ -794,3 +794,89 @@ body.is-setup .tabbar {
     padding-top: var(--s4);
     border-top: 1px solid var(--border);
 }
+
+.subscription-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 0;
+}
+
+.subscription-item {
+    width: 100%;
+    padding-block: var(--s3);
+    border-top: 1px solid var(--border);
+}
+
+.subscription-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.add-subscription-form {
+    padding-top: var(--s4);
+    border-top: 1px solid var(--border);
+}
+
+.add-subscription-form .btn,
+.due-actions .btn {
+    min-height: var(--tap);
+    width: 100%;
+}
+
+.due-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    padding: var(--s4);
+    padding-bottom: calc(var(--s4) + env(safe-area-inset-bottom));
+    background: rgba(17, 24, 39, 0.45);
+}
+
+.due-card {
+    width: 100%;
+    max-width: none;
+    padding: var(--s5) var(--s4);
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.due-name {
+    font-size: clamp(1.15rem, 1rem + 0.55vw, 1.4rem);
+    font-weight: 700;
+}
+
+.due-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    width: 100%;
+}
+
+@media (min-width: 40rem) {
+    .due-overlay {
+        align-items: center;
+        padding: var(--s5);
+    }
+
+    .due-card {
+        border-radius: var(--radius);
+        max-width: min(32rem, 100%);
+    }
+
+    .due-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .due-actions .btn {
+        width: auto;
+        flex: 1 1 10rem;
+    }
+}
+

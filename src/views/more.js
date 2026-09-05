@@ -37,6 +37,14 @@ const addIncomeCategoryDraft = {
     error: '',
 };
 
+const addSubscriptionDraft = {
+    name: '',
+    amount: '',
+    dayOfMonth: '',
+    errorField: '',
+    error: '',
+};
+
 const addSubDrafts = new Map();
 const renameDrafts = new Map();
 
@@ -46,6 +54,7 @@ let renameCategoryId = null;
 let renameSubKey = null;
 let confirmIncomeCategoryId = null;
 let renameIncomeCategoryId = null;
+let confirmSubscriptionId = null;
 let focusId = null;
 
 function element(tagName, className, text) {
@@ -171,7 +180,20 @@ function closeTransientUi() {
     renameSubKey = null;
     confirmIncomeCategoryId = null;
     renameIncomeCategoryId = null;
+    confirmSubscriptionId = null;
     renameDrafts.clear();
+}
+
+function parseDayOfMonth(value) {
+    const trimmed = String(value).trim();
+    if (trimmed === '' || !/^\d{1,2}$/.test(trimmed)) {
+        return null;
+    }
+    const day = Number(trimmed);
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+        return null;
+    }
+    return day;
 }
 
 function savingsCategory(data) {
@@ -711,6 +733,198 @@ function renderIncomeCategoryRow(ctx, category) {
     return item;
 }
 
+function addSubscription(ctx, nameField, amountField, dayField) {
+    clearError(nameField);
+    clearError(amountField);
+    clearError(dayField);
+    addSubscriptionDraft.error = '';
+    addSubscriptionDraft.errorField = '';
+
+    addSubscriptionDraft.name = nameField.control.value;
+    addSubscriptionDraft.amount = amountField.control.value;
+    addSubscriptionDraft.dayOfMonth = dayField.control.value;
+
+    const name = addSubscriptionDraft.name.trim();
+    if (name === '') {
+        addSubscriptionDraft.errorField = 'name';
+        addSubscriptionDraft.error = 'Enter a name.';
+        setError(nameField, addSubscriptionDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    const amountCents = parseAmount(addSubscriptionDraft.amount);
+    if (amountCents === null) {
+        addSubscriptionDraft.errorField = 'amount';
+        addSubscriptionDraft.error = 'Enter a valid amount greater than zero.';
+        setError(amountField, addSubscriptionDraft.error);
+        amountField.control.focus();
+        return;
+    }
+
+    const dayOfMonth = parseDayOfMonth(addSubscriptionDraft.dayOfMonth);
+    if (dayOfMonth === null) {
+        addSubscriptionDraft.errorField = 'day';
+        addSubscriptionDraft.error = 'Enter a day from 1 to 31.';
+        setError(dayField, addSubscriptionDraft.error);
+        dayField.control.focus();
+        return;
+    }
+
+    ctx.data.subscriptions.push({
+        id: createId('subs'),
+        name,
+        amountCents,
+        dayOfMonth,
+    });
+
+    addSubscriptionDraft.name = '';
+    addSubscriptionDraft.amount = '';
+    addSubscriptionDraft.dayOfMonth = '';
+    addSubscriptionDraft.error = '';
+    addSubscriptionDraft.errorField = '';
+
+    if (persist(ctx)) {
+        ctx.toast('Subscription added');
+    }
+}
+
+function confirmDeleteSubscription(ctx, subscription) {
+    const index = ctx.data.subscriptions.findIndex(({ id }) => id === subscription.id);
+    if (index === -1) {
+        ctx.toast('Subscription does not exist.');
+        return;
+    }
+
+    ctx.data.subscriptions.splice(index, 1);
+    closeTransientUi();
+    if (persist(ctx)) {
+        ctx.toast('Subscription deleted');
+    }
+}
+
+function renderSubscriptionRow(ctx, subscription) {
+    const item = element('article', 'subscription-item');
+
+    if (confirmSubscriptionId === subscription.id) {
+        item.append(renderConfirm(
+            `Delete ${subscription.name}? Past charges stay in your history.`,
+            () => confirmDeleteSubscription(ctx, subscription),
+            () => {
+                confirmSubscriptionId = null;
+                ctx.render();
+            },
+        ));
+        return item;
+    }
+
+    const head = element('div', 'more-category-head');
+    const titles = element('div', 'more-category-titles');
+    titles.append(
+        element('h3', 'category-name', subscription.name),
+        element(
+            'p',
+            'muted',
+            `${formatEuro(subscription.amountCents)} · day ${subscription.dayOfMonth}`,
+        ),
+    );
+    head.append(titles);
+
+    const actions = element('div', 'more-actions');
+    actions.append(
+        actionButton('btn btn-ghost-danger', 'Delete', () => {
+            closeTransientUi();
+            confirmSubscriptionId = subscription.id;
+            ctx.render();
+        }),
+    );
+    head.append(actions);
+    item.append(head);
+    return item;
+}
+
+function renderSubscriptionsSection(ctx) {
+    const section = element('section', 'card stack');
+    section.append(element('h2', 'section-title', 'Subscriptions'));
+
+    const list = element('div', 'subscription-list');
+    if (ctx.data.subscriptions.length === 0) {
+        list.append(element('p', 'muted', 'No subscriptions yet.'));
+    } else {
+        for (const subscription of ctx.data.subscriptions) {
+            list.append(renderSubscriptionRow(ctx, subscription));
+        }
+    }
+    section.append(list);
+
+    const form = element('form', 'stack add-subscription-form');
+    form.noValidate = true;
+    form.append(element('h3', 'category-name', 'Add subscription'));
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'off';
+    nameInput.value = addSubscriptionDraft.name;
+    const nameField = buildField('add-subscription-name', 'Name', nameInput);
+    nameInput.addEventListener('input', () => {
+        addSubscriptionDraft.name = nameInput.value;
+        addSubscriptionDraft.error = '';
+        clearError(nameField);
+    });
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.placeholder = '12.50';
+    amountInput.value = addSubscriptionDraft.amount;
+    const amountField = buildField('add-subscription-amount', 'Usual amount (EUR)', amountInput);
+    amountInput.addEventListener('input', () => {
+        addSubscriptionDraft.amount = amountInput.value;
+        addSubscriptionDraft.error = '';
+        clearError(amountField);
+    });
+
+    const dayInput = document.createElement('input');
+    dayInput.type = 'text';
+    dayInput.inputMode = 'numeric';
+    dayInput.autocomplete = 'off';
+    dayInput.placeholder = '1–31';
+    dayInput.value = addSubscriptionDraft.dayOfMonth;
+    const dayField = buildField('add-subscription-day', 'Day of month', dayInput);
+    dayInput.addEventListener('input', () => {
+        addSubscriptionDraft.dayOfMonth = dayInput.value;
+        addSubscriptionDraft.error = '';
+        clearError(dayField);
+    });
+
+    if (addSubscriptionDraft.error !== '') {
+        if (addSubscriptionDraft.errorField === 'name') {
+            setError(nameField, addSubscriptionDraft.error);
+        } else if (addSubscriptionDraft.errorField === 'amount') {
+            setError(amountField, addSubscriptionDraft.error);
+        } else if (addSubscriptionDraft.errorField === 'day') {
+            setError(dayField, addSubscriptionDraft.error);
+        }
+    }
+
+    const submit = element('button', 'btn btn-primary', 'Add subscription');
+    submit.type = 'submit';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        addSubscription(ctx, nameField, amountField, dayField);
+    });
+
+    form.append(
+        nameField.wrapper,
+        amountField.wrapper,
+        dayField.wrapper,
+        submit,
+    );
+    section.append(form);
+    return section;
+}
+
 function renderIncomeSection(ctx) {
     const settings = ctx.data.settings;
     const section = element('section', 'card stack');
@@ -1141,7 +1355,11 @@ export function render(root, ctx) {
     const layout = element('div', 'stack more-page');
     layout.append(element('h2', 'section-title', 'More'));
     renderWarnings(layout, plan);
-    layout.append(renderPlanSection(ctx), renderIncomeSection(ctx));
+    layout.append(
+        renderPlanSection(ctx),
+        renderIncomeSection(ctx),
+        renderSubscriptionsSection(ctx),
+    );
 
     const section = element('section', 'card stack');
     section.append(element('h2', 'section-title', 'Categories'));
