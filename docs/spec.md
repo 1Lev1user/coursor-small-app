@@ -227,8 +227,16 @@ Columns: Date, Type, Category, Subcategory, Note, Amount.
 ## 11. Look and feel
 
 Clean and modern like a banking app: cards, soft shadows, blue accent
-(`#2563eb`), light background. Mobile first, comfortable touch targets,
-readable at arm's length.
+(`#2563eb`), light background. Comfortable touch targets, readable at
+arm's length.
+
+**The layout must adapt to the screen.** It is not a fixed-size phone
+canvas. Widths, type, spacing, the chart, cards and the tab bar grow and
+shrink with the viewport using relative units (`%`, `rem`, `clamp`, `vw`,
+flex/grid). There is no 600px (or any other) page cap. Padding and
+safe-area insets keep content off the edges. Decorative radii and 1px
+borders may stay in pixels. Touch targets stay at least 44px tall, which
+is a minimum, not a layout size.
 
 ## 12. Out of scope for v1
 
