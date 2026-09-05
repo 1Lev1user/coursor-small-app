@@ -91,9 +91,16 @@ export function buildPlanSnapshot(data) {
     };
 }
 
+function copyPlanSnapshot(plan) {
+    return {
+        ...plan,
+        entries: plan.entries.map((entry) => ({ ...entry })),
+    };
+}
+
 export function getMonthPlan(data, monthKey) {
     if (Object.hasOwn(data.monthPlans, monthKey)) {
-        return data.monthPlans[monthKey];
+        return copyPlanSnapshot(data.monthPlans[monthKey]);
     }
 
     return buildPlanSnapshot(data);
@@ -104,7 +111,7 @@ export function freezeMonthPlan(data, monthKey) {
         data.monthPlans[monthKey] = buildPlanSnapshot(data);
     }
 
-    return data.monthPlans[monthKey];
+    return copyPlanSnapshot(data.monthPlans[monthKey]);
 }
 
 export function refreshCurrentMonthPlan(data, now = new Date()) {
@@ -114,7 +121,7 @@ export function refreshCurrentMonthPlan(data, now = new Date()) {
     }
 
     data.monthPlans[monthKey] = buildPlanSnapshot(data);
-    return data.monthPlans[monthKey];
+    return copyPlanSnapshot(data.monthPlans[monthKey]);
 }
 
 export function monthTotals(data, monthKey) {

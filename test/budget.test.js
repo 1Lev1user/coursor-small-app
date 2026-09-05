@@ -33,18 +33,35 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
 
     const plan = resolvePlan(data.categories, data.settings.monthlyBudgetCents);
 
-    assert.deepEqual(plan.entries.map(({ id }) => id), [
-        'necessary',
-        'subscriptions',
-        'random',
-        'savings',
-    ]);
-    assert.deepEqual(plan.entries.map(({ percent }) => percent), [30, 30, 30, 10]);
-    assert.deepEqual(plan.entries.map(({ limitCents }) => limitCents), [
-        30000,
-        30000,
-        30000,
-        10000,
+    assert.deepEqual(plan.entries, [
+        {
+            id: 'necessary',
+            name: 'Necessary expenses',
+            pinned: false,
+            percent: 30,
+            limitCents: 30000,
+        },
+        {
+            id: 'subscriptions',
+            name: 'Subscriptions',
+            pinned: false,
+            percent: 30,
+            limitCents: 30000,
+        },
+        {
+            id: 'random',
+            name: 'Random small purchases',
+            pinned: false,
+            percent: 30,
+            limitCents: 30000,
+        },
+        {
+            id: 'savings',
+            name: 'Savings',
+            pinned: true,
+            percent: 10,
+            limitCents: 10000,
+        },
     ]);
     assert.equal(plan.pinnedTotalPercent, 10);
     assert.equal(plan.leftoverPercent, 90);
@@ -62,11 +79,39 @@ test('resolvePlan gives flexible categories zero when pinned total is 100', () =
     const data = defaultData();
     data.settings.monthlyBudgetCents = 99999;
     data.categories.find(({ id }) => id === 'savings').percent = 100;
+    data.categories = data.categories.filter(({ id }) => (
+        id === 'necessary'
+        || id === 'subscriptions'
+        || id === 'savings'
+        || id === UNCATEGORISED_ID
+    ));
 
     const plan = resolvePlan(data.categories, data.settings.monthlyBudgetCents);
 
-    assert.deepEqual(plan.entries.slice(0, 3).map(({ percent }) => percent), [0, 0, 0]);
-    assert.deepEqual(plan.entries.slice(0, 3).map(({ limitCents }) => limitCents), [0, 0, 0]);
+    assert.deepEqual(plan.entries, [
+        {
+            id: 'necessary',
+            name: 'Necessary expenses',
+            pinned: false,
+            percent: 0,
+            limitCents: 0,
+        },
+        {
+            id: 'subscriptions',
+            name: 'Subscriptions',
+            pinned: false,
+            percent: 0,
+            limitCents: 0,
+        },
+        {
+            id: 'savings',
+            name: 'Savings',
+            pinned: true,
+            percent: 100,
+            limitCents: 99999,
+        },
+    ]);
+    assert.equal(plan.flexibleCount, 2);
     assert.equal(plan.leftoverPercent, 0);
     assert.equal(plan.warnings.flexibleWithoutBudget, true);
 });
@@ -203,10 +248,11 @@ test('buildPlanSnapshot has the frozen shape and does not store anything', () =>
 test('getMonthPlan returns a stored plan or an unstored current snapshot', () => {
     const data = defaultData();
     data.settings.monthlyBudgetCents = 1000;
-    const stored = { marker: 'stored' };
+    const stored = buildPlanSnapshot(data);
     data.monthPlans['2026-08'] = stored;
 
-    assert.equal(getMonthPlan(data, '2026-08'), stored);
+    assert.deepEqual(getMonthPlan(data, '2026-08'), stored);
+    assert.notEqual(getMonthPlan(data, '2026-08'), stored);
     const current = getMonthPlan(data, '2026-09');
     assert.equal(current.monthlyBudgetCents, 1000);
     assert.equal(Object.hasOwn(data.monthPlans, '2026-09'), false);
@@ -220,9 +266,33 @@ test('freezeMonthPlan stores once and never overwrites an existing frozen plan',
     data.settings.monthlyBudgetCents = 200000;
     const second = freezeMonthPlan(data, '2026-09');
 
-    assert.equal(first, data.monthPlans['2026-09']);
-    assert.equal(second, first);
+    assert.notEqual(first, data.monthPlans['2026-09']);
+    assert.notEqual(second, data.monthPlans['2026-09']);
     assert.equal(second.monthlyBudgetCents, 100000);
+});
+
+test('month plan APIs return deep copies that cannot mutate frozen storage', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+
+    const frozen = freezeMonthPlan(data, '2026-09');
+    frozen.monthlyBudgetCents = 1;
+    frozen.entries[0].limitCents = 1;
+    assert.equal(data.monthPlans['2026-09'].monthlyBudgetCents, 100000);
+    assert.notEqual(data.monthPlans['2026-09'].entries[0].limitCents, 1);
+
+    const fetched = getMonthPlan(data, '2026-09');
+    fetched.monthlyBudgetCents = 2;
+    fetched.entries[0].limitCents = 2;
+    assert.equal(data.monthPlans['2026-09'].monthlyBudgetCents, 100000);
+    assert.notEqual(data.monthPlans['2026-09'].entries[0].limitCents, 2);
+
+    data.settings.monthlyBudgetCents = 200000;
+    const refreshed = refreshCurrentMonthPlan(data, new Date(2026, 8, 15));
+    refreshed.monthlyBudgetCents = 3;
+    refreshed.entries[0].limitCents = 3;
+    assert.equal(data.monthPlans['2026-09'].monthlyBudgetCents, 200000);
+    assert.notEqual(data.monthPlans['2026-09'].entries[0].limitCents, 3);
 });
 
 test('refreshCurrentMonthPlan only refreshes an already-frozen current month', () => {
@@ -234,7 +304,7 @@ test('refreshCurrentMonthPlan only refreshes an already-frozen current month', (
 
     const refreshed = refreshCurrentMonthPlan(data, new Date(2026, 9, 15));
 
-    assert.equal(refreshed, data.monthPlans['2026-10']);
+    assert.notEqual(refreshed, data.monthPlans['2026-10']);
     assert.equal(data.monthPlans['2026-09'].monthlyBudgetCents, 100000);
     assert.equal(data.monthPlans['2026-10'].monthlyBudgetCents, 200000);
 
