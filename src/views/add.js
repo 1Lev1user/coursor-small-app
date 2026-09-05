@@ -1,4 +1,4 @@
-import { parseAmount, formatEuro } from '../money.js';
+import { parseAmount } from '../money.js';
 import { monthKeyOf, todayISO } from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
 import {
@@ -10,8 +10,7 @@ import {
 /** @type {'home' | 'expense' | 'income'} */
 let panel = 'home';
 
-// Survives the re-render that follows a save, so the user keeps their
-// category and date while the amount and note are cleared for the next entry.
+// Keep category/date after a successful save; clear amount and note for the next entry.
 const draft = {
     categoryId: '',
     subcategoryId: '',
@@ -36,7 +35,6 @@ let focusSaveErrorOnRender = false;
 let addingCategory = false;
 let addCategoryName = '';
 let addCategoryError = '';
-let focusAddCategoryOnRender = false;
 
 let confirmNoteAsSub = false;
 
@@ -150,10 +148,8 @@ function element(tag, className, text) {
 }
 
 function backToHomeButton(ctx) {
-    const button = document.createElement('button');
+    const button = element('button', 'btn', 'Back to Home');
     button.type = 'button';
-    button.className = 'btn';
-    button.textContent = 'Back to Home';
     button.addEventListener('click', () => {
         openAddPanel('home');
         ctx.render();
@@ -179,19 +175,15 @@ function renderHome(root, ctx) {
         ),
     );
 
-    const expenseBtn = document.createElement('button');
+    const expenseBtn = element('button', 'btn btn-primary', 'Add expense');
     expenseBtn.type = 'button';
-    expenseBtn.className = 'btn btn-primary';
-    expenseBtn.textContent = 'Add expense';
     expenseBtn.addEventListener('click', () => {
         openAddPanel('expense');
         ctx.render();
     });
 
-    const incomeBtn = document.createElement('button');
+    const incomeBtn = element('button', 'btn btn-primary', 'Add extra income');
     incomeBtn.type = 'button';
-    incomeBtn.className = 'btn btn-primary';
-    incomeBtn.textContent = 'Add extra income';
     incomeBtn.addEventListener('click', () => {
         openAddPanel('income');
         ctx.render();
@@ -334,14 +326,15 @@ function renderIncomeForm(root, ctx) {
         incomeDraft.error = '';
         incomeDraft.errorField = '';
 
+        openAddPanel('home');
         if (ctx.save() === false) {
             ctx.data.incomes.pop();
+            openAddPanel('income');
+            ctx.render();
             ctx.toast('Could not save to this device');
             return;
         }
 
-        openAddPanel('home');
-        ctx.render();
         ctx.toast('Extra income added');
     });
 
@@ -404,8 +397,6 @@ function renderExpenseForm(root, ctx) {
     categoryRow.append(categorySelect, categoryPlus);
 
     const categoryField = buildField('add-category', 'Category', categoryRow);
-    // Label targets the select, not the row wrapper.
-    categoryField.wrapper.querySelector('label').htmlFor = 'add-category';
     categorySelect.id = 'add-category';
     categoryField.control = categorySelect;
 
@@ -440,7 +431,6 @@ function renderExpenseForm(root, ctx) {
     noteRow.append(noteInput, notePlus);
 
     const noteField = buildField('add-note', 'Note \u2014 what was it?', noteRow);
-    noteField.wrapper.querySelector('label').htmlFor = 'add-note';
     noteInput.id = 'add-note';
     noteField.control = noteInput;
 
@@ -805,8 +795,7 @@ function renderExpenseForm(root, ctx) {
     if (focusSaveErrorOnRender) {
         focusSaveErrorOnRender = false;
         formError.focus();
-    } else if (focusAddCategoryOnRender || addingCategory) {
-        focusAddCategoryOnRender = false;
+    } else if (addingCategory) {
         document.getElementById('add-quick-category-name')?.focus();
     } else if (focusAmountOnRender) {
         focusAmountOnRender = false;

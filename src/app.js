@@ -13,7 +13,7 @@ import { render as renderSetup } from './views/setup.js';
 const TOAST_MS = 2000;
 
 const views = {
-    add: { title: 'Home', render: renderAdd },
+    add: { render: renderAdd },
     month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: renderChart },
     more: { title: 'Settings', render: renderMore },
@@ -430,9 +430,7 @@ if (
     (location.protocol === 'http:' || location.protocol === 'https:')
     && 'serviceWorker' in navigator
 ) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-        /* Fail soft — offline shell is best-effort. */
-    });
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 render();
