@@ -1,0 +1,1 @@
+document.getElementById('status').textContent = 'App loaded. Ready to build!';

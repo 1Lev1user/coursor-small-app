@@ -1,0 +1,9 @@
+{
+    "name": "My Expenses",
+    "short_name": "Expenses",
+    "start_url": "index.html",
+    "display": "standalone",
+    "background_color": "#f3f4f6",
+    "theme_color": "#2563eb",
+    "icons": []
+}
