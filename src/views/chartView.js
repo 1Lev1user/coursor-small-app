@@ -94,7 +94,6 @@ function renderOverview(layout, ctx, totals) {
     card.append(renderDonut(spendingItems, {
         centreLabel: 'spent',
         centreValue: formatEuro(totals.spentCents),
-        onSelect: ({ id }) => showCategory(ctx, id),
     }));
     card.append(renderLegend(categories, {
         drillInto: (categoryId) => showCategory(ctx, categoryId),
