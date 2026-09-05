@@ -10,6 +10,24 @@ const UNCATEGORISED_CATEGORY = {
     subcategories: [],
 };
 
+const OTHERS_CATEGORY = {
+    id: 'others',
+    name: 'Others',
+    pinned: false,
+    percent: 0,
+    limitMode: 'percent',
+    limitCents: 0,
+    system: false,
+    subcategories: [],
+};
+
+function newOthersCategory() {
+    return {
+        ...OTHERS_CATEGORY,
+        subcategories: [],
+    };
+}
+
 function newUncategorisedCategory() {
     return {
         ...UNCATEGORISED_CATEGORY,
@@ -36,6 +54,7 @@ export function defaultData() {
             usualMonthlyIncomeCents: 0,
             setupComplete: false,
             lastBackupISO: null,
+            othersSeeded: true,
         },
         categories: [
             {
@@ -43,6 +62,8 @@ export function defaultData() {
                 name: 'Necessary expenses',
                 pinned: false,
                 percent: 0,
+                limitMode: 'percent',
+                limitCents: 0,
                 system: false,
                 subcategories: [
                     { id: 'rent', name: 'Rent/mortgage' },
@@ -58,6 +79,8 @@ export function defaultData() {
                 name: 'Subscriptions',
                 pinned: false,
                 percent: 0,
+                limitMode: 'percent',
+                limitCents: 0,
                 system: false,
                 subcategories: [],
             },
@@ -66,6 +89,8 @@ export function defaultData() {
                 name: 'Random small purchases',
                 pinned: false,
                 percent: 0,
+                limitMode: 'percent',
+                limitCents: 0,
                 system: false,
                 subcategories: [
                     { id: 'eating-out', name: 'Eating out' },
@@ -78,9 +103,12 @@ export function defaultData() {
                 name: 'Savings',
                 pinned: true,
                 percent: 0,
+                limitMode: 'percent',
+                limitCents: 0,
                 system: false,
                 subcategories: [],
             },
+            newOthersCategory(),
             newUncategorisedCategory(),
         ],
         incomeCategories: [
@@ -138,6 +166,36 @@ export function normalise(raw) {
         if (!Object.hasOwn(data.settings, 'lastBackupISO')) {
             data.settings.lastBackupISO = null;
         }
+        if (!Object.hasOwn(data.settings, 'othersSeeded')) {
+            data.settings.othersSeeded = false;
+        }
+
+        const budget = data.settings.monthlyBudgetCents;
+        for (const category of data.categories) {
+            if (category?.system === true) {
+                continue;
+            }
+            if (category.limitMode !== 'percent' && category.limitMode !== 'euro') {
+                category.limitMode = 'percent';
+            }
+            if (typeof category.limitCents !== 'number' || !Number.isFinite(category.limitCents)) {
+                category.limitCents = 0;
+            }
+            if (category.pinned === true && category.limitMode === 'percent') {
+                if (category.limitCents === 0 && category.percent > 0 && budget > 0) {
+                    category.limitCents = Math.round(budget * category.percent / 100);
+                }
+            }
+        }
+
+        const hasOthers = data.categories.some(
+            (category) => category?.system !== true && /^others$/i.test(category?.name ?? ''),
+        );
+        if (!hasOthers && data.settings.othersSeeded !== true) {
+            data.categories.push(newOthersCategory());
+            data.settings.othersSeeded = true;
+        }
+
         const uncategorisedIndex = data.categories.findIndex(
             (category) => category?.id === UNCATEGORISED_ID,
         );

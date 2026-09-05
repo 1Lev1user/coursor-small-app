@@ -16,6 +16,8 @@ const expectedCategories = [
         name: 'Necessary expenses',
         pinned: false,
         percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
         system: false,
         subcategories: [
             { id: 'rent', name: 'Rent/mortgage' },
@@ -31,6 +33,8 @@ const expectedCategories = [
         name: 'Subscriptions',
         pinned: false,
         percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
         system: false,
         subcategories: [],
     },
@@ -39,6 +43,8 @@ const expectedCategories = [
         name: 'Random small purchases',
         pinned: false,
         percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
         system: false,
         subcategories: [
             { id: 'eating-out', name: 'Eating out' },
@@ -51,6 +57,18 @@ const expectedCategories = [
         name: 'Savings',
         pinned: true,
         percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
+        system: false,
+        subcategories: [],
+    },
+    {
+        id: 'others',
+        name: 'Others',
+        pinned: false,
+        percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
         system: false,
         subcategories: [],
     },
@@ -79,6 +97,7 @@ test('defaultData returns the exact initial data shape and seeds', () => {
             usualMonthlyIncomeCents: 0,
             setupComplete: false,
             lastBackupISO: null,
+            othersSeeded: true,
         },
         categories: expectedCategories,
         incomeCategories: [
@@ -288,4 +307,58 @@ test('deleteSubcategory refuses missing parent and missing child', () => {
     const data = defaultData();
     assert.equal(deleteSubcategory(data, 'missing', 'shopping').ok, false);
     assert.equal(deleteSubcategory(data, 'random', 'missing').ok, false);
+});
+
+test('defaultData seeds Others as flexible user category and limitMode on all user categories', () => {
+    const data = defaultData();
+    const others = data.categories.find(({ name }) => name.toLowerCase() === 'others');
+    assert.ok(others);
+    assert.equal(others.system, false);
+    assert.equal(others.pinned, false);
+    assert.equal(others.limitMode, 'percent');
+    assert.equal(others.limitCents, 0);
+    for (const category of data.categories.filter(({ system }) => !system)) {
+        assert.ok(category.limitMode === 'percent' || category.limitMode === 'euro');
+        assert.equal(typeof category.limitCents, 'number');
+    }
+});
+
+test('normalise fills limitMode and limitCents and seeds Others when missing', () => {
+    const raw = defaultData();
+    raw.categories = raw.categories
+        .filter(({ name }) => name.toLowerCase() !== 'others')
+        .map(({ limitMode, limitCents, ...rest }) => rest);
+    raw.categories.find(({ id }) => id === 'savings').percent = 10;
+    raw.settings.monthlyBudgetCents = 100000;
+    delete raw.settings.othersSeeded;
+
+    const result = normalise(raw);
+    assert.equal(result.ok, true);
+    const savings = result.data.categories.find(({ id }) => id === 'savings');
+    assert.equal(savings.limitMode, 'percent');
+    assert.equal(savings.limitCents, 10000);
+    assert.ok(result.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
+    assert.equal(result.data.settings.othersSeeded, true);
+});
+
+test('normalise does not recreate Others if user deleted it', () => {
+    const raw = defaultData();
+    raw.categories = raw.categories
+        .filter(({ name }) => name.toLowerCase() !== 'others')
+        .map(({ limitMode, limitCents, ...rest }) => rest);
+    delete raw.settings.othersSeeded;
+
+    const first = normalise(raw);
+    assert.equal(first.ok, true);
+    assert.ok(first.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
+    assert.equal(first.data.settings.othersSeeded, true);
+
+    const secondRaw = structuredClone(first.data);
+    secondRaw.categories = secondRaw.categories.filter(
+        ({ name }) => name.toLowerCase() !== 'others',
+    );
+
+    const second = normalise(secondRaw);
+    assert.equal(second.ok, true);
+    assert.ok(!second.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
 });

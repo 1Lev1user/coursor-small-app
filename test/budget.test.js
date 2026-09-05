@@ -41,22 +41,22 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'necessary',
             name: 'Necessary expenses',
             pinned: false,
-            percent: 30,
-            limitCents: 30000,
+            percent: 22.5,
+            limitCents: 22500,
         },
         {
             id: 'subscriptions',
             name: 'Subscriptions',
             pinned: false,
-            percent: 30,
-            limitCents: 30000,
+            percent: 22.5,
+            limitCents: 22500,
         },
         {
             id: 'random',
             name: 'Random small purchases',
             pinned: false,
-            percent: 30,
-            limitCents: 30000,
+            percent: 22.5,
+            limitCents: 22500,
         },
         {
             id: 'savings',
@@ -65,11 +65,18 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             percent: 10,
             limitCents: 10000,
         },
+        {
+            id: 'others',
+            name: 'Others',
+            pinned: false,
+            percent: 22.5,
+            limitCents: 22500,
+        },
     ]);
     assert.equal(plan.pinnedTotalPercent, 10);
     assert.equal(plan.leftoverPercent, 90);
-    assert.equal(plan.flexibleCount, 3);
-    assert.equal(plan.flexiblePercentEach, 30);
+    assert.equal(plan.flexibleCount, 4);
+    assert.equal(plan.flexiblePercentEach, 22.5);
     assert.equal(plan.unallocatedPercent, 0);
     assert.equal(plan.unallocatedCents, 0);
     assert.deepEqual(plan.warnings, {
@@ -172,8 +179,8 @@ test('resolvePlan handles a zero budget and excludes the system category from ev
 
     assert.equal(plan.entries.some(({ id }) => id === UNCATEGORISED_ID), false);
     assert.equal(plan.pinnedTotalPercent, 10);
-    assert.deepEqual(plan.entries.map(({ percent }) => percent), [30, 30, 30, 10]);
-    assert.deepEqual(plan.entries.map(({ limitCents }) => limitCents), [0, 0, 0, 0]);
+    assert.deepEqual(plan.entries.map(({ percent }) => percent), [22.5, 22.5, 22.5, 10, 22.5]);
+    assert.deepEqual(plan.entries.map(({ limitCents }) => limitCents), [0, 0, 0, 0, 0]);
 });
 
 test('resolvePlan assigns fractional-share rounding remainder to the last positive entry', () => {
@@ -299,7 +306,7 @@ test('buildPlanSnapshot has the frozen shape and does not store anything', () =>
     ]);
     assert.equal(snapshot.monthlyBudgetCents, 12345);
     assert.equal(snapshot.usualMonthlyIncomeCents, 54321);
-    assert.deepEqual(snapshot.entries.map(({ percent }) => percent), [30, 30, 30, 10]);
+    assert.deepEqual(snapshot.entries.map(({ percent }) => percent), [22.5, 22.5, 22.5, 10, 22.5]);
     assert.deepEqual(data.monthPlans, {});
 });
 
@@ -404,17 +411,17 @@ test('monthTotals calculates budget, cash, incomes, and strict over-limit catego
     assert.deepEqual(totals.categories[0], {
         id: 'necessary',
         name: 'Necessary expenses',
-        percent: 30,
-        limitCents: 30000,
+        percent: 22.5,
+        limitCents: 22500,
         spentCents: 30001,
-        remainingCents: -1,
+        remainingCents: -7501,
         over: true,
-        overByCents: 1,
+        overByCents: 7501,
     });
     assert.equal(totals.categories[1].spentCents, 30000);
-    assert.equal(totals.categories[1].remainingCents, 0);
-    assert.equal(totals.categories[1].over, false);
-    assert.equal(totals.categories[1].overByCents, 0);
+    assert.equal(totals.categories[1].remainingCents, -7500);
+    assert.equal(totals.categories[1].over, true);
+    assert.equal(totals.categories[1].overByCents, 7500);
     assert.equal(totals.categories[2].over, false);
 });
 
@@ -428,7 +435,7 @@ test('monthTotals returns zero totals without data and does not throw', () => {
     assert.equal(totals.incomeCents, 0);
     assert.equal(totals.budgetLeftCents, 0);
     assert.equal(totals.cashLeftCents, 0);
-    assert.equal(totals.categories.length, 4);
+    assert.equal(totals.categories.length, 5);
     assert.ok(totals.categories.every((category) => (
         category.limitCents === 0
         && category.spentCents === 0
@@ -459,13 +466,14 @@ test('monthTotals uses frozen entries and appends categories with later spending
 
     const totals = monthTotals(data, '2026-09');
 
-    assert.deepEqual(totals.categories.slice(0, 4).map(({ id }) => id), [
+    assert.deepEqual(totals.categories.slice(0, 5).map(({ id }) => id), [
         'necessary',
         'subscriptions',
         'random',
         'savings',
+        'others',
     ]);
-    assert.deepEqual(totals.categories.slice(4), [
+    assert.deepEqual(totals.categories.slice(5), [
         {
             id: 'later',
             name: 'Added later',
