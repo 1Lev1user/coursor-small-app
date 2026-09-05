@@ -1,25 +1,318 @@
+:root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --danger: #dc2626;
+    --ok: #059669;
+    --border: #e5e7eb;
+
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 2px rgba(17, 24, 39, 0.06), 0 6px 16px rgba(17, 24, 39, 0.08);
+
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+
+    --page: 600px;
+    --page-inner: calc(var(--page) - var(--s4) * 2);
+    --tabbar-height: 60px;
+    --tap: 44px;
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+[hidden] {
+    display: none !important;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f3f4f6;
-    color: #1f2937;
-    padding: 16px;
-    max-width: 600px;
+    font-size: 16px;
+    line-height: 1.45;
+    background-color: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Shell */
+
+.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: var(--s3) var(--s4);
+    padding-top: calc(var(--s3) + env(safe-area-inset-top));
+}
+
+#screen-title {
+    max-width: var(--page-inner);
     margin: 0 auto;
-}
-
-h1 {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 700;
-    margin-bottom: 16px;
+    letter-spacing: -0.01em;
 }
 
-#status {
-    color: #6b7280;
+#view {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: var(--s4);
+    padding-bottom: calc(var(--tabbar-height) + var(--s5) + env(safe-area-inset-bottom));
+}
+
+.tabbar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    gap: var(--s1);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding-inline: var(--s4);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+    flex: 1 1 0;
+    max-width: calc(var(--page-inner) / 4);
+    min-height: var(--tabbar-height);
+    border: none;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-top: 2px solid transparent;
+}
+
+.tab:hover {
+    color: var(--text);
+}
+
+.tab.is-active {
+    color: var(--accent);
+    border-top-color: var(--accent);
+}
+
+/* Cards and layout helpers */
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--s4);
+}
+
+.card + .card {
+    margin-top: var(--s4);
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+}
+
+.muted {
+    color: var(--muted);
     font-size: 14px;
+}
+
+.big-number {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s1);
+    padding: var(--s1) var(--s3);
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: var(--s5) var(--s4);
+}
+
+/* Forms */
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+}
+
+.field label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.field input,
+.field select {
+    width: 100%;
+    min-height: var(--tap);
+    padding: var(--s3);
+    font: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.field select {
+    appearance: none;
+    padding-right: calc(var(--s4) + var(--s5));
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+}
+
+.field input:focus,
+.field select:focus {
+    border-color: var(--accent);
+}
+
+.field input[aria-invalid='true'],
+.field select[aria-invalid='true'] {
+    border-color: var(--danger);
+}
+
+.field input::placeholder {
+    color: var(--muted);
+}
+
+.error-text {
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Buttons */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    min-height: var(--tap);
+    padding: var(--s3) var(--s4);
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.btn:hover {
+    background: var(--bg);
+}
+
+.btn-primary {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
+.btn-danger {
+    color: var(--accent-ink);
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+}
+
+.btn-ghost {
+    color: var(--accent);
+    background: none;
+    border-color: transparent;
+}
+
+.btn-ghost:hover {
+    background: var(--bg);
+}
+
+/* Toast */
+
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--tabbar-height) + var(--s4) + env(safe-area-inset-bottom));
+    z-index: 20;
+    transform: translateX(-50%);
+    max-width: var(--page-inner);
+    padding: var(--s3) var(--s5);
+    border-radius: 999px;
+    background: var(--text);
+    color: var(--accent-ink);
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+    animation: toast-in 160ms ease-out;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, var(--s2));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none;
+    }
 }

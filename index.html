@@ -2,16 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>My Expenses</title>
+    <meta name="description" content="Local-only expense and income tracker in euros. Your data stays on this device.">
+    <meta name="theme-color" content="#2563eb">
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2563eb">
+    <link rel="icon" href="data:,">
 </head>
 <body>
-    <h1>My Expenses</h1>
-    <p id="status">Loading...</p>
+    <header class="app-header"><h1 id="screen-title">Add expense</h1></header>
+    <main id="view"></main>
+    <nav class="tabbar" id="tabbar" aria-label="Main">
+        <button type="button" class="tab" data-tab="add">Add</button>
+        <button type="button" class="tab" data-tab="month">Month</button>
+        <button type="button" class="tab" data-tab="chart">Chart</button>
+        <button type="button" class="tab" data-tab="more">More</button>
+    </nav>
 
-    <script src="app.js"></script>
+    <script type="module" src="src/app.js"></script>
 </body>
 </html>
