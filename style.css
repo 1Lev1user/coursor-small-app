@@ -883,6 +883,53 @@ body.is-setup .tabbar {
     min-width: 0;
 }
 
+.add-field-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--s2);
+    width: 100%;
+}
+
+.add-field-row select,
+.add-field-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+}
+
+.add-plus-btn {
+    flex: 0 0 auto;
+    min-height: var(--tap);
+    min-width: var(--tap);
+    padding: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--accent);
+    font: inherit;
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.add-plus-btn:hover {
+    border-color: var(--accent);
+}
+
+.add-quick-panel {
+    padding: var(--s3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+}
+
+.add-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    justify-content: flex-end;
+}
+
 .unit-toggle {
     min-height: var(--tap);
     min-width: var(--tap);

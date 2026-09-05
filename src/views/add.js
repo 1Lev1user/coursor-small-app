@@ -1,7 +1,11 @@
 import { parseAmount } from '../money.js';
 import { monthKeyOf, todayISO } from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
-import { freezeMonthPlan } from '../budget.js';
+import {
+    freezeMonthPlan,
+    syncCategoryPlanFields,
+    refreshCurrentMonthPlan,
+} from '../budget.js';
 
 // Survives the re-render that follows a save, so the user keeps their
 // category and date while the amount and note are cleared for the next entry.
@@ -16,6 +20,13 @@ const draft = {
 let focusAmountOnRender = false;
 let saveError = '';
 let focusSaveErrorOnRender = false;
+
+let addingCategory = false;
+let addCategoryName = '';
+let addCategoryError = '';
+let focusAddCategoryOnRender = false;
+
+let confirmNoteAsSub = false;
 
 function selectableCategories(data) {
     return data.categories.filter(
@@ -63,6 +74,39 @@ function clearError(field) {
     field.control.removeAttribute('aria-describedby');
 }
 
+function namesMatch(a, b) {
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function closeQuickPanels() {
+    addingCategory = false;
+    addCategoryName = '';
+    addCategoryError = '';
+    confirmNoteAsSub = false;
+}
+
+function createFlexibleCategory(ctx, name) {
+    const budget = ctx.data.settings.monthlyBudgetCents;
+    const category = {
+        id: createId('cat'),
+        name,
+        pinned: false,
+        percent: 0,
+        limitMode: 'percent',
+        limitCents: 0,
+        system: false,
+        subcategories: [],
+    };
+    ctx.data.categories.push(category);
+    syncCategoryPlanFields(ctx.data.categories, budget);
+    refreshCurrentMonthPlan(ctx.data);
+    return category;
+}
+
+function findCategory(data, categoryId) {
+    return data.categories.find(({ id }) => id === categoryId);
+}
+
 export function render(root, ctx) {
     const categories = selectableCategories(ctx.data);
 
@@ -87,7 +131,22 @@ export function render(root, ctx) {
         ...categories.map(({ id, name }) => option(id, name)),
     );
     categorySelect.value = draft.categoryId;
-    const categoryField = buildField('add-category', 'Category', categorySelect);
+
+    const categoryPlus = document.createElement('button');
+    categoryPlus.type = 'button';
+    categoryPlus.className = 'add-plus-btn';
+    categoryPlus.setAttribute('aria-label', 'Add category');
+    categoryPlus.textContent = '+';
+
+    const categoryRow = document.createElement('div');
+    categoryRow.className = 'add-field-row';
+    categoryRow.append(categorySelect, categoryPlus);
+
+    const categoryField = buildField('add-category', 'Category', categoryRow);
+    // Label targets the select, not the row wrapper.
+    categoryField.wrapper.querySelector('label').htmlFor = 'add-category';
+    categorySelect.id = 'add-category';
+    categoryField.control = categorySelect;
 
     const subcategorySelect = document.createElement('select');
     const subcategoryField = buildField('add-subcategory', 'Subcategory', subcategorySelect);
@@ -107,7 +166,22 @@ export function render(root, ctx) {
     noteInput.autocomplete = 'off';
     noteInput.placeholder = 'Optional';
     noteInput.value = draft.note;
-    const noteField = buildField('add-note', 'Note \u2014 what was it?', noteInput);
+
+    const notePlus = document.createElement('button');
+    notePlus.type = 'button';
+    notePlus.className = 'add-plus-btn';
+    notePlus.setAttribute('aria-label', 'Add note as subcategory');
+    notePlus.textContent = '+';
+    notePlus.hidden = draft.note.trim() === '';
+
+    const noteRow = document.createElement('div');
+    noteRow.className = 'add-field-row';
+    noteRow.append(noteInput, notePlus);
+
+    const noteField = buildField('add-note', 'Note \u2014 what was it?', noteRow);
+    noteField.wrapper.querySelector('label').htmlFor = 'add-note';
+    noteInput.id = 'add-note';
+    noteField.control = noteInput;
 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
@@ -116,8 +190,6 @@ export function render(root, ctx) {
     dateInput.value = draft.date;
     const dateField = buildField('add-date', 'Date', dateInput);
 
-    // Belongs to the whole form rather than one field: it reports that the
-    // device refused the write, not that something was typed wrongly.
     const formError = document.createElement('p');
     formError.id = 'add-form-error';
     formError.className = 'error-text';
@@ -131,7 +203,7 @@ export function render(root, ctx) {
     submitButton.textContent = 'Add expense';
 
     function subcategoriesOf(categoryId) {
-        return categories.find(({ id }) => id === categoryId)?.subcategories ?? [];
+        return findCategory(ctx.data, categoryId)?.subcategories ?? [];
     }
 
     function rebuildSubcategories() {
@@ -152,6 +224,29 @@ export function render(root, ctx) {
         clearError(subcategoryField);
     }
 
+    categoryPlus.addEventListener('click', () => {
+        confirmNoteAsSub = false;
+        addingCategory = true;
+        addCategoryError = '';
+        ctx.render();
+    });
+
+    notePlus.addEventListener('click', () => {
+        const noteName = noteInput.value.trim();
+        if (noteName === '') {
+            return;
+        }
+        if (categorySelect.value === '') {
+            setError(categoryField, 'Choose a category first.');
+            categorySelect.focus();
+            return;
+        }
+        addingCategory = false;
+        addCategoryError = '';
+        confirmNoteAsSub = true;
+        ctx.render();
+    });
+
     categorySelect.addEventListener('change', () => {
         draft.categoryId = categorySelect.value;
         draft.subcategoryId = '';
@@ -168,11 +263,184 @@ export function render(root, ctx) {
     });
     noteInput.addEventListener('input', () => {
         draft.note = noteInput.value;
+        notePlus.hidden = noteInput.value.trim() === '';
+        if (noteInput.value.trim() === '') {
+            confirmNoteAsSub = false;
+        }
     });
     dateInput.addEventListener('change', () => {
         draft.date = dateInput.value;
         clearError(dateField);
     });
+
+    const categoryPanelHost = document.createElement('div');
+    categoryPanelHost.className = 'add-quick-panel-host';
+
+    if (addingCategory) {
+        const panel = document.createElement('div');
+        panel.className = 'add-quick-panel stack';
+        panel.setAttribute('role', 'group');
+        panel.setAttribute('aria-label', 'Add category');
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.autocomplete = 'off';
+        nameInput.placeholder = 'Category name';
+        nameInput.value = addCategoryName;
+        nameInput.id = 'add-quick-category-name';
+        const nameField = buildField('add-quick-category-name', 'New category name', nameInput);
+        if (addCategoryError !== '') {
+            setError(nameField, addCategoryError);
+        }
+
+        nameInput.addEventListener('input', () => {
+            addCategoryName = nameInput.value;
+            addCategoryError = '';
+            clearError(nameField);
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.textContent = 'Save';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = 'Cancel';
+
+        const actions = document.createElement('div');
+        actions.className = 'add-quick-actions';
+        actions.append(cancelBtn, saveBtn);
+
+        cancelBtn.addEventListener('click', () => {
+            closeQuickPanels();
+            ctx.render();
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const name = addCategoryName.trim();
+            if (name === '') {
+                addCategoryError = 'Enter a name.';
+                setError(nameField, addCategoryError);
+                nameInput.focus();
+                return;
+            }
+
+            const existing = selectableCategories(ctx.data).find(({ name: n }) => namesMatch(n, name));
+            if (existing !== undefined) {
+                draft.categoryId = existing.id;
+                draft.subcategoryId = '';
+                closeQuickPanels();
+                if (ctx.save() !== false) {
+                    ctx.toast('Category already exists');
+                }
+                ctx.render();
+                return;
+            }
+
+            const category = createFlexibleCategory(ctx, name);
+            draft.categoryId = category.id;
+            draft.subcategoryId = '';
+            closeQuickPanels();
+
+            if (ctx.save() === false) {
+                ctx.data.categories.splice(ctx.data.categories.indexOf(category), 1);
+                syncCategoryPlanFields(
+                    ctx.data.categories,
+                    ctx.data.settings.monthlyBudgetCents,
+                );
+                refreshCurrentMonthPlan(ctx.data);
+                saveError = 'Could not save to this device. Try again.';
+                focusSaveErrorOnRender = true;
+                ctx.render();
+                return;
+            }
+
+            ctx.render();
+            ctx.toast('Category added');
+        });
+
+        panel.append(nameField.wrapper, actions);
+        categoryPanelHost.append(panel);
+    }
+
+    const notePanelHost = document.createElement('div');
+    notePanelHost.className = 'add-quick-panel-host';
+
+    if (confirmNoteAsSub) {
+        const noteName = draft.note.trim();
+        const parent = findCategory(ctx.data, draft.categoryId);
+        const panel = document.createElement('div');
+        panel.className = 'add-quick-panel stack';
+        panel.setAttribute('role', 'group');
+        panel.setAttribute('aria-label', 'Add subcategory from note');
+
+        const copy = document.createElement('p');
+        copy.className = 'confirm-copy';
+        const parentLabel = parent?.name ?? 'this category';
+        copy.textContent = `Add \u201c${noteName}\u201d as a subcategory of ${parentLabel}?`;
+
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn btn-primary';
+        addBtn.textContent = 'Add';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = 'Cancel';
+
+        const actions = document.createElement('div');
+        actions.className = 'add-quick-actions';
+        actions.append(cancelBtn, addBtn);
+
+        cancelBtn.addEventListener('click', () => {
+            confirmNoteAsSub = false;
+            ctx.render();
+        });
+
+        addBtn.addEventListener('click', () => {
+            if (draft.categoryId === '' || parent === undefined) {
+                confirmNoteAsSub = false;
+                setError(categoryField, 'Choose a category first.');
+                categorySelect.focus();
+                return;
+            }
+
+            const existing = parent.subcategories.find(({ name }) => namesMatch(name, noteName));
+            if (existing !== undefined) {
+                draft.subcategoryId = existing.id;
+                confirmNoteAsSub = false;
+                ctx.render();
+                ctx.toast('Subcategory already exists');
+                return;
+            }
+
+            const subcategory = {
+                id: createId('sub'),
+                name: noteName,
+            };
+            parent.subcategories.push(subcategory);
+            draft.subcategoryId = subcategory.id;
+            confirmNoteAsSub = false;
+
+            if (ctx.save() === false) {
+                parent.subcategories.splice(parent.subcategories.indexOf(subcategory), 1);
+                draft.subcategoryId = '';
+                saveError = 'Could not save to this device. Try again.';
+                focusSaveErrorOnRender = true;
+                ctx.render();
+                return;
+            }
+
+            ctx.render();
+            ctx.toast('Subcategory added');
+        });
+
+        panel.append(copy, actions);
+        notePanelHost.append(panel);
+    }
 
     form.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -228,8 +496,6 @@ export function render(root, ctx) {
         ctx.data.expenses.push(expense);
         freezeMonthPlan(ctx.data, monthKey);
 
-        // The draft still holds what was typed, so the re-render inside
-        // ctx.save() brings the form back untouched if the write is refused.
         if (ctx.save() === false) {
             ctx.data.expenses.splice(ctx.data.expenses.indexOf(expense), 1);
             if (!planWasAlreadyFrozen) {
@@ -248,6 +514,7 @@ export function render(root, ctx) {
         draft.amount = '';
         draft.note = '';
         draft.date = date;
+        closeQuickPanels();
         focusAmountOnRender = true;
 
         ctx.render();
@@ -256,9 +523,11 @@ export function render(root, ctx) {
 
     form.append(
         categoryField.wrapper,
+        categoryPanelHost,
         subcategoryField.wrapper,
         amountField.wrapper,
         noteField.wrapper,
+        notePanelHost,
         dateField.wrapper,
         formError,
         submitButton,
@@ -274,6 +543,9 @@ export function render(root, ctx) {
     if (focusSaveErrorOnRender) {
         focusSaveErrorOnRender = false;
         formError.focus();
+    } else if (focusAddCategoryOnRender || addingCategory) {
+        focusAddCategoryOnRender = false;
+        document.getElementById('add-quick-category-name')?.focus();
     } else if (focusAmountOnRender) {
         focusAmountOnRender = false;
         amountInput.focus();
