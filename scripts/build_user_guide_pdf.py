@@ -1,8 +1,8 @@
-"""Build the My Expenses English user guide PDF."""
+"""Build a compact 2-page My Expenses English user guide PDF."""
 
 from pathlib import Path
 
-from reportlab.lib.colors import HexColor, white
+from reportlab.lib.colors import HexColor
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -11,6 +11,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     HRFlowable,
+    KeepTogether,
     ListFlowable,
     ListItem,
     Paragraph,
@@ -18,15 +19,14 @@ from reportlab.platypus import (
     Spacer,
 )
 
-OUT = Path(__file__).resolve().parents[1] / "docs" / "My-Expenses-User-Guide.pdf"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "docs" / "My-Expenses-User-Guide.pdf"
+DESKTOP = Path.home() / "Desktop" / "My-Expenses-User-Guide.pdf"
 APP_URL = "https://1lev1user.github.io/coursor-small-app/"
 AUTHOR = "Ļevs Krilovs"
 
-FONT = Path(r"C:\Windows\Fonts\arial.ttf")
-FONT_BOLD = Path(r"C:\Windows\Fonts\arialbd.ttf")
-
-pdfmetrics.registerFont(TTFont("Guide", str(FONT)))
-pdfmetrics.registerFont(TTFont("Guide-Bold", str(FONT_BOLD)))
+pdfmetrics.registerFont(TTFont("Guide", r"C:\Windows\Fonts\arial.ttf"))
+pdfmetrics.registerFont(TTFont("Guide-Bold", r"C:\Windows\Fonts\arialbd.ttf"))
 
 INK = HexColor("#111827")
 MUTED = HexColor("#4b5563")
@@ -38,92 +38,72 @@ SOFT = HexColor("#eff6ff")
 def styles():
     base = getSampleStyleSheet()
     return {
-        "cover_kicker": ParagraphStyle(
-            "cover_kicker",
+        "title": ParagraphStyle(
+            "title",
             parent=base["Normal"],
             fontName="Guide-Bold",
-            fontSize=11,
-            textColor=ACCENT,
-            alignment=TA_CENTER,
-            spaceAfter=8,
-        ),
-        "cover_title": ParagraphStyle(
-            "cover_title",
-            parent=base["Normal"],
-            fontName="Guide-Bold",
-            fontSize=28,
-            leading=34,
+            fontSize=18,
+            leading=22,
             textColor=INK,
             alignment=TA_CENTER,
-            spaceAfter=10,
+            spaceAfter=2,
         ),
-        "cover_sub": ParagraphStyle(
-            "cover_sub",
+        "sub": ParagraphStyle(
+            "sub",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=12,
-            leading=18,
+            fontSize=9,
+            leading=12,
             textColor=MUTED,
             alignment=TA_CENTER,
-            spaceAfter=6,
+            spaceAfter=4,
         ),
         "h1": ParagraphStyle(
             "h1",
             parent=base["Normal"],
             fontName="Guide-Bold",
-            fontSize=16,
-            leading=22,
+            fontSize=11.5,
+            leading=14,
             textColor=INK,
-            spaceBefore=16,
-            spaceAfter=8,
-        ),
-        "h2": ParagraphStyle(
-            "h2",
-            parent=base["Normal"],
-            fontName="Guide-Bold",
-            fontSize=12.5,
-            leading=17,
-            textColor=INK,
-            spaceBefore=10,
-            spaceAfter=5,
+            spaceBefore=7,
+            spaceAfter=3,
         ),
         "body": ParagraphStyle(
             "body",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=10.5,
-            leading=15,
+            fontSize=9,
+            leading=11.5,
             textColor=INK,
             alignment=TA_JUSTIFY,
-            spaceAfter=7,
+            spaceAfter=3,
         ),
         "bullet": ParagraphStyle(
             "bullet",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=10.5,
-            leading=15,
+            fontSize=9,
+            leading=11.5,
             textColor=INK,
-            leftIndent=4,
         ),
         "note": ParagraphStyle(
             "note",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=10,
-            leading=14,
+            fontSize=8.5,
+            leading=11,
             textColor=MUTED,
             alignment=TA_LEFT,
-            spaceBefore=4,
-            spaceAfter=8,
+            spaceBefore=2,
+            spaceAfter=4,
             backColor=SOFT,
-            borderPadding=8,
+            borderPadding=5,
         ),
         "footer": ParagraphStyle(
             "footer",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=8.5,
+            fontSize=7.5,
             textColor=MUTED,
             alignment=TA_CENTER,
         ),
@@ -131,23 +111,25 @@ def styles():
             "link",
             parent=base["Normal"],
             fontName="Guide",
-            fontSize=10.5,
-            leading=15,
+            fontSize=9,
+            leading=11,
             textColor=ACCENT,
             alignment=TA_CENTER,
-            spaceAfter=10,
+            spaceAfter=4,
         ),
     }
 
 
 def bullets(items, style):
     return ListFlowable(
-        [ListItem(Paragraph(item, style), leftIndent=12, bulletColor=ACCENT) for item in items],
+        [ListItem(Paragraph(item, style), leftIndent=8, value="•") for item in items],
         bulletType="bullet",
         start="•",
-        leftIndent=18,
+        leftIndent=12,
         bulletFontName="Guide",
-        bulletFontSize=10.5,
+        bulletFontSize=9,
+        spaceBefore=0,
+        spaceAfter=2,
     )
 
 
@@ -158,30 +140,30 @@ def build():
     doc = SimpleDocTemplate(
         str(OUT),
         pagesize=A4,
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=16 * mm,
-        bottomMargin=16 * mm,
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        topMargin=11 * mm,
+        bottomMargin=12 * mm,
         title="My Expenses — User Guide",
         author=AUTHOR,
-        subject="How to use and install My Expenses",
+        subject="How to use and install My Expenses (2 pages)",
         creator=f"My Expenses guide by {AUTHOR}",
     )
 
     story = []
-    story.append(Spacer(1, 18 * mm))
-    story.append(Paragraph("PERSONAL FINANCE PWA", s["cover_kicker"]))
-    story.append(Paragraph("My Expenses", s["cover_title"]))
-    story.append(Paragraph("User guide — what it is, how it works, and how to install it", s["cover_sub"]))
-    story.append(Paragraph(f"Developed by <b>{AUTHOR}</b>", s["cover_sub"]))
-    story.append(Spacer(1, 4 * mm))
-    story.append(HRFlowable(width="100%", thickness=1, color=LINE, spaceBefore=4, spaceAfter=12))
+    story.append(Paragraph("My Expenses", s["title"]))
+    story.append(
+        Paragraph(
+            f"User guide · Developed by <b>{AUTHOR}</b> · Share only with his permission",
+            s["sub"],
+        )
+    )
+    story.append(HRFlowable(width="100%", thickness=0.8, color=LINE, spaceBefore=1, spaceAfter=4))
     story.append(Paragraph(f'<link href="{APP_URL}">{APP_URL}</link>', s["link"]))
     story.append(
         Paragraph(
-            f"<b>Sharing notice.</b> This application was developed by {AUTHOR}. "
-            "It may be shared only by him. Do not redistribute the app link, install "
-            "instructions, or copies of this guide without his permission.",
+            f"<b>Sharing notice.</b> Developed by {AUTHOR}. The app link and this guide "
+            "may be shared <b>only by him</b>. Do not redistribute without his permission.",
             s["note"],
         )
     )
@@ -189,192 +171,125 @@ def build():
     story.append(Paragraph("1. What this is", s["h1"]))
     story.append(
         Paragraph(
-            "<b>My Expenses</b> is a simple euro (€) spending and income tracker that runs "
-            "in your phone or computer browser as a Progressive Web App (PWA). "
-            "There is no account and no cloud sync: everything stays on your device.",
+            "<b>My Expenses</b> is a euro (€) spending and income tracker that runs in the "
+            "browser as a Progressive Web App (PWA). No account, no cloud sync — all data "
+            "stays on your device. Use it to log expenses, follow a monthly spend budget, "
+            "set Savings (0–100% of that budget, € or %), track income and recurring "
+            "subscriptions, and export JSON backups or month CSV files.",
             s["body"],
-        )
-    )
-    story.append(
-        bullets(
-            [
-                "Track daily expenses by category and subcategory",
-                "Set a monthly spend budget and see how much is left",
-                "Pin Savings (0%–100% of the monthly spend budget, in € or %)",
-                "Log usual income and extra income",
-                "Remember recurring subscriptions and get due reminders",
-                "Export / import a full JSON backup, or download a month as CSV",
-            ],
-            s["bullet"],
         )
     )
 
     story.append(Paragraph("2. Who it is for", s["h1"]))
     story.append(
         Paragraph(
-            "It is intended for personal use by people who receive access from "
-            f"{AUTHOR}. It is not a public product store app and is not meant for "
-            "uncontrolled redistribution.",
-            s["body"],
-        )
-    )
-    story.append(
-        Paragraph(
-            f"<b>Credit:</b> Developed by {AUTHOR}. <b>Sharing:</b> only he may share "
-            "the application (link, installs, or this guide).",
+            f"Personal use for people who receive access from {AUTHOR}. Not a public store "
+            f"app. <b>Credit:</b> developed by {AUTHOR}. <b>Sharing:</b> only he may share "
+            "the application or this guide.",
             s["body"],
         )
     )
 
     story.append(Paragraph("3. How it works", s["h1"]))
-    story.append(Paragraph("First launch", s["h2"]))
     story.append(
         Paragraph(
-            "On first open you set your <b>monthly spend budget</b>, <b>Savings</b> "
-            "(euro or percent, zero allowed, never more than 100% of the budget), "
-            "and your <b>usual monthly income</b>. You can change these later under "
+            "<b>First launch:</b> set monthly spend budget, Savings (euro or %, zero allowed, "
+            "never over 100% of budget), and usual monthly income. Change later under "
             "<b>More → Plan</b> and related sections.",
             s["body"],
         )
     )
-    story.append(Paragraph("Main tabs", s["h2"]))
     story.append(
         bullets(
             [
-                "<b>Add</b> — log a new expense (amount, category, date, optional note)",
-                "<b>Month</b> — this month’s totals, category progress, and entries",
+                "<b>Add</b> — new expense (amount, category, date, optional note)",
+                "<b>Month</b> — totals, category progress, entries",
                 "<b>Chart</b> — spending breakdown",
-                "<b>More</b> — plan, income, subscriptions, categories, backup &amp; export",
+                "<b>More</b> — plan, income, subscriptions (budget + recurring list), "
+                "categories, backup &amp; export",
             ],
             s["bullet"],
         )
     )
-    story.append(Paragraph("Budget logic (short)", s["h2"]))
     story.append(
         Paragraph(
-            "Your <b>monthly spend budget</b> is the pool you plan to spend. "
             "Categories can be <b>flexible</b> (share leftover budget) or <b>fixed</b> "
-            "(a set % or € amount). <b>Savings</b> is always fixed and cannot be deleted. "
-            "<b>Subscriptions</b> has its own section in More: budget share plus a list "
-            "of recurring items with day-of-month reminders.",
-            s["body"],
-        )
-    )
-    story.append(Paragraph("Data &amp; backups", s["h2"]))
-    story.append(
-        Paragraph(
-            "Data is stored only in this browser / installed app on this device. "
-            "Another phone or browser starts empty unless you import a backup. "
-            "Use <b>More → Backup &amp; export → Export backup (JSON)</b> regularly. "
-            "Safari and some browsers can clear site data; installing to the Home Screen "
-            "is more reliable.",
+            "(set % or €). <b>Savings</b> is always fixed and cannot be deleted. "
+            "Data lives only in this browser/app on this device — another phone starts empty "
+            "unless you import a backup. Export JSON regularly under "
+            "<b>More → Backup &amp; export</b>. Installing to the Home Screen is more reliable "
+            "than a temporary browser tab.",
             s["body"],
         )
     )
 
-    story.append(Paragraph("4. Open the app", s["h1"]))
-    story.append(
-        Paragraph(
-            f'Open this link in your browser: <link href="{APP_URL}"><b>{APP_URL}</b></link>',
-            s["body"],
-        )
-    )
-
-    story.append(Paragraph("5. Install on iPhone / iPad (Safari)", s["h1"]))
+    story.append(Paragraph("4. Install on iPhone / iPad (Safari)", s["h1"]))
     story.append(
         bullets(
             [
-                "Open the link above in <b>Safari</b> (not Chrome or in-app browsers).",
-                "Tap the <b>Share</b> button (square with an arrow pointing up).",
-                "Scroll and tap <b>Add to Home Screen</b>.",
-                "Confirm the name <b>My Expenses</b> (or Expenses) and tap <b>Add</b>.",
-                "Open the new icon from your Home Screen — it runs like a standalone app.",
-            ],
-            s["bullet"],
-        )
-    )
-    story.append(
-        Paragraph(
-            "Tip: Keep using the Home Screen icon so your data is less likely to be cleared "
-            "than in a temporary Safari tab.",
-            s["body"],
-        )
-    )
-
-    story.append(Paragraph("6. Install on Android (Chrome)", s["h1"]))
-    story.append(
-        bullets(
-            [
-                "Open the link above in <b>Chrome</b>.",
-                "Tap the menu (⋮). Choose <b>Install app</b> or <b>Add to Home screen</b>.",
-                "If you see an install banner, you can use that instead.",
-                "Confirm install. Open <b>My Expenses</b> from your app drawer or Home Screen.",
+                f"Open <link href=\"{APP_URL}\">{APP_URL}</link> in <b>Safari</b> "
+                "(not Chrome / in-app browsers).",
+                "Tap <b>Share</b> → <b>Add to Home Screen</b> → <b>Add</b>.",
+                "Open the Home Screen icon for standalone use and safer storage.",
             ],
             s["bullet"],
         )
     )
 
-    story.append(Paragraph("7. Desktop (optional)", s["h1"]))
-    story.append(
-        Paragraph(
-            "In Chrome or Edge on a computer, open the app URL and use the install / "
-            "“Install page as app” control in the address bar if offered. You can also "
-            "bookmark the page and use it in the browser.",
-            s["body"],
-        )
-    )
-
-    story.append(Paragraph("8. Moving to a new phone", s["h1"]))
+    story.append(Paragraph("5. Install on Android (Chrome)", s["h1"]))
     story.append(
         bullets(
             [
-                "On the old device: <b>More → Backup &amp; export → Export backup (JSON)</b> "
-                "and save the file somewhere safe (Files, Drive, email to yourself).",
-                "Install My Expenses on the new device (sections 5–6).",
-                "On the new device: <b>More → Backup &amp; export → Import backup</b> "
-                "and choose that JSON file. Import replaces local data after confirmation.",
+                f"Open the same link in <b>Chrome</b>.",
+                "Menu (⋮) → <b>Install app</b> / <b>Add to Home screen</b> (or use the install banner).",
+                "Open <b>My Expenses</b> from the app drawer or Home Screen.",
             ],
             s["bullet"],
         )
     )
 
-    story.append(Paragraph("9. Attribution &amp; sharing rules", s["h1"]))
+    story.append(Paragraph("6. Desktop &amp; moving phones", s["h1"]))
     story.append(
         Paragraph(
-            f"My Expenses was developed by <b>{AUTHOR}</b>.",
+            "<b>Desktop:</b> in Chrome/Edge, open the URL and use Install / “Install page as app” "
+            "if offered, or bookmark it. <b>New phone:</b> on the old device export "
+            "<b>Backup (JSON)</b>; install on the new device; then "
+            "<b>More → Backup &amp; export → Import backup</b> (replaces local data after confirm).",
             s["body"],
         )
     )
+
+    story.append(Paragraph("7. Attribution", s["h1"]))
     story.append(
         Paragraph(
-            "The application and this guide may be shared <b>only by him</b>. "
-            "If you received this guide or the app link from someone else, please do not "
-            f"pass it on further without permission from {AUTHOR}.",
+            f"My Expenses was developed by <b>{AUTHOR}</b>. The application and this guide "
+            "may be shared <b>only by him</b>. If you received them from someone else, do not "
+            f"pass them on without permission from {AUTHOR}.",
             s["body"],
-        )
-    )
-    story.append(Spacer(1, 8 * mm))
-    story.append(HRFlowable(width="100%", thickness=1, color=LINE, spaceBefore=2, spaceAfter=10))
-    story.append(
-        Paragraph(
-            f"© {AUTHOR} · My Expenses · For personal use by recipients he chooses to share with",
-            s["footer"],
         )
     )
 
     def footer(canvas, _doc):
         canvas.saveState()
         canvas.setFillColor(MUTED)
-        canvas.setFont("Guide", 8)
+        canvas.setFont("Guide", 7.5)
         canvas.drawCentredString(
             A4[0] / 2,
-            10 * mm,
-            f"My Expenses · Developed by {AUTHOR} · Share only with his permission",
+            7 * mm,
+            f"My Expenses · Developed by {AUTHOR} · Share only with his permission · Page {_doc.page}",
         )
         canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
-    print(OUT)
+
+    from pypdf import PdfReader
+
+    pages = len(PdfReader(str(OUT)).pages)
+    DESKTOP.write_bytes(OUT.read_bytes())
+    print(f"{OUT} ({pages} pages)")
+    print(f"{DESKTOP}")
+    if pages > 2:
+        raise SystemExit(f"Expected at most 2 pages, got {pages}")
 
 
 if __name__ == "__main__":
