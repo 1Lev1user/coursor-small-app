@@ -376,4 +376,14 @@ tabbarElement.addEventListener('click', (event) => {
 });
 
 requestPersistence();
+
+if (
+    (location.protocol === 'http:' || location.protocol === 'https:')
+    && 'serviceWorker' in navigator
+) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+        /* Fail soft — offline shell is best-effort. */
+    });
+}
+
 render();

@@ -7,6 +7,9 @@ import {
     resolvePlan,
     freezeMonthPlan,
 } from '../budget.js';
+import { exportBackup, importBackup, countRecords } from '../backup.js';
+import { buildMonthCsv, csvFilename } from '../csv.js';
+import { downloadText } from '../files.js';
 
 const addDraft = {
     name: '',
@@ -61,6 +64,9 @@ let incomeEntryDraft = null;
 let incomeEntrySaveError = '';
 let focusIncomeEntryError = false;
 let focusId = null;
+let pendingImportText = null;
+let pendingImportCounts = null;
+let importError = '';
 
 function element(tagName, className, text) {
     const node = document.createElement(tagName);
@@ -191,7 +197,218 @@ function closeTransientUi() {
     incomeEntryDraft = null;
     incomeEntrySaveError = '';
     focusIncomeEntryError = false;
+    pendingImportText = null;
+    pendingImportCounts = null;
+    importError = '';
     renameDrafts.clear();
+}
+
+function hasBackupWorthyData(data) {
+    return data.expenses.length > 0
+        || data.incomes.length > 0
+        || data.subscriptions.length > 0;
+}
+
+function calendarDaysBetween(fromISO, toISO) {
+    const fromParts = fromISO.split('-').map(Number);
+    const toParts = toISO.split('-').map(Number);
+    if (fromParts.length !== 3 || toParts.length !== 3) {
+        return Number.POSITIVE_INFINITY;
+    }
+    const from = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+    const to = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+    return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+function needsBackupReminder(data, now = new Date()) {
+    if (!hasBackupWorthyData(data)) {
+        return false;
+    }
+    const last = data.settings.lastBackupISO;
+    if (last === null || last === undefined || last === '') {
+        return true;
+    }
+    return calendarDaysBetween(last, todayISO(now)) > 30;
+}
+
+function replaceAppData(ctx, next) {
+    for (const key of Object.keys(ctx.data)) {
+        delete ctx.data[key];
+    }
+    Object.assign(ctx.data, next);
+}
+
+function doExportBackup(ctx) {
+    const { filename, json } = exportBackup(ctx.data);
+    downloadText(filename, json, 'application/json');
+    ctx.data.settings.lastBackupISO = todayISO();
+    if (persist(ctx)) {
+        ctx.toast('Backup exported');
+    }
+}
+
+function doExportMonthCsv(ctx, flavour) {
+    const monthKey = ctx.monthKey;
+    const text = buildMonthCsv(ctx.data, monthKey, flavour);
+    downloadText(csvFilename(monthKey, flavour), text, 'text/csv');
+    ctx.toast(flavour === 'europe' ? 'Europe CSV downloaded' : 'Standard CSV downloaded');
+}
+
+function beginImportBackup(ctx, file) {
+    importError = '';
+    if (file === undefined || file === null) {
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+        const rawText = String(reader.result ?? '');
+        const preview = importBackup(rawText);
+        if (preview.ok !== true) {
+            pendingImportText = null;
+            pendingImportCounts = null;
+            importError = preview.reason;
+            ctx.render();
+            return;
+        }
+
+        pendingImportText = rawText;
+        pendingImportCounts = countRecords(ctx.data);
+        importError = '';
+        ctx.render();
+    });
+    reader.addEventListener('error', () => {
+        pendingImportText = null;
+        pendingImportCounts = null;
+        importError = 'Could not read that file.';
+        ctx.render();
+    });
+    reader.readAsText(file);
+}
+
+function confirmImportBackup(ctx) {
+    if (pendingImportText === null) {
+        return;
+    }
+
+    const result = importBackup(pendingImportText);
+    if (result.ok !== true) {
+        importError = result.reason;
+        pendingImportText = null;
+        pendingImportCounts = null;
+        ctx.render();
+        return;
+    }
+
+    replaceAppData(ctx, result.data);
+    pendingImportText = null;
+    pendingImportCounts = null;
+    importError = '';
+    if (persist(ctx)) {
+        ctx.toast('Backup imported');
+    }
+}
+
+function renderBackupReminder(ctx) {
+    if (!needsBackupReminder(ctx.data)) {
+        return null;
+    }
+
+    const card = element('section', 'card stack backup-reminder');
+    card.setAttribute('role', 'status');
+    card.append(
+        element('h2', 'section-title', 'Backup reminder'),
+        element(
+            'p',
+            '',
+            'Your last backup is missing or more than 30 days old. Export a JSON'
+                + ' backup so you can restore your data on this or another device.',
+        ),
+        actionButton('btn btn-primary', 'Export backup now', () => {
+            doExportBackup(ctx);
+        }),
+    );
+    return card;
+}
+
+function renderBackupSection(ctx) {
+    const section = element('section', 'card stack');
+    section.append(element('h2', 'section-title', 'Backup & export'));
+
+    const backupActions = element('div', 'backup-actions');
+    backupActions.append(
+        actionButton('btn btn-primary', 'Export backup (JSON)', () => {
+            doExportBackup(ctx);
+        }),
+    );
+
+    const importLabel = element('label', 'btn backup-file-label');
+    importLabel.textContent = 'Import backup';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'application/json,.json';
+    fileInput.className = 'backup-file-input';
+    fileInput.setAttribute('aria-label', 'Choose backup JSON file');
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        beginImportBackup(ctx, file);
+        fileInput.value = '';
+    });
+    importLabel.append(fileInput);
+    backupActions.append(importLabel);
+    section.append(backupActions);
+
+    if (importError !== '') {
+        const error = element('p', 'error-text', importError);
+        error.setAttribute('role', 'alert');
+        section.append(error);
+    }
+
+    if (pendingImportText !== null && pendingImportCounts !== null) {
+        const counts = pendingImportCounts;
+        const message = `Replace all data? This will destroy ${counts.expenses} expenses,`
+            + ` ${counts.incomes} incomes, and ${counts.subscriptions} subscriptions.`
+            + ' This cannot be undone.';
+        const box = element('div', 'confirm-box');
+        box.setAttribute('role', 'group');
+        box.append(
+            element('p', 'confirm-copy', message),
+            actionButton('btn', 'Cancel', () => {
+                pendingImportText = null;
+                pendingImportCounts = null;
+                importError = '';
+                ctx.render();
+            }),
+            actionButton('btn btn-danger', 'Replace everything', () => {
+                confirmImportBackup(ctx);
+            }),
+        );
+        section.append(box);
+    }
+
+    section.append(element(
+        'h3',
+        'category-name',
+        `Month CSV (${ctx.monthKey})`,
+    ));
+    section.append(element(
+        'p',
+        'muted',
+        'Download this month\'s expenses and incomes. Europe uses ; and comma decimals;'
+            + ' Standard uses , and dot decimals.',
+    ));
+
+    const csvActions = element('div', 'backup-actions');
+    csvActions.append(
+        actionButton('btn', 'Europe CSV', () => {
+            doExportMonthCsv(ctx, 'europe');
+        }),
+        actionButton('btn', 'Standard CSV', () => {
+            doExportMonthCsv(ctx, 'standard');
+        }),
+    );
+    section.append(csvActions);
+    return section;
 }
 
 function option(value, text) {
@@ -1640,11 +1857,18 @@ export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
     const layout = element('div', 'stack more-page');
     layout.append(element('h2', 'section-title', 'More'));
+
+    const reminder = renderBackupReminder(ctx);
+    if (reminder !== null) {
+        layout.append(reminder);
+    }
+
     renderWarnings(layout, plan);
     layout.append(
         renderPlanSection(ctx),
         renderIncomeSection(ctx),
         renderSubscriptionsSection(ctx),
+        renderBackupSection(ctx),
     );
 
     const section = element('section', 'card stack');
