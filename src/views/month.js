@@ -1,6 +1,7 @@
 import { monthTotals } from '../budget.js';
 import { formatEuro } from '../money.js';
 import { addMonths, isInMonth, monthLabel } from '../months.js';
+import { renderMonthNav } from './monthNav.js';
 
 const SHORT_MONTH_NAMES = [
     'Jan',
@@ -35,24 +36,6 @@ function shortDate(date) {
 
 function displayPercent(percent) {
     return `${Math.round(percent * 10) / 10}%`;
-}
-
-function renderNavigator(root, ctx) {
-    const navigator = element('div', 'row month-navigator');
-    const previous = element('button', 'btn btn-ghost', '\u2039');
-    previous.type = 'button';
-    previous.setAttribute('aria-label', 'Previous month');
-    previous.addEventListener('click', () => ctx.setMonthKey(addMonths(ctx.monthKey, -1)));
-
-    const label = element('h2', 'month-title', monthLabel(ctx.monthKey));
-
-    const next = element('button', 'btn btn-ghost', '\u203a');
-    next.type = 'button';
-    next.setAttribute('aria-label', 'Next month');
-    next.addEventListener('click', () => ctx.setMonthKey(addMonths(ctx.monthKey, 1)));
-
-    navigator.append(previous, label, next);
-    root.append(navigator);
 }
 
 function headline(caption, amountCents, negativeMessage) {
@@ -240,7 +223,7 @@ export function render(root, ctx) {
     const entries = monthEntries(ctx.data, ctx.monthKey);
 
     const layout = element('div', 'stack');
-    renderNavigator(layout, ctx);
+    renderMonthNav(layout, ctx);
     renderSummary(layout, totals);
     layout.append(element('p', 'muted month-comparison', comparisonText(
         totals,
