@@ -77,6 +77,7 @@ let incomeEntryDraft = null;
 let incomeEntrySaveError = '';
 let focusIncomeEntryError = false;
 let focusId = null;
+let pendingScrollId = null;
 let pendingImportText = null;
 let pendingImportCounts = null;
 let importError = '';
@@ -2213,6 +2214,10 @@ function renderCategoriesSection(ctx, plan) {
     return section;
 }
 
+export function openSettingsSection(sectionId) {
+    pendingScrollId = sectionId;
+}
+
 export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
     const layout = element('div', 'stack more-page');
@@ -2247,6 +2252,12 @@ export function render(root, ctx) {
         renderBackupSection(ctx),
     );
     root.append(layout);
+
+    if (pendingScrollId !== null) {
+        const section = document.getElementById(pendingScrollId);
+        pendingScrollId = null;
+        section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     if (focusId !== null) {
         const target = document.getElementById(focusId);

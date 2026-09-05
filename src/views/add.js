@@ -1,4 +1,4 @@
-import { parseAmount } from '../money.js';
+import { parseAmount, formatEuro } from '../money.js';
 import { monthKeyOf, todayISO } from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
 import {
@@ -6,6 +6,13 @@ import {
     syncCategoryPlanFields,
     refreshCurrentMonthPlan,
 } from '../budget.js';
+import {
+    getMonthReviewSuggestion,
+    dismissMonthReview,
+    applySurplusToSavings,
+    savingsRoomCents,
+} from '../monthReview.js';
+import { openSettingsSection } from './more.js';
 
 /** @type {'home' | 'expense' | 'income'} */
 let panel = 'home';
@@ -182,6 +189,117 @@ function backToHomeButton(ctx) {
     return button;
 }
 
+function renderMonthReviewCard(ctx, suggestion) {
+    const { totals } = suggestion;
+    const card = element('section', 'card stack home-review');
+    card.setAttribute('aria-label', 'Month review suggestion');
+
+    const bits = [];
+    if (totals.extraIncomeCents > 0) {
+        bits.push(`extra income ${formatEuro(totals.extraIncomeCents)}`);
+    }
+    if (totals.cashLeftCents > 0) {
+        bits.push(`cash left ${formatEuro(totals.cashLeftCents)}`);
+    }
+    if (totals.budgetLeftCents < 0) {
+        bits.push(`over spend budget by ${formatEuro(-totals.budgetLeftCents)}`);
+    }
+    if (suggestion.earnedAboveSpendBudget) {
+        bits.push(
+            `income ${formatEuro(totals.incomeCents)} above spend budget`,
+        );
+    }
+
+    card.append(
+        element('h2', 'section-title', `Review after ${suggestion.previousLabel}?`),
+        element(
+            'p',
+            '',
+            `Last month: ${bits.join(' · ')}. Spend budget was ${formatEuro(totals.budgetCents)}.`,
+        ),
+        element('p', 'muted', 'Shown only in the first 5 days of the month.'),
+    );
+
+    const section1 = element('div', 'stack home-review-section');
+    section1.append(element('h3', 'home-review-subtitle', 'Categories & plan'));
+    section1.append(element(
+        'p',
+        'muted',
+        'Retune category limits if spending felt tight or loose.',
+    ));
+
+    const section1Actions = element('div', 'home-review-actions stack');
+    const categoriesBtn = element('button', 'btn', 'Review categories');
+    categoriesBtn.type = 'button';
+    categoriesBtn.addEventListener('click', () => {
+        openSettingsSection('more-categories');
+        ctx.goTo('more');
+    });
+    section1Actions.append(categoriesBtn);
+    section1.append(section1Actions);
+    card.append(section1);
+
+    if (suggestion.earnedAboveSpendBudget) {
+        const over = suggestion.incomeOverSpendCents;
+        const section2 = element('div', 'stack home-review-section');
+        section2.append(element('h3', 'home-review-subtitle', 'Income above spend budget'));
+        section2.append(element(
+            'p',
+            '',
+            `You earned ${formatEuro(totals.incomeCents)}, `
+                + `${formatEuro(over)} more than the spend budget of `
+                + `${formatEuro(totals.budgetCents)}. Choose one:`,
+        ));
+
+        const section2Actions = element('div', 'home-review-actions stack');
+        const applyAmount = Math.min(over, savingsRoomCents(ctx.data));
+        const savingsBtn = element(
+            'button',
+            'btn btn-primary',
+            applyAmount > 0
+                ? `Add ${formatEuro(applyAmount)} to Savings`
+                : 'Add to Savings',
+        );
+        savingsBtn.type = 'button';
+        savingsBtn.disabled = applyAmount <= 0;
+        savingsBtn.addEventListener('click', () => {
+            const result = applySurplusToSavings(ctx.data, applyAmount);
+            if (result === null) {
+                ctx.toast('Savings is already at the spend budget cap');
+                return;
+            }
+            dismissMonthReview(ctx.data, suggestion.previousKey);
+            if (ctx.save() === false) {
+                return;
+            }
+            ctx.toast(`Savings raised by ${formatEuro(result.appliedCents)}`);
+        });
+
+        const budgetBtn = element('button', 'btn', 'Change spending budget');
+        budgetBtn.type = 'button';
+        budgetBtn.addEventListener('click', () => {
+            openSettingsSection('more-plan');
+            ctx.goTo('more');
+        });
+
+        section2Actions.append(savingsBtn, budgetBtn);
+        section2.append(section2Actions);
+        card.append(section2);
+    }
+
+    const dismissBtn = element('button', 'btn btn-ghost', 'Not now');
+    dismissBtn.type = 'button';
+    dismissBtn.addEventListener('click', () => {
+        dismissMonthReview(ctx.data, suggestion.previousKey);
+        if (ctx.save() !== false) {
+            ctx.toast('Review dismissed');
+        }
+    });
+    card.append(dismissBtn);
+
+    return card;
+}
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const card = element('section', 'card stack home-hero');
@@ -219,6 +337,12 @@ function renderHome(root, ctx) {
     actions.append(expenseBtn, incomeBtn);
     card.append(actions);
     layout.append(card);
+
+    const review = getMonthReviewSuggestion(ctx.data);
+    if (review !== null) {
+        layout.append(renderMonthReviewCard(ctx, review));
+    }
+
     root.append(layout);
 }
 

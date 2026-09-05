@@ -351,12 +351,15 @@ def build():
     story.append(side_by_side(
         s, "screen-chart.png", "Chart",
         [
-            "Donut / breakdown of spending by category for the month.",
-            "Category labels or legend tied to the chart.",
+            "Two analytics: <b>Spending</b> and <b>Income</b>.",
+            "Spending donut by expense category (tap a row to drill into subcategories).",
+            "Income donut: usual salary from Plan + extra income by category.",
+            "Note: spend budget stays fixed — extra income only raises Cash left.",
         ],
         [
-            "See which areas take most of the budget at a glance.",
-            "Compare months after you switch the month elsewhere if available.",
+            "Compare which expense areas take most of the budget.",
+            "See where money came from this month (Plan salary vs extras).",
+            "Switch months with the month navigator at the top.",
         ],
     ))
 

@@ -10,6 +10,7 @@ import {
     refreshCurrentMonthPlan,
     monthTotals,
     subcategoryTotals,
+    incomeBreakdown,
     percentFromEuroCents,
     euroCentsFromPercent,
     syncCategoryPlanFields,
@@ -546,4 +547,76 @@ test('subcategoryTotals omits unused subcategories and returns empty for an unkn
         { id: 'shopping', name: 'Shopping', spentCents: 100 },
     ]);
     assert.deepEqual(subcategoryTotals(data, '2026-09', 'missing'), []);
+});
+
+test('incomeBreakdown includes Plan salary and groups extra income by category', () => {
+    const data = defaultData();
+    data.settings.usualMonthlyIncomeCents = 200000;
+    data.incomes = [
+        {
+            id: 'i1',
+            incomeCategoryId: 'income-other',
+            amountCents: 5000,
+            note: 'Gift',
+            date: '2026-09-02',
+        },
+        {
+            id: 'i2',
+            incomeCategoryId: 'income-other',
+            amountCents: 2500,
+            note: '',
+            date: '2026-09-10',
+        },
+        {
+            id: 'i3',
+            incomeCategoryId: 'salary',
+            amountCents: 1000,
+            note: 'Bonus',
+            date: '2026-09-15',
+        },
+        {
+            id: 'i4',
+            incomeCategoryId: 'income-other',
+            amountCents: 999,
+            note: 'skip',
+            date: '2026-10-01',
+        },
+    ];
+
+    const breakdown = incomeBreakdown(data, '2026-09');
+    assert.equal(breakdown.usualIncomeCents, 200000);
+    assert.equal(breakdown.extraIncomeCents, 8500);
+    assert.equal(breakdown.totalCents, 208500);
+    assert.deepEqual(breakdown.entries, [
+        {
+            id: 'usual-plan',
+            name: 'Usual salary (Plan)',
+            amountCents: 200000,
+            fromPlan: true,
+        },
+        {
+            id: 'income-other',
+            name: 'Other',
+            amountCents: 7500,
+            fromPlan: false,
+        },
+        {
+            id: 'salary',
+            name: 'Salary',
+            amountCents: 1000,
+            fromPlan: false,
+        },
+    ]);
+});
+
+test('incomeBreakdown is empty when there is no Plan salary and no extras', () => {
+    const data = defaultData();
+    data.settings.usualMonthlyIncomeCents = 0;
+    assert.deepEqual(incomeBreakdown(data, '2026-09'), {
+        monthKey: '2026-09',
+        usualIncomeCents: 0,
+        extraIncomeCents: 0,
+        totalCents: 0,
+        entries: [],
+    });
 });

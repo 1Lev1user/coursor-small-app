@@ -256,3 +256,68 @@ export function subcategoryTotals(data, monthKey, categoryId) {
         spentCents,
     })).sort((first, second) => second.spentCents - first.spentCents);
 }
+
+/**
+ * Income analytics: usual Plan salary plus extra income by category.
+ */
+export function incomeBreakdown(data, monthKey) {
+    const plan = getMonthPlan(data, monthKey);
+    const knownIds = new Set(data.incomeCategories.map(({ id }) => id));
+    const amountsByCategory = new Map();
+
+    for (const income of data.incomes) {
+        if (!isInMonth(income.date, monthKey)) {
+            continue;
+        }
+        const id = knownIds.has(income.incomeCategoryId) ? income.incomeCategoryId : '';
+        amountsByCategory.set(
+            id,
+            (amountsByCategory.get(id) ?? 0) + income.amountCents,
+        );
+    }
+
+    const entries = [];
+    const usualIncomeCents = plan.usualMonthlyIncomeCents;
+    if (usualIncomeCents > 0) {
+        entries.push({
+            id: 'usual-plan',
+            name: 'Usual salary (Plan)',
+            amountCents: usualIncomeCents,
+            fromPlan: true,
+        });
+    }
+
+    for (const category of data.incomeCategories) {
+        const amountCents = amountsByCategory.get(category.id) ?? 0;
+        if (amountCents <= 0) {
+            continue;
+        }
+        entries.push({
+            id: category.id,
+            name: category.name,
+            amountCents,
+            fromPlan: false,
+        });
+    }
+
+    const orphanCents = amountsByCategory.get('') ?? 0;
+    if (orphanCents > 0) {
+        entries.push({
+            id: '',
+            name: 'Unspecified',
+            amountCents: orphanCents,
+            fromPlan: false,
+        });
+    }
+
+    entries.sort((first, second) => second.amountCents - first.amountCents);
+
+    const totalCents = entries.reduce((sum, entry) => sum + entry.amountCents, 0);
+    return {
+        monthKey,
+        usualIncomeCents,
+        extraIncomeCents: Math.max(0, totalCents - usualIncomeCents),
+        totalCents,
+        entries,
+    };
+}

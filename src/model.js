@@ -76,6 +76,7 @@ export function defaultData() {
             setupComplete: false,
             lastBackupISO: null,
             othersSeeded: true,
+            monthReviewDismissedFor: null,
         },
         categories: [
             {
@@ -185,6 +186,14 @@ export function normalise(raw) {
             data.settings.userName = '';
         } else {
             data.settings.userName = data.settings.userName.trim();
+        }
+        if (!Object.hasOwn(data.settings, 'monthReviewDismissedFor')) {
+            data.settings.monthReviewDismissedFor = null;
+        } else if (
+            data.settings.monthReviewDismissedFor !== null
+            && typeof data.settings.monthReviewDismissedFor !== 'string'
+        ) {
+            data.settings.monthReviewDismissedFor = null;
         }
 
         const budget = data.settings.monthlyBudgetCents;

@@ -489,7 +489,16 @@ body.is-setup .tabbar {
 }
 
 .chart-heading {
+    margin-bottom: 0.15rem;
     text-align: center;
+}
+
+.chart-section {
+    gap: 0.5rem;
+}
+
+.chart-section > .muted {
+    margin: 0;
 }
 
 /* Forms */
@@ -919,6 +928,26 @@ body.is-setup .tabbar {
 
 .home-actions .btn {
     width: 100%;
+}
+
+.home-review .home-review-actions {
+    gap: var(--s2);
+}
+
+.home-review .home-review-actions .btn {
+    width: 100%;
+}
+
+.home-review-section {
+    padding-top: var(--s3);
+    border-top: 1px solid var(--border);
+    gap: var(--s2);
+}
+
+.home-review-subtitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 
 .add-quick-panel {

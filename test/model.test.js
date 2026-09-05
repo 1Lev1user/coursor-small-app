@@ -99,6 +99,7 @@ test('defaultData returns the exact initial data shape and seeds', () => {
             setupComplete: false,
             lastBackupISO: null,
             othersSeeded: true,
+            monthReviewDismissedFor: null,
         },
         categories: expectedCategories,
         incomeCategories: [
