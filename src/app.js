@@ -4,6 +4,7 @@ import { render as renderAdd } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
+import { render as renderSetup } from './views/setup.js';
 
 const TOAST_MS = 2000;
 
@@ -59,6 +60,9 @@ function setMonthKey(key) {
 }
 
 function goTo(tab) {
+    if (!app.data.settings.setupComplete) {
+        return;
+    }
     if (!Object.hasOwn(views, tab)) {
         return;
     }
@@ -80,6 +84,23 @@ function context() {
 }
 
 function render() {
+    const setupComplete = app.data.settings.setupComplete === true;
+    document.body.classList.toggle('is-setup', !setupComplete);
+    tabbarElement.hidden = !setupComplete;
+
+    for (const button of tabButtons) {
+        button.disabled = !setupComplete;
+    }
+
+    viewElement.replaceChildren();
+
+    if (!setupComplete) {
+        titleElement.textContent = 'Setup';
+        document.title = 'Setup - My Expenses';
+        renderSetup(viewElement, context());
+        return;
+    }
+
     const view = views[app.tab];
 
     titleElement.textContent = view.title;
@@ -95,13 +116,12 @@ function render() {
         }
     }
 
-    viewElement.replaceChildren();
     view.render(viewElement, context());
 }
 
 tabbarElement.addEventListener('click', (event) => {
     const button = event.target.closest('[data-tab]');
-    if (button !== null) {
+    if (button !== null && !button.disabled) {
         goTo(button.dataset.tab);
     }
 });

@@ -80,6 +80,14 @@ body {
     padding-bottom: calc(var(--tabbar-height) + var(--s5) + env(safe-area-inset-bottom));
 }
 
+body.is-setup #view {
+    padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
+}
+
+body.is-setup .tabbar {
+    display: none;
+}
+
 .tabbar {
     position: fixed;
     inset: auto 0 0 0;
@@ -741,6 +749,48 @@ body {
 }
 
 .add-category-form {
+    padding-top: var(--s4);
+    border-top: 1px solid var(--border);
+}
+
+/* Setup */
+
+.setup-page {
+    width: 100%;
+    max-width: none;
+}
+
+.setup-form .btn,
+.plan-form .btn,
+.add-extra-income-form .btn {
+    width: 100%;
+    min-height: var(--tap);
+}
+
+.plan-note {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.income-category-item {
+    width: 100%;
+    padding-block: var(--s3);
+    border-top: 1px solid var(--border);
+}
+
+.income-category-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.income-entry-list {
+    border-top: 1px solid var(--border);
+    padding-top: var(--s2);
+}
+
+.add-extra-income-form {
     padding-top: var(--s4);
     border-top: 1px solid var(--border);
 }

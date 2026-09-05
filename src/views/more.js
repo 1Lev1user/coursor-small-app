@@ -1,10 +1,39 @@
+import { parseAmount, formatEuro, formatPlain } from '../money.js';
+import { todayISO, monthKeyOf } from '../months.js';
 import { UNCATEGORISED_ID, createId, deleteCategory, deleteSubcategory } from '../model.js';
-import { canSetPinned, refreshCurrentMonthPlan, resolvePlan } from '../budget.js';
+import {
+    canSetPinned,
+    refreshCurrentMonthPlan,
+    resolvePlan,
+    freezeMonthPlan,
+} from '../budget.js';
 
 const addDraft = {
     name: '',
     kind: 'flexible',
     percent: '',
+    error: '',
+};
+
+const planDraft = {
+    budget: null,
+    savingsPercent: null,
+    income: null,
+    errorField: '',
+    error: '',
+};
+
+const incomeDraft = {
+    incomeCategoryId: '',
+    amount: '',
+    date: '',
+    note: '',
+    errorField: '',
+    error: '',
+};
+
+const addIncomeCategoryDraft = {
+    name: '',
     error: '',
 };
 
@@ -15,6 +44,8 @@ let confirmCategoryId = null;
 let confirmSubKey = null;
 let renameCategoryId = null;
 let renameSubKey = null;
+let confirmIncomeCategoryId = null;
+let renameIncomeCategoryId = null;
 let focusId = null;
 
 function element(tagName, className, text) {
@@ -138,7 +169,32 @@ function closeTransientUi() {
     confirmSubKey = null;
     renameCategoryId = null;
     renameSubKey = null;
+    confirmIncomeCategoryId = null;
+    renameIncomeCategoryId = null;
     renameDrafts.clear();
+}
+
+function savingsCategory(data) {
+    return data.categories.find(({ id }) => id === 'savings');
+}
+
+function centsInputValue(cents, draftValue) {
+    if (draftValue !== null) {
+        return draftValue;
+    }
+    if (!cents) {
+        return '';
+    }
+    return formatPlain(cents);
+}
+
+function incomeCategoryName(data, incomeCategoryId) {
+    return data.incomeCategories.find(({ id }) => id === incomeCategoryId)?.name
+        ?? incomeCategoryId;
+}
+
+function incomeCategoryInUse(data, incomeCategoryId) {
+    return data.incomes.some((entry) => entry.incomeCategoryId === incomeCategoryId);
 }
 
 function applyCategoryRename(ctx, category, rawName) {
@@ -269,6 +325,31 @@ function addCategory(ctx, nameField, percentField) {
 }
 
 function renderWarnings(root, plan) {
+    if (plan.leftoverPercent > 0 && plan.flexibleCount > 0) {
+        const leftover = element('section', 'card plan-note');
+        leftover.append(element(
+            'p',
+            '',
+            `Leftover ${displayPercent(plan.leftoverPercent)} is split equally`
+                + ` across ${plan.flexibleCount} flexible`
+                + (plan.flexibleCount === 1 ? ' category' : ' categories')
+                + ` (${displayPercent(plan.flexiblePercentEach)} each).`,
+        ));
+        root.append(leftover);
+    }
+
+    if (plan.unallocatedPercent > 0) {
+        const unallocated = element('section', 'card warning-card');
+        unallocated.append(element(
+            'p',
+            '',
+            `Unallocated ${displayPercent(plan.unallocatedPercent)}`
+                + ` (${formatEuro(plan.unallocatedCents)}) — no flexible categories`
+                + ' to receive the remainder.',
+        ));
+        root.append(unallocated);
+    }
+
     if (plan.warnings.flexibleWithoutBudget) {
         const warning = element('section', 'card warning-card');
         warning.append(element(
@@ -290,6 +371,515 @@ function renderWarnings(root, plan) {
         ));
         root.append(warning);
     }
+}
+
+function savePlan(ctx, budgetField, savingsField, incomeField) {
+    clearError(budgetField);
+    clearError(savingsField);
+    clearError(incomeField);
+    planDraft.error = '';
+    planDraft.errorField = '';
+
+    planDraft.budget = budgetField.control.value;
+    planDraft.savingsPercent = savingsField.control.value;
+    planDraft.income = incomeField.control.value;
+
+    const budgetCents = parseAmount(planDraft.budget);
+    if (budgetCents === null) {
+        planDraft.errorField = 'budget';
+        planDraft.error = 'Enter a valid amount greater than zero.';
+        setError(budgetField, planDraft.error);
+        budgetField.control.focus();
+        return;
+    }
+
+    const savingsPercent = parsePercent(planDraft.savingsPercent);
+    if (savingsPercent === null) {
+        planDraft.errorField = 'savings';
+        planDraft.error = 'Enter a savings percentage from 0 to 100.';
+        setError(savingsField, planDraft.error);
+        savingsField.control.focus();
+        return;
+    }
+
+    const pinCheck = canSetPinned(ctx.data.categories, 'savings', savingsPercent);
+    if (pinCheck.ok !== true) {
+        planDraft.errorField = 'savings';
+        planDraft.error = pinCheck.reason;
+        setError(savingsField, pinCheck.reason);
+        savingsField.control.focus();
+        return;
+    }
+
+    const incomeCents = parseAmount(planDraft.income);
+    if (incomeCents === null) {
+        planDraft.errorField = 'income';
+        planDraft.error = 'Enter a valid amount greater than zero.';
+        setError(incomeField, planDraft.error);
+        incomeField.control.focus();
+        return;
+    }
+
+    const savings = savingsCategory(ctx.data);
+    if (savings === undefined) {
+        planDraft.errorField = 'savings';
+        planDraft.error = 'Savings category is missing.';
+        setError(savingsField, planDraft.error);
+        savingsField.control.focus();
+        return;
+    }
+
+    ctx.data.settings.monthlyBudgetCents = budgetCents;
+    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
+    savings.pinned = true;
+    savings.percent = savingsPercent;
+    refreshCurrentMonthPlan(ctx.data);
+
+    planDraft.budget = null;
+    planDraft.savingsPercent = null;
+    planDraft.income = null;
+    planDraft.error = '';
+    planDraft.errorField = '';
+
+    if (persist(ctx)) {
+        ctx.toast('Plan saved');
+    }
+}
+
+function renderPlanSection(ctx) {
+    const settings = ctx.data.settings;
+    const savings = savingsCategory(ctx.data);
+    const section = element('section', 'card stack');
+    section.append(element('h2', 'section-title', 'Plan'));
+
+    const form = element('form', 'stack plan-form');
+    form.noValidate = true;
+
+    const budgetInput = document.createElement('input');
+    budgetInput.type = 'text';
+    budgetInput.inputMode = 'decimal';
+    budgetInput.autocomplete = 'off';
+    budgetInput.placeholder = '1000';
+    budgetInput.value = centsInputValue(settings.monthlyBudgetCents, planDraft.budget);
+    const budgetField = buildField('plan-budget', 'Monthly spend budget (EUR)', budgetInput);
+    budgetInput.addEventListener('input', () => {
+        planDraft.budget = budgetInput.value;
+        clearError(budgetField);
+    });
+
+    const savingsInput = document.createElement('input');
+    savingsInput.type = 'text';
+    savingsInput.inputMode = 'decimal';
+    savingsInput.autocomplete = 'off';
+    savingsInput.placeholder = '10';
+    savingsInput.value = planDraft.savingsPercent !== null
+        ? planDraft.savingsPercent
+        : String(savings?.percent ?? 0);
+    const savingsField = buildField('plan-savings', 'Savings %', savingsInput);
+    savingsInput.addEventListener('input', () => {
+        planDraft.savingsPercent = savingsInput.value;
+        clearError(savingsField);
+    });
+
+    const incomeInput = document.createElement('input');
+    incomeInput.type = 'text';
+    incomeInput.inputMode = 'decimal';
+    incomeInput.autocomplete = 'off';
+    incomeInput.placeholder = '2000';
+    incomeInput.value = centsInputValue(settings.usualMonthlyIncomeCents, planDraft.income);
+    const incomeField = buildField('plan-income', 'Usual monthly income (EUR)', incomeInput);
+    incomeInput.addEventListener('input', () => {
+        planDraft.income = incomeInput.value;
+        clearError(incomeField);
+    });
+
+    if (planDraft.error !== '') {
+        if (planDraft.errorField === 'budget') {
+            setError(budgetField, planDraft.error);
+        } else if (planDraft.errorField === 'savings') {
+            setError(savingsField, planDraft.error);
+        } else if (planDraft.errorField === 'income') {
+            setError(incomeField, planDraft.error);
+        }
+    }
+
+    const submit = element('button', 'btn btn-primary', 'Save plan');
+    submit.type = 'submit';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        savePlan(ctx, budgetField, savingsField, incomeField);
+    });
+
+    form.append(
+        budgetField.wrapper,
+        savingsField.wrapper,
+        incomeField.wrapper,
+        submit,
+    );
+    section.append(form);
+    return section;
+}
+
+function saveUsualIncome(ctx, incomeField) {
+    clearError(incomeField);
+    const amountCents = parseAmount(incomeField.control.value);
+    if (amountCents === null) {
+        setError(incomeField, 'Enter a valid amount greater than zero.');
+        incomeField.control.focus();
+        return;
+    }
+
+    ctx.data.settings.usualMonthlyIncomeCents = amountCents;
+    refreshCurrentMonthPlan(ctx.data);
+    planDraft.income = null;
+    if (persist(ctx)) {
+        ctx.toast('Usual income saved');
+    }
+}
+
+function addExtraIncome(ctx, categoryField, amountField, dateField) {
+    clearError(categoryField);
+    clearError(amountField);
+    clearError(dateField);
+    incomeDraft.error = '';
+    incomeDraft.errorField = '';
+
+    incomeDraft.incomeCategoryId = categoryField.control.value;
+    incomeDraft.amount = amountField.control.value;
+    incomeDraft.date = dateField.control.value;
+
+    if (incomeDraft.incomeCategoryId === '') {
+        incomeDraft.errorField = 'category';
+        incomeDraft.error = 'Choose an income category.';
+        setError(categoryField, incomeDraft.error);
+        categoryField.control.focus();
+        return;
+    }
+
+    const amountCents = parseAmount(incomeDraft.amount);
+    if (amountCents === null) {
+        incomeDraft.errorField = 'amount';
+        incomeDraft.error = 'Enter a valid amount greater than zero.';
+        setError(amountField, incomeDraft.error);
+        amountField.control.focus();
+        return;
+    }
+
+    if (incomeDraft.date === '' || monthKeyOf(incomeDraft.date) === null) {
+        incomeDraft.errorField = 'date';
+        incomeDraft.error = 'Enter a valid date.';
+        setError(dateField, incomeDraft.error);
+        dateField.control.focus();
+        return;
+    }
+
+    const noteInput = document.getElementById('extra-income-note');
+    const note = noteInput?.value.trim() ?? '';
+
+    ctx.data.incomes.push({
+        id: createId('inc'),
+        incomeCategoryId: incomeDraft.incomeCategoryId,
+        amountCents,
+        note,
+        date: incomeDraft.date,
+    });
+    freezeMonthPlan(ctx.data, monthKeyOf(incomeDraft.date));
+
+    incomeDraft.incomeCategoryId = '';
+    incomeDraft.amount = '';
+    incomeDraft.date = '';
+    incomeDraft.note = '';
+    incomeDraft.error = '';
+    incomeDraft.errorField = '';
+
+    if (persist(ctx)) {
+        ctx.toast('Extra income added');
+    }
+}
+
+function addIncomeCategory(ctx, nameField) {
+    addIncomeCategoryDraft.name = nameField.control.value;
+    addIncomeCategoryDraft.error = '';
+    const name = addIncomeCategoryDraft.name.trim();
+    if (name === '') {
+        addIncomeCategoryDraft.error = 'Enter a name.';
+        setError(nameField, addIncomeCategoryDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    ctx.data.incomeCategories.push({
+        id: createId('incat'),
+        name,
+    });
+    addIncomeCategoryDraft.name = '';
+    addIncomeCategoryDraft.error = '';
+    if (persist(ctx)) {
+        ctx.toast('Income category added');
+    }
+}
+
+function applyIncomeCategoryRename(ctx, category, rawName) {
+    const name = rawName.trim();
+    if (name === '') {
+        renameDrafts.set(category.id, { value: rawName, error: 'Enter a name.' });
+        ctx.render();
+        return;
+    }
+
+    category.name = name;
+    closeTransientUi();
+    if (persist(ctx)) {
+        ctx.toast('Income category renamed');
+    }
+}
+
+function confirmDeleteIncomeCategory(ctx, category) {
+    if (incomeCategoryInUse(ctx.data, category.id)) {
+        ctx.toast('This income category is in use and cannot be deleted.');
+        closeTransientUi();
+        ctx.render();
+        return;
+    }
+
+    const index = ctx.data.incomeCategories.findIndex(({ id }) => id === category.id);
+    if (index === -1) {
+        ctx.toast('Income category does not exist.');
+        return;
+    }
+
+    ctx.data.incomeCategories.splice(index, 1);
+    closeTransientUi();
+    if (persist(ctx)) {
+        ctx.toast('Income category deleted');
+    }
+}
+
+function renderIncomeCategoryRow(ctx, category) {
+    const item = element('article', 'income-category-item');
+    const draft = renameDrafts.get(category.id) ?? { value: category.name, error: '' };
+
+    if (renameIncomeCategoryId === category.id) {
+        item.append(renderRenameForm(
+            `rename-incat-${category.id}`,
+            draft.value,
+            draft.error,
+            (value) => {
+                renameDrafts.set(category.id, { value, error: '' });
+                applyIncomeCategoryRename(ctx, category, value);
+            },
+            () => {
+                renameIncomeCategoryId = null;
+                renameDrafts.delete(category.id);
+                ctx.render();
+            },
+        ));
+        return item;
+    }
+
+    if (confirmIncomeCategoryId === category.id) {
+        item.append(renderConfirm(
+            `Delete ${category.name}?`,
+            () => confirmDeleteIncomeCategory(ctx, category),
+            () => {
+                confirmIncomeCategoryId = null;
+                ctx.render();
+            },
+        ));
+        return item;
+    }
+
+    const head = element('div', 'more-category-head');
+    head.append(element('h3', 'category-name', category.name));
+    const actions = element('div', 'more-actions');
+    actions.append(
+        actionButton('btn btn-ghost', 'Rename', () => {
+            closeTransientUi();
+            renameIncomeCategoryId = category.id;
+            renameDrafts.set(category.id, { value: category.name, error: '' });
+            focusId = `rename-incat-${category.id}`;
+            ctx.render();
+        }),
+        actionButton('btn btn-ghost-danger', 'Delete', () => {
+            closeTransientUi();
+            confirmIncomeCategoryId = category.id;
+            ctx.render();
+        }),
+    );
+    head.append(actions);
+    item.append(head);
+    return item;
+}
+
+function renderIncomeSection(ctx) {
+    const settings = ctx.data.settings;
+    const section = element('section', 'card stack');
+    section.append(element('h2', 'section-title', 'Income'));
+
+    const usualForm = element('form', 'stack');
+    usualForm.noValidate = true;
+    const usualInput = document.createElement('input');
+    usualInput.type = 'text';
+    usualInput.inputMode = 'decimal';
+    usualInput.autocomplete = 'off';
+    usualInput.placeholder = '2000';
+    usualInput.value = centsInputValue(settings.usualMonthlyIncomeCents, planDraft.income);
+    const usualField = buildField('usual-income', 'Usual monthly income (EUR)', usualInput);
+    usualInput.addEventListener('input', () => {
+        planDraft.income = usualInput.value;
+        clearError(usualField);
+    });
+    const usualSave = element('button', 'btn btn-primary', 'Save usual income');
+    usualSave.type = 'submit';
+    usualForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveUsualIncome(ctx, usualField);
+    });
+    usualForm.append(usualField.wrapper, usualSave);
+    section.append(usualForm);
+
+    section.append(element('h3', 'category-name', 'Extra income'));
+    const list = element('div', 'entry-list income-entry-list');
+    if (ctx.data.incomes.length === 0) {
+        list.append(element('p', 'muted', 'No extra income yet.'));
+    } else {
+        const sorted = [...ctx.data.incomes].sort((first, second) => {
+            if (first.date !== second.date) {
+                return first.date < second.date ? 1 : -1;
+            }
+            return 0;
+        });
+        for (const income of sorted) {
+            const row = element('div', 'entry-row');
+            const description = element('div', 'entry-description');
+            description.append(
+                element('p', 'entry-name', incomeCategoryName(ctx.data, income.incomeCategoryId)),
+            );
+            if (typeof income.note === 'string' && income.note.trim() !== '') {
+                description.append(element('p', 'muted', income.note));
+            }
+            const values = element('div', 'entry-values');
+            values.append(element('time', 'muted', income.date));
+            values.append(element('p', 'entry-amount is-ok', `+${formatEuro(income.amountCents)}`));
+            row.append(description, values);
+            list.append(row);
+        }
+    }
+    section.append(list);
+
+    if (incomeDraft.date === '') {
+        incomeDraft.date = todayISO();
+    }
+
+    const addForm = element('form', 'stack add-extra-income-form');
+    addForm.noValidate = true;
+    addForm.append(element('h3', 'category-name', 'Add extra income'));
+
+    const categorySelect = document.createElement('select');
+    categorySelect.required = true;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Choose a category';
+    categorySelect.append(placeholder);
+    for (const category of ctx.data.incomeCategories) {
+        const option = document.createElement('option');
+        option.value = category.id;
+        option.textContent = category.name;
+        categorySelect.append(option);
+    }
+    categorySelect.value = incomeDraft.incomeCategoryId;
+    const categoryField = buildField('extra-income-category', 'Income category', categorySelect);
+    categorySelect.addEventListener('change', () => {
+        incomeDraft.incomeCategoryId = categorySelect.value;
+        clearError(categoryField);
+    });
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.placeholder = '100';
+    amountInput.value = incomeDraft.amount;
+    const amountField = buildField('extra-income-amount', 'Amount (EUR)', amountInput);
+    amountInput.addEventListener('input', () => {
+        incomeDraft.amount = amountInput.value;
+        clearError(amountField);
+    });
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = incomeDraft.date;
+    const dateField = buildField('extra-income-date', 'Date', dateInput);
+    dateInput.addEventListener('input', () => {
+        incomeDraft.date = dateInput.value;
+        clearError(dateField);
+    });
+
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.autocomplete = 'off';
+    noteInput.value = incomeDraft.note;
+    const noteField = buildField('extra-income-note', 'Note (optional)', noteInput);
+    noteInput.addEventListener('input', () => {
+        incomeDraft.note = noteInput.value;
+    });
+
+    if (incomeDraft.error !== '') {
+        if (incomeDraft.errorField === 'category') {
+            setError(categoryField, incomeDraft.error);
+        } else if (incomeDraft.errorField === 'amount') {
+            setError(amountField, incomeDraft.error);
+        } else if (incomeDraft.errorField === 'date') {
+            setError(dateField, incomeDraft.error);
+        }
+    }
+
+    const addSubmit = element('button', 'btn btn-primary', 'Add extra income');
+    addSubmit.type = 'submit';
+    addForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        addExtraIncome(ctx, categoryField, amountField, dateField);
+    });
+    addForm.append(
+        categoryField.wrapper,
+        amountField.wrapper,
+        dateField.wrapper,
+        noteField.wrapper,
+        addSubmit,
+    );
+    section.append(addForm);
+
+    section.append(element('h3', 'category-name', 'Income categories'));
+    const categories = element('div', 'category-list');
+    for (const category of ctx.data.incomeCategories) {
+        categories.append(renderIncomeCategoryRow(ctx, category));
+    }
+
+    const addCategoryForm = element('form', 'inline-form');
+    addCategoryForm.noValidate = true;
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'off';
+    nameInput.value = addIncomeCategoryDraft.name;
+    const nameField = buildField('add-income-category', 'Add income category', nameInput);
+    if (addIncomeCategoryDraft.error !== '') {
+        setError(nameField, addIncomeCategoryDraft.error);
+    }
+    nameInput.addEventListener('input', () => {
+        addIncomeCategoryDraft.name = nameInput.value;
+        addIncomeCategoryDraft.error = '';
+        clearError(nameField);
+    });
+    const addCategoryButton = element('button', 'btn btn-primary', 'Add');
+    addCategoryButton.type = 'submit';
+    addCategoryForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        addIncomeCategory(ctx, nameField);
+    });
+    addCategoryForm.append(nameField.wrapper, addCategoryButton);
+    section.append(categories, addCategoryForm);
+
+    return section;
 }
 
 function renderSubcategory(ctx, category, subcategory) {
@@ -551,6 +1141,7 @@ export function render(root, ctx) {
     const layout = element('div', 'stack more-page');
     layout.append(element('h2', 'section-title', 'More'));
     renderWarnings(layout, plan);
+    layout.append(renderPlanSection(ctx), renderIncomeSection(ctx));
 
     const section = element('section', 'card stack');
     section.append(element('h2', 'section-title', 'Categories'));
