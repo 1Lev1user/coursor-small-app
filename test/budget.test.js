@@ -10,6 +10,9 @@ import {
     refreshCurrentMonthPlan,
     monthTotals,
     subcategoryTotals,
+    percentFromEuroCents,
+    euroCentsFromPercent,
+    syncCategoryPlanFields,
 } from '../src/budget.js';
 
 function expense(id, categoryId, amountCents, date, subcategoryId = '') {
@@ -213,15 +216,70 @@ test('canSetPinned computes replacement and new-category totals while ignoring s
     assert.deepEqual(canSetPinned(data.categories, 'savings', 70), {
         ok: true,
         pinnedTotalPercent: 100,
+        overflow: false,
     });
     assert.deepEqual(canSetPinned(data.categories, null, 30), {
         ok: true,
         pinnedTotalPercent: 100,
+        overflow: false,
     });
     assert.deepEqual(canSetPinned(data.categories, 'savings', 71), {
-        ok: false,
-        reason: 'Pinned categories would total 101%, which is above the 100% maximum.',
+        ok: true,
+        pinnedTotalPercent: 101,
+        overflow: true,
     });
+});
+
+test('percentFromEuroCents and euroCentsFromPercent round-trip on clean numbers', () => {
+    assert.equal(percentFromEuroCents(3500, 100000), 3.5);
+    assert.equal(euroCentsFromPercent(3.5, 100000), 3500);
+    assert.equal(percentFromEuroCents(10000, 0), 0);
+    assert.equal(euroCentsFromPercent(10, 0), 0);
+});
+
+test('resolvePlan uses fixed-euro limitCents as canonical when limitMode is euro', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000; // €1000
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.pinned = true;
+    savings.limitMode = 'euro';
+    savings.limitCents = 10000; // €100
+    savings.percent = 999; // stale — must be ignored/overwritten by sync
+
+    const plan = resolvePlan(data.categories, data.settings.monthlyBudgetCents);
+    const entry = plan.entries.find(({ id }) => id === 'savings');
+    assert.equal(entry.limitCents, 10000);
+    assert.equal(entry.percent, 10);
+    assert.equal(plan.pinnedTotalPercent, 10);
+    assert.equal(plan.leftoverPercent, 90);
+});
+
+test('syncCategoryPlanFields updates fixed-euro percent when budget changes', () => {
+    const categories = [
+        {
+            id: 'savings',
+            name: 'Savings',
+            system: false,
+            pinned: true,
+            limitMode: 'euro',
+            limitCents: 10000,
+            percent: 10,
+            subcategories: [],
+        },
+        {
+            id: 'flex',
+            name: 'Flex',
+            system: false,
+            pinned: false,
+            limitMode: 'percent',
+            limitCents: 0,
+            percent: 0,
+            subcategories: [],
+        },
+    ];
+    syncCategoryPlanFields(categories, 200000); // budget now €2000
+    assert.equal(categories[0].limitCents, 10000);
+    assert.equal(categories[0].percent, 5);
 });
 
 test('buildPlanSnapshot has the frozen shape and does not store anything', () => {

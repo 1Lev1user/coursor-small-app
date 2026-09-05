@@ -1,7 +1,41 @@
 import { splitShares } from './money.js';
 import { currentMonthKey, isInMonth } from './months.js';
 
+export function percentFromEuroCents(limitCents, monthlyBudgetCents) {
+    if (!Number.isFinite(limitCents) || !Number.isFinite(monthlyBudgetCents) || monthlyBudgetCents <= 0) {
+        return 0;
+    }
+    return (limitCents * 100) / monthlyBudgetCents;
+}
+
+export function euroCentsFromPercent(percent, monthlyBudgetCents) {
+    if (!Number.isFinite(percent) || !Number.isFinite(monthlyBudgetCents) || monthlyBudgetCents <= 0) {
+        return 0;
+    }
+    return splitShares(monthlyBudgetCents, [percent])[0];
+}
+
+/** Mutates user categories in place: sync percent ↔ limitCents from limitMode. */
+export function syncCategoryPlanFields(categories, monthlyBudgetCents) {
+    for (const category of categories) {
+        if (category.system === true) continue;
+        if (category.pinned !== true) {
+            if (category.limitMode !== 'percent' && category.limitMode !== 'euro') {
+                category.limitMode = 'percent';
+            }
+            continue;
+        }
+        if (category.limitMode === 'euro') {
+            category.percent = percentFromEuroCents(category.limitCents, monthlyBudgetCents);
+        } else {
+            category.limitMode = 'percent';
+            category.limitCents = euroCentsFromPercent(category.percent, monthlyBudgetCents);
+        }
+    }
+}
+
 export function resolvePlan(categories, monthlyBudgetCents) {
+    syncCategoryPlanFields(categories, monthlyBudgetCents);
     const included = categories.filter(({ system }) => system !== true);
     const pinnedTotalPercent = included
         .filter(({ pinned }) => pinned === true)
@@ -66,14 +100,11 @@ export function canSetPinned(categories, categoryId, percent) {
     }, 0);
     const pinnedTotalPercent = otherPinnedTotal + percent;
 
-    if (pinnedTotalPercent > 100) {
-        return {
-            ok: false,
-            reason: `Pinned categories would total ${pinnedTotalPercent}%, which is above the 100% maximum.`,
-        };
-    }
-
-    return { ok: true, pinnedTotalPercent };
+    return {
+        ok: true,
+        pinnedTotalPercent,
+        overflow: pinnedTotalPercent > 100,
+    };
 }
 
 export function buildPlanSnapshot(data) {
