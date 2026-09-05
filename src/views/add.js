@@ -14,6 +14,8 @@ const draft = {
 };
 
 let focusAmountOnRender = false;
+let saveError = '';
+let focusSaveErrorOnRender = false;
 
 function selectableCategories(data) {
     return data.categories.filter(
@@ -77,9 +79,8 @@ export function render(root, ctx) {
     form.className = 'card stack';
     form.noValidate = true;
 
-    // aria-required rather than required: validation is ours, and a native
-    // required control reports itself invalid before the user has touched it.
     const categorySelect = document.createElement('select');
+    categorySelect.required = true;
     categorySelect.setAttribute('aria-required', 'true');
     categorySelect.append(
         option('', 'Choose a category'),
@@ -96,6 +97,7 @@ export function render(root, ctx) {
     amountInput.inputMode = 'decimal';
     amountInput.autocomplete = 'off';
     amountInput.placeholder = '12.50 or 12,50';
+    amountInput.required = true;
     amountInput.setAttribute('aria-required', 'true');
     amountInput.value = draft.amount;
     const amountField = buildField('add-amount', 'Amount (\u20ac)', amountInput);
@@ -109,9 +111,19 @@ export function render(root, ctx) {
 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
+    dateInput.required = true;
     dateInput.setAttribute('aria-required', 'true');
     dateInput.value = draft.date;
     const dateField = buildField('add-date', 'Date', dateInput);
+
+    // Belongs to the whole form rather than one field: it reports that the
+    // device refused the write, not that something was typed wrongly.
+    const formError = document.createElement('p');
+    formError.id = 'add-form-error';
+    formError.className = 'error-text';
+    formError.setAttribute('role', 'alert');
+    formError.tabIndex = -1;
+    formError.hidden = true;
 
     const submitButton = document.createElement('button');
     submitButton.type = 'submit';
@@ -130,6 +142,7 @@ export function render(root, ctx) {
             option('', 'Choose a subcategory'),
             ...subcategories.map(({ id, name }) => option(id, name)),
         );
+        subcategorySelect.required = hasSubcategories;
         subcategorySelect.setAttribute('aria-required', String(hasSubcategories));
         subcategorySelect.value = subcategories.some(({ id }) => id === draft.subcategoryId)
             ? draft.subcategoryId
@@ -164,6 +177,10 @@ export function render(root, ctx) {
     form.addEventListener('submit', (event) => {
         event.preventDefault();
 
+        saveError = '';
+        formError.textContent = '';
+        formError.hidden = true;
+
         const categoryId = categorySelect.value;
         const subcategories = subcategoriesOf(categoryId);
         const subcategoryId = subcategories.length > 0 ? subcategorySelect.value : '';
@@ -197,15 +214,34 @@ export function render(root, ctx) {
             return;
         }
 
-        ctx.data.expenses.push({
+        const monthKey = monthKeyOf(date);
+        const planWasAlreadyFrozen = Object.hasOwn(ctx.data.monthPlans, monthKey);
+        const expense = {
             id: createId('exp'),
             categoryId,
             subcategoryId,
             amountCents,
             note: noteInput.value.trim(),
             date,
-        });
-        freezeMonthPlan(ctx.data, monthKeyOf(date));
+        };
+
+        ctx.data.expenses.push(expense);
+        freezeMonthPlan(ctx.data, monthKey);
+
+        // The draft still holds what was typed, so the re-render inside
+        // ctx.save() brings the form back untouched if the write is refused.
+        if (ctx.save() === false) {
+            ctx.data.expenses.splice(ctx.data.expenses.indexOf(expense), 1);
+            if (!planWasAlreadyFrozen) {
+                delete ctx.data.monthPlans[monthKey];
+            }
+
+            saveError = 'Could not save to this device. Nothing was recorded \u2014 your entry is'
+                + ' still here, try again.';
+            focusSaveErrorOnRender = true;
+            ctx.render();
+            return;
+        }
 
         draft.categoryId = categoryId;
         draft.subcategoryId = subcategoryId;
@@ -214,10 +250,8 @@ export function render(root, ctx) {
         draft.date = date;
         focusAmountOnRender = true;
 
-        // ctx.save() reports its own failure, so only confirm a real write.
-        if (ctx.save() !== false) {
-            ctx.toast('Added');
-        }
+        ctx.render();
+        ctx.toast('Added');
     });
 
     form.append(
@@ -226,12 +260,21 @@ export function render(root, ctx) {
         amountField.wrapper,
         noteField.wrapper,
         dateField.wrapper,
+        formError,
         submitButton,
     );
     rebuildSubcategories();
     root.append(form);
 
-    if (focusAmountOnRender) {
+    if (saveError !== '') {
+        formError.textContent = saveError;
+        formError.hidden = false;
+    }
+
+    if (focusSaveErrorOnRender) {
+        focusSaveErrorOnRender = false;
+        formError.focus();
+    } else if (focusAmountOnRender) {
         focusAmountOnRender = false;
         amountInput.focus();
     }
