@@ -811,10 +811,6 @@ function parseDayOfMonth(value) {
     return day;
 }
 
-function savingsCategory(data) {
-    return data.categories.find(({ id }) => id === 'savings');
-}
-
 function centsInputValue(cents, draftValue) {
     if (draftValue !== null) {
         return draftValue;
@@ -1754,6 +1750,8 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
 
     if (draft.kind === 'flexible') {
         category.pinned = false;
+        category.limitMode = 'percent';
+        category.limitCents = 0;
         syncCategoryPlanFields(ctx.data.categories, budget);
         refreshCurrentMonthPlan(ctx.data);
         closeTransientUi();
