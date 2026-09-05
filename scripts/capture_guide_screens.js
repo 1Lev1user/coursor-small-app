@@ -115,6 +115,12 @@ const data = {
     monthPlans: {},
 };
 
+async function dismissOverlays(page) {
+    await page.evaluate(() => {
+        document.getElementById('due-subscription-overlay')?.remove();
+    });
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 await page.goto('http://localhost:8080/', { waitUntil: 'networkidle' });
@@ -136,26 +142,39 @@ async function shot(name, mutate) {
         }, [key, mutate]);
         await page.reload({ waitUntil: 'networkidle' });
     }
+    await dismissOverlays(page);
     await page.screenshot({ path: join(out, name) });
 }
 
 await shot('screen-setup.png', 'setup');
-await shot('screen-add.png', 'ready');
-// Dismiss any due-subscription overlay if present
-const dueClose = page.locator('#due-subscription-overlay button');
-if (await dueClose.count()) {
-    await page.locator('#due-subscription-overlay button').filter({ hasText: /later|skip|cancel|not now/i }).first().click({ timeout: 2000 }).catch(async () => {
-        await page.evaluate(() => document.getElementById('due-subscription-overlay')?.remove());
-    });
-}
+await shot('screen-home.png', 'ready');
+
+await page.getByRole('button', { name: 'Add expense' }).click();
+await page.waitForTimeout(300);
+await dismissOverlays(page);
+await page.screenshot({ path: join(out, 'screen-expense.png') });
+
+await page.getByRole('button', { name: 'Back to Home' }).click();
+await page.waitForTimeout(200);
+await page.getByRole('button', { name: 'Add extra income' }).click();
+await page.waitForTimeout(300);
+await dismissOverlays(page);
+await page.screenshot({ path: join(out, 'screen-income.png') });
+
 await page.click('[data-tab="month"]');
 await page.waitForTimeout(400);
+await dismissOverlays(page);
 await page.screenshot({ path: join(out, 'screen-month.png') });
+
 await page.click('[data-tab="chart"]');
 await page.waitForTimeout(400);
+await dismissOverlays(page);
 await page.screenshot({ path: join(out, 'screen-chart.png') });
+
 await page.click('[data-tab="more"]');
 await page.waitForTimeout(500);
+await dismissOverlays(page);
 await page.screenshot({ path: join(out, 'screen-settings.png'), fullPage: true });
+
 await browser.close();
 console.log('screenshots written to', out);
