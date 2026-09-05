@@ -6,14 +6,16 @@
     <title>My Expenses</title>
     <meta name="description" content="Local-only expense and income tracker in euros. Your data stays on this device.">
     <meta name="theme-color" content="#2563eb">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 </head>
 <body>
+    <a class="skip-link" href="#view">Skip to content</a>
     <header class="app-header"><h1 id="screen-title">Add expense</h1></header>
-    <main id="view"></main>
+    <main id="view" tabindex="-1"></main>
     <nav class="tabbar" id="tabbar" aria-label="Main">
         <button type="button" class="tab" data-tab="add">Add</button>
         <button type="button" class="tab" data-tab="month">Month</button>

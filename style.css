@@ -53,6 +53,29 @@ body {
     border-radius: var(--radius-sm);
 }
 
+.skip-link {
+    position: absolute;
+    left: var(--s4);
+    top: var(--s4);
+    z-index: 1000;
+    padding: var(--s2) var(--s3);
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-ink);
+    text-decoration: none;
+    transform: translateY(-200%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
+    outline: 3px solid var(--text);
+    outline-offset: 2px;
+}
+
+#view:focus {
+    outline: none;
+}
+
 /* Shell */
 
 .app-header {
@@ -625,7 +648,8 @@ body.is-setup .tabbar {
 
 .more-page .btn,
 .more-page .inline-form,
-.more-page .add-category-form {
+.more-page .add-category-form,
+#view :focus-visible {
     scroll-margin-bottom: calc(var(--tabbar-height) + var(--s4) + env(safe-area-inset-bottom));
 }
 
