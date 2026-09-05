@@ -333,6 +333,7 @@ function renderBackupReminder(ctx) {
 
 function renderBackupSection(ctx) {
     const section = element('section', 'card stack');
+    section.id = 'more-backup';
     section.append(element('h2', 'section-title', 'Backup & export'));
 
     const backupActions = element('div', 'backup-actions');
@@ -987,6 +988,7 @@ function renderPlanSection(ctx) {
     const settings = ctx.data.settings;
     const savings = savingsCategory(ctx.data);
     const section = element('section', 'card stack');
+    section.id = 'more-plan';
     section.append(element('h2', 'section-title', 'Plan'));
 
     const form = element('form', 'stack plan-form');
@@ -1055,23 +1057,6 @@ function renderPlanSection(ctx) {
     );
     section.append(form);
     return section;
-}
-
-function saveUsualIncome(ctx, incomeField) {
-    clearError(incomeField);
-    const amountCents = parseAmount(incomeField.control.value);
-    if (amountCents === null) {
-        setError(incomeField, 'Enter a valid amount greater than zero.');
-        incomeField.control.focus();
-        return;
-    }
-
-    ctx.data.settings.usualMonthlyIncomeCents = amountCents;
-    refreshCurrentMonthPlan(ctx.data);
-    planDraft.income = null;
-    if (persist(ctx)) {
-        ctx.toast('Usual income saved');
-    }
 }
 
 function addExtraIncome(ctx, categoryField, amountField, dateField) {
@@ -1360,6 +1345,7 @@ function renderSubscriptionRow(ctx, subscription) {
 
 function renderSubscriptionsSection(ctx) {
     const section = element('section', 'card stack');
+    section.id = 'more-subscriptions';
     section.append(element('h2', 'section-title', 'Subscriptions'));
 
     const list = element('div', 'subscription-list');
@@ -1441,31 +1427,9 @@ function renderSubscriptionsSection(ctx) {
 }
 
 function renderIncomeSection(ctx) {
-    const settings = ctx.data.settings;
     const section = element('section', 'card stack');
+    section.id = 'more-income';
     section.append(element('h2', 'section-title', 'Income'));
-
-    const usualForm = element('form', 'stack');
-    usualForm.noValidate = true;
-    const usualInput = document.createElement('input');
-    usualInput.type = 'text';
-    usualInput.inputMode = 'decimal';
-    usualInput.autocomplete = 'off';
-    usualInput.placeholder = '2000';
-    usualInput.value = centsInputValue(settings.usualMonthlyIncomeCents, planDraft.income);
-    const usualField = buildField('usual-income', 'Usual monthly income (EUR)', usualInput);
-    usualInput.addEventListener('input', () => {
-        planDraft.income = usualInput.value;
-        clearError(usualField);
-    });
-    const usualSave = element('button', 'btn btn-primary', 'Save usual income');
-    usualSave.type = 'submit';
-    usualForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        saveUsualIncome(ctx, usualField);
-    });
-    usualForm.append(usualField.wrapper, usualSave);
-    section.append(usualForm);
 
     section.append(element('h3', 'category-name', 'Extra income'));
     const list = element('div', 'entry-list income-entry-list');
@@ -1853,10 +1817,38 @@ function renderAddCategory(ctx) {
     return form;
 }
 
+function renderCategoriesSection(ctx, plan) {
+    const section = element('section', 'card stack');
+    section.id = 'more-categories';
+    section.append(element('h2', 'section-title', 'Categories'));
+
+    const list = element('div', 'category-list');
+    for (const category of userCategories(ctx.data)) {
+        list.append(renderCategory(ctx, category, plan));
+    }
+    section.append(list, renderAddCategory(ctx));
+    return section;
+}
+
 export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
     const layout = element('div', 'stack more-page');
     layout.append(element('h2', 'section-title', 'More'));
+
+    const jumps = element('nav', 'more-jumps');
+    jumps.setAttribute('aria-label', 'More sections');
+    for (const [id, label] of [
+        ['more-plan', 'Plan'],
+        ['more-income', 'Income'],
+        ['more-subscriptions', 'Subscriptions'],
+        ['more-categories', 'Categories'],
+        ['more-backup', 'Backup'],
+    ]) {
+        const link = element('a', 'more-jump', label);
+        link.href = `#${id}`;
+        jumps.append(link);
+    }
+    layout.append(jumps);
 
     const reminder = renderBackupReminder(ctx);
     if (reminder !== null) {
@@ -1868,18 +1860,9 @@ export function render(root, ctx) {
         renderPlanSection(ctx),
         renderIncomeSection(ctx),
         renderSubscriptionsSection(ctx),
+        renderCategoriesSection(ctx, plan),
         renderBackupSection(ctx),
     );
-
-    const section = element('section', 'card stack');
-    section.append(element('h2', 'section-title', 'Categories'));
-
-    const list = element('div', 'category-list');
-    for (const category of userCategories(ctx.data)) {
-        list.append(renderCategory(ctx, category, plan));
-    }
-    section.append(list, renderAddCategory(ctx));
-    layout.append(section);
     root.append(layout);
 
     if (focusId !== null) {
