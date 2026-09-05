@@ -320,12 +320,14 @@ def build():
     story.append(side_by_side(
         s, "screen-income.png", "Add extra income",
         [
-            "Income category, amount, optional note, and date.",
+            "Income category picker and <b>+</b> to create a new income category.",
+            "Amount, optional note, and date.",
             "Reminder that usual salary comes from Settings → Plan.",
             "<b>Add extra income</b> and <b>Back to Home</b>.",
         ],
         [
-            "Log one-off income only (bonus, gift, freelance).",
+            "Choose a category or tap <b>+</b> to add one (bonus, gift, freelance…).",
+            "Log one-off income only — not regular salary.",
             "Save, then return Home — or switch tabs to check Month totals.",
         ],
     ))

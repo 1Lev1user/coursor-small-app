@@ -38,12 +38,25 @@ let addCategoryError = '';
 
 let confirmNoteAsSub = false;
 
+let addingIncomeCategory = false;
+let addIncomeCategoryName = '';
+let addIncomeCategoryError = '';
+
 export function openAddPanel(next = 'home') {
     panel = next === 'expense' || next === 'income' ? next : 'home';
     if (panel === 'home') {
         closeQuickPanels();
         incomeDraft.error = '';
         incomeDraft.errorField = '';
+    } else if (panel === 'income') {
+        addingCategory = false;
+        addCategoryName = '';
+        addCategoryError = '';
+        confirmNoteAsSub = false;
+    } else if (panel === 'expense') {
+        addingIncomeCategory = false;
+        addIncomeCategoryName = '';
+        addIncomeCategoryError = '';
     }
 }
 
@@ -112,6 +125,9 @@ function closeQuickPanels() {
     addCategoryName = '';
     addCategoryError = '';
     confirmNoteAsSub = false;
+    addingIncomeCategory = false;
+    addIncomeCategoryName = '';
+    addIncomeCategoryError = '';
 }
 
 function createFlexibleCategory(ctx, name) {
@@ -129,6 +145,15 @@ function createFlexibleCategory(ctx, name) {
     ctx.data.categories.push(category);
     syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
+    return category;
+}
+
+function createIncomeCategory(ctx, name) {
+    const category = {
+        id: createId('incat'),
+        name,
+    };
+    ctx.data.incomeCategories.push(category);
     return category;
 }
 
@@ -201,6 +226,9 @@ function renderIncomeForm(root, ctx) {
     if (incomeDraft.date === '') {
         incomeDraft.date = todayISO();
     }
+    if (!ctx.data.incomeCategories.some(({ id }) => id === incomeDraft.incomeCategoryId)) {
+        incomeDraft.incomeCategoryId = '';
+    }
 
     const form = document.createElement('form');
     form.id = 'add-income-form';
@@ -222,10 +250,28 @@ function renderIncomeForm(root, ctx) {
         categorySelect.append(option(category.id, category.name));
     }
     categorySelect.value = incomeDraft.incomeCategoryId;
-    const categoryField = buildField('home-income-category', 'Income category', categorySelect);
+
+    const categoryPlus = document.createElement('button');
+    categoryPlus.type = 'button';
+    categoryPlus.className = 'add-plus-btn';
+    categoryPlus.setAttribute('aria-label', 'Add income category');
+    categoryPlus.textContent = '+';
+
+    const categoryRow = document.createElement('div');
+    categoryRow.className = 'add-field-row';
+    categoryRow.append(categorySelect, categoryPlus);
+
+    const categoryField = buildField('home-income-category', 'Income category', categoryRow);
+    categorySelect.id = 'home-income-category';
+    categoryField.control = categorySelect;
     categorySelect.addEventListener('change', () => {
         incomeDraft.incomeCategoryId = categorySelect.value;
         clearError(categoryField);
+    });
+    categoryPlus.addEventListener('click', () => {
+        addingIncomeCategory = true;
+        addIncomeCategoryError = '';
+        ctx.render();
     });
 
     const amountInput = document.createElement('input');
@@ -266,6 +312,100 @@ function renderIncomeForm(root, ctx) {
         } else if (incomeDraft.errorField === 'date') {
             setError(dateField, incomeDraft.error);
         }
+    }
+
+    const categoryPanelHost = document.createElement('div');
+    categoryPanelHost.className = 'add-quick-panel-host';
+
+    if (addingIncomeCategory) {
+        const panelEl = document.createElement('div');
+        panelEl.className = 'add-quick-panel stack';
+        panelEl.setAttribute('role', 'group');
+        panelEl.setAttribute('aria-label', 'Add income category');
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.autocomplete = 'off';
+        nameInput.placeholder = 'Category name';
+        nameInput.value = addIncomeCategoryName;
+        nameInput.id = 'add-quick-income-category-name';
+        const nameField = buildField(
+            'add-quick-income-category-name',
+            'New income category',
+            nameInput,
+        );
+        if (addIncomeCategoryError !== '') {
+            setError(nameField, addIncomeCategoryError);
+        }
+        nameInput.addEventListener('input', () => {
+            addIncomeCategoryName = nameInput.value;
+            addIncomeCategoryError = '';
+            clearError(nameField);
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.textContent = 'Save';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn';
+        cancelBtn.textContent = 'Cancel';
+
+        const actions = document.createElement('div');
+        actions.className = 'add-quick-actions';
+        actions.append(cancelBtn, saveBtn);
+
+        cancelBtn.addEventListener('click', () => {
+            addingIncomeCategory = false;
+            addIncomeCategoryName = '';
+            addIncomeCategoryError = '';
+            ctx.render();
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const name = addIncomeCategoryName.trim();
+            if (name === '') {
+                addIncomeCategoryError = 'Enter a name.';
+                setError(nameField, addIncomeCategoryError);
+                nameInput.focus();
+                return;
+            }
+
+            const existing = ctx.data.incomeCategories.find(({ name: n }) => namesMatch(n, name));
+            if (existing !== undefined) {
+                incomeDraft.incomeCategoryId = existing.id;
+                addingIncomeCategory = false;
+                addIncomeCategoryName = '';
+                addIncomeCategoryError = '';
+                if (ctx.save() !== false) {
+                    ctx.toast('Category already exists');
+                }
+                ctx.render();
+                return;
+            }
+
+            const category = createIncomeCategory(ctx, name);
+            incomeDraft.incomeCategoryId = category.id;
+            addingIncomeCategory = false;
+            addIncomeCategoryName = '';
+            addIncomeCategoryError = '';
+
+            if (ctx.save() === false) {
+                ctx.data.incomeCategories.splice(ctx.data.incomeCategories.indexOf(category), 1);
+                incomeDraft.incomeCategoryId = '';
+                ctx.render();
+                ctx.toast('Could not save to this device');
+                return;
+            }
+
+            ctx.render();
+            ctx.toast('Income category added');
+        });
+
+        panelEl.append(nameField.wrapper, actions);
+        categoryPanelHost.append(panelEl);
     }
 
     const submit = document.createElement('button');
@@ -326,6 +466,9 @@ function renderIncomeForm(root, ctx) {
         incomeDraft.note = '';
         incomeDraft.error = '';
         incomeDraft.errorField = '';
+        addingIncomeCategory = false;
+        addIncomeCategoryName = '';
+        addIncomeCategoryError = '';
 
         openAddPanel('home');
         if (ctx.save() === false) {
@@ -341,6 +484,7 @@ function renderIncomeForm(root, ctx) {
 
     form.append(
         categoryField.wrapper,
+        categoryPanelHost,
         amountField.wrapper,
         dateField.wrapper,
         noteField.wrapper,
@@ -348,6 +492,10 @@ function renderIncomeForm(root, ctx) {
         backToHomeButton(ctx),
     );
     root.append(form);
+
+    if (addingIncomeCategory) {
+        document.getElementById('add-quick-income-category-name')?.focus();
+    }
 }
 
 export function render(root, ctx) {
