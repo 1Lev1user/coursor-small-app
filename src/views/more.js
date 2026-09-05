@@ -3,6 +3,7 @@ import { todayISO, monthKeyOf } from '../months.js';
 import {
     UNCATEGORISED_ID,
     SAVINGS_ID,
+    SUBSCRIPTIONS_ID,
     createId,
     deleteCategory,
     deleteSubcategory,
@@ -96,7 +97,11 @@ function displayPercent(percent) {
 
 function userCategories(data) {
     return data.categories.filter(
-        (category) => category.system !== true && category.id !== UNCATEGORISED_ID,
+        (category) => (
+            category.system !== true
+            && category.id !== UNCATEGORISED_ID
+            && category.id !== SUBSCRIPTIONS_ID
+        ),
     );
 }
 
@@ -1428,10 +1433,53 @@ function renderSubscriptionRow(ctx, subscription) {
     return item;
 }
 
-function renderSubscriptionsSection(ctx) {
+function openCategoryPlanEditor(ctx, category) {
+    closeTransientUi();
+    editPlanCategoryId = category.id;
+    const isSavings = category.id === SAVINGS_ID;
+    const limitUnit = isSavings
+        ? (category.limitMode === 'percent' ? 'percent' : 'euro')
+        : (category.limitMode === 'euro' ? 'euro' : 'percent');
+    categoryPlanDrafts.set(category.id, {
+        kind: isSavings || category.pinned ? 'pinned' : 'flexible',
+        limitUnit,
+        amount: (isSavings || category.pinned)
+            ? (limitUnit === 'euro'
+                ? formatPlain(category.limitCents)
+                : String(category.percent))
+            : '',
+        error: '',
+    });
+    ctx.render();
+}
+
+function renderSubscriptionsSection(ctx, plan) {
     const section = element('section', 'card stack');
     section.id = 'more-subscriptions';
     section.append(element('h2', 'section-title', 'Subscriptions'));
+
+    const category = ctx.data.categories.find(({ id }) => id === SUBSCRIPTIONS_ID);
+    if (category !== undefined) {
+        const budgetCents = ctx.data.settings.monthlyBudgetCents;
+        const planBlock = element('div', 'stack subscription-plan');
+        planBlock.append(
+            element('h3', 'category-name', 'Budget share'),
+            element('p', 'muted', shareLabel(category, plan, budgetCents)),
+        );
+
+        if (editPlanCategoryId === category.id) {
+            planBlock.append(renderCategoryPlanEditor(ctx, category));
+        } else {
+            planBlock.append(
+                actionButton('btn btn-ghost', 'Edit plan', () => {
+                    openCategoryPlanEditor(ctx, category);
+                }),
+            );
+        }
+        section.append(planBlock);
+    }
+
+    section.append(element('h3', 'category-name', 'Recurring'));
 
     const list = element('div', 'subscription-list');
     if (ctx.data.subscriptions.length === 0) {
@@ -1983,23 +2031,7 @@ function renderCategory(ctx, category, plan) {
         const actions = element('div', 'more-actions');
         actions.append(
             actionButton('btn btn-ghost', 'Edit plan', () => {
-                closeTransientUi();
-                editPlanCategoryId = category.id;
-                const isSavings = category.id === SAVINGS_ID;
-                const limitUnit = isSavings
-                    ? (category.limitMode === 'percent' ? 'percent' : 'euro')
-                    : (category.limitMode === 'euro' ? 'euro' : 'percent');
-                categoryPlanDrafts.set(category.id, {
-                    kind: isSavings || category.pinned ? 'pinned' : 'flexible',
-                    limitUnit,
-                    amount: (isSavings || category.pinned)
-                        ? (limitUnit === 'euro'
-                            ? formatPlain(category.limitCents)
-                            : String(category.percent))
-                        : '',
-                    error: '',
-                });
-                ctx.render();
+                openCategoryPlanEditor(ctx, category);
             }),
             actionButton('btn btn-ghost', 'Rename', () => {
                 closeTransientUi();
@@ -2164,7 +2196,7 @@ export function render(root, ctx) {
     layout.append(
         renderPlanSection(ctx),
         renderIncomeSection(ctx),
-        renderSubscriptionsSection(ctx),
+        renderSubscriptionsSection(ctx, plan),
         renderCategoriesSection(ctx, plan),
         renderBackupSection(ctx),
     );

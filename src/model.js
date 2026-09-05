@@ -1,6 +1,7 @@
 export const SCHEMA_VERSION = 1;
 export const UNCATEGORISED_ID = 'uncategorised';
 export const SAVINGS_ID = 'savings';
+export const SUBSCRIPTIONS_ID = 'subscriptions';
 
 const UNCATEGORISED_CATEGORY = {
     id: UNCATEGORISED_ID,
@@ -94,7 +95,7 @@ export function defaultData() {
                 ],
             },
             {
-                id: 'subscriptions',
+                id: SUBSCRIPTIONS_ID,
                 name: 'Subscriptions',
                 pinned: false,
                 percent: 0,
