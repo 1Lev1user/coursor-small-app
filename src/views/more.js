@@ -6,6 +6,7 @@ import {
     refreshCurrentMonthPlan,
     resolvePlan,
     freezeMonthPlan,
+    syncCategoryPlanFields,
 } from '../budget.js';
 import { exportBackup, importBackup, countRecords } from '../backup.js';
 import { buildMonthCsv, csvFilename } from '../csv.js';
@@ -968,9 +969,11 @@ function savePlan(ctx, budgetField, savingsField, incomeField) {
     }
 
     ctx.data.settings.monthlyBudgetCents = budgetCents;
-    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     savings.pinned = true;
+    savings.limitMode = 'percent';
     savings.percent = savingsPercent;
+    syncCategoryPlanFields(ctx.data.categories, budgetCents);
+    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
     planDraft.budget = null;
