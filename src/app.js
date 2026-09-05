@@ -49,10 +49,12 @@ function toast(message) {
 }
 
 function save() {
-    if (!saveToStorage(app.data)) {
+    const saved = saveToStorage(app.data);
+    if (!saved) {
         toast('Could not save to this device');
     }
     render();
+    return saved;
 }
 
 function setMonthKey(key) {

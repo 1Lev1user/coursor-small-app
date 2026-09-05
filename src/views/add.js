@@ -214,8 +214,10 @@ export function render(root, ctx) {
         draft.date = date;
         focusAmountOnRender = true;
 
-        ctx.save();
-        ctx.toast('Added');
+        // ctx.save() reports its own failure, so only confirm a real write.
+        if (ctx.save() !== false) {
+            ctx.toast('Added');
+        }
     });
 
     form.append(
