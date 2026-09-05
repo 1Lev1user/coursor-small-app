@@ -1,6 +1,7 @@
 import { load, save as saveToStorage, requestPersistence } from './storage.js';
 import { currentMonthKey } from './months.js';
 import { render as renderAdd } from './views/add.js';
+import { render as renderMonth } from './views/month.js';
 
 const TOAST_MS = 2000;
 
@@ -13,7 +14,7 @@ function comingNext(root) {
 
 const views = {
     add: { title: 'Add expense', render: renderAdd },
-    month: { title: 'Month', render: comingNext },
+    month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: comingNext },
     more: { title: 'More', render: comingNext },
 };
