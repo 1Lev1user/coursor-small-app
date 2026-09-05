@@ -182,8 +182,17 @@ function renderCategories(root, categories) {
             ? 0
             : Math.min(100, Math.max(0, category.spentCents / category.limitCents * 100));
         fill.style.width = `${width}%`;
+        fill.setAttribute('aria-hidden', 'true');
         if (category.over) {
             fill.classList.add('is-over');
+        }
+        track.setAttribute('role', 'progressbar');
+        track.setAttribute('aria-label', category.name);
+        track.setAttribute('aria-valuemin', '0');
+        track.setAttribute('aria-valuemax', '100');
+        track.setAttribute('aria-valuenow', String(Math.round(width)));
+        if (category.over) {
+            track.setAttribute('aria-valuetext', `Over by ${formatEuro(category.overByCents)}`);
         }
         track.append(fill);
 
@@ -769,7 +778,9 @@ function renderEntry(ctx, item) {
     }
 
     const values = element('div', 'entry-values');
-    values.append(element('time', 'muted', shortDate(entry.date)));
+    const time = element('time', 'muted', shortDate(entry.date));
+    time.setAttribute('datetime', entry.date);
+    values.append(time);
     const amountText = type === 'income'
         ? `+${formatEuro(entry.amountCents)}`
         : formatEuro(entry.amountCents);
