@@ -1,7 +1,7 @@
 # Editable category limits (% ↔ €) — Design
 
 **Date:** 2026-09-05  
-**Status:** Approved for implementation planning (pending user review of this file)  
+**Status:** Approved — implementation plan ready  
 **App:** My Expenses (local PWA)
 
 ## Problem
