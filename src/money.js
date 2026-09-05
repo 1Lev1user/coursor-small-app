@@ -26,7 +26,7 @@ export function parseAmount(input) {
     const [wholePart, decimalPart = ''] = normalized.split('.');
     const cents = Number(wholePart) * 100 + Number(decimalPart.padEnd(2, '0'));
 
-    if (cents <= 0) {
+    if (cents <= 0 || !Number.isSafeInteger(cents)) {
         return null;
     }
 

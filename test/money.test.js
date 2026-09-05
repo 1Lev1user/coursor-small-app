@@ -91,6 +91,14 @@ test('parseAmount rejects number type', () => {
     assert.equal(parseAmount(12), null);
 });
 
+test('parseAmount rejects oversized whole number', () => {
+    assert.equal(parseAmount('90071992547410'), null);
+});
+
+test('parseAmount rejects very long digit string', () => {
+    assert.equal(parseAmount('1'.repeat(400)), null);
+});
+
 // --- formatEuro ---
 
 test('formatEuro formats standard amount', () => {
@@ -136,6 +144,10 @@ test('splitShares splits evenly by percentage', () => {
 test('splitShares sums to total with fractional percentages', () => {
     const result = splitShares(100000, [33.333, 33.333, 33.334]);
     assert.equal(result.reduce((a, b) => a + b, 0), 100000);
+});
+
+test('splitShares adds remainder to last non-zero share', () => {
+    assert.deepEqual(splitShares(100, [33.333, 66.667, 0]), [33, 67, 0]);
 });
 
 test('splitShares handles partial allocation', () => {
