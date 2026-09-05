@@ -1,4 +1,4 @@
-import { parseAmount } from '../money.js';
+import { parseAmount, formatEuro } from '../money.js';
 import { monthKeyOf, todayISO } from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
 import {
@@ -6,6 +6,9 @@ import {
     syncCategoryPlanFields,
     refreshCurrentMonthPlan,
 } from '../budget.js';
+
+/** @type {'home' | 'expense' | 'income'} */
+let panel = 'home';
 
 // Survives the re-render that follows a save, so the user keeps their
 // category and date while the amount and note are cleared for the next entry.
@@ -15,6 +18,15 @@ const draft = {
     amount: '',
     note: '',
     date: '',
+};
+
+const incomeDraft = {
+    incomeCategoryId: '',
+    amount: '',
+    note: '',
+    date: '',
+    error: '',
+    errorField: '',
 };
 
 let focusAmountOnRender = false;
@@ -27,6 +39,25 @@ let addCategoryError = '';
 let focusAddCategoryOnRender = false;
 
 let confirmNoteAsSub = false;
+
+export function openAddPanel(next = 'home') {
+    panel = next === 'expense' || next === 'income' ? next : 'home';
+    if (panel === 'home') {
+        closeQuickPanels();
+        incomeDraft.error = '';
+        incomeDraft.errorField = '';
+    }
+}
+
+export function addScreenTitle() {
+    if (panel === 'expense') {
+        return 'Add expense';
+    }
+    if (panel === 'income') {
+        return 'Add extra income';
+    }
+    return 'Home';
+}
 
 function selectableCategories(data) {
     return data.categories.filter(
@@ -107,7 +138,237 @@ function findCategory(data, categoryId) {
     return data.categories.find(({ id }) => id === categoryId);
 }
 
+function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) {
+        node.className = className;
+    }
+    if (text !== undefined) {
+        node.textContent = text;
+    }
+    return node;
+}
+
+function backToHomeButton(ctx) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.textContent = 'Back to Home';
+    button.addEventListener('click', () => {
+        openAddPanel('home');
+        ctx.render();
+    });
+    return button;
+}
+
+function renderHome(root, ctx) {
+    const layout = element('div', 'stack home-page');
+    const card = element('section', 'card stack home-hero');
+
+    card.append(
+        element('h2', 'section-title', 'Track income & expenses'),
+        element(
+            'p',
+            '',
+            'This app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.',
+        ),
+        element(
+            'p',
+            'muted home-auto-note',
+            'Your usual monthly income (Settings → Plan) is counted automatically each month. Subscriptions remind you on their day so you can log the charge. Here you only add day-to-day expenses and extra income (bonus, gift, side job) — not your regular salary.',
+        ),
+    );
+
+    const expenseBtn = document.createElement('button');
+    expenseBtn.type = 'button';
+    expenseBtn.className = 'btn btn-primary';
+    expenseBtn.textContent = 'Add expense';
+    expenseBtn.addEventListener('click', () => {
+        openAddPanel('expense');
+        ctx.render();
+    });
+
+    const incomeBtn = document.createElement('button');
+    incomeBtn.type = 'button';
+    incomeBtn.className = 'btn btn-primary';
+    incomeBtn.textContent = 'Add extra income';
+    incomeBtn.addEventListener('click', () => {
+        openAddPanel('income');
+        ctx.render();
+    });
+
+    const actions = element('div', 'home-actions stack');
+    actions.append(expenseBtn, incomeBtn);
+    card.append(actions);
+    layout.append(card);
+    root.append(layout);
+}
+
+function renderIncomeForm(root, ctx) {
+    if (incomeDraft.date === '') {
+        incomeDraft.date = todayISO();
+    }
+
+    const form = document.createElement('form');
+    form.id = 'add-income-form';
+    form.className = 'card stack';
+    form.noValidate = true;
+
+    form.append(
+        element(
+            'p',
+            'muted home-auto-note',
+            'Extra income only. Your usual salary from Plan is applied automatically each month — do not enter it again here.',
+        ),
+    );
+
+    const categorySelect = document.createElement('select');
+    categorySelect.required = true;
+    categorySelect.append(option('', 'Choose a category'));
+    for (const category of ctx.data.incomeCategories) {
+        categorySelect.append(option(category.id, category.name));
+    }
+    categorySelect.value = incomeDraft.incomeCategoryId;
+    const categoryField = buildField('home-income-category', 'Income category', categorySelect);
+    categorySelect.addEventListener('change', () => {
+        incomeDraft.incomeCategoryId = categorySelect.value;
+        clearError(categoryField);
+    });
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.placeholder = '100';
+    amountInput.value = incomeDraft.amount;
+    const amountField = buildField('home-income-amount', 'Amount (\u20ac)', amountInput);
+    amountInput.addEventListener('input', () => {
+        incomeDraft.amount = amountInput.value;
+        clearError(amountField);
+    });
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = incomeDraft.date;
+    const dateField = buildField('home-income-date', 'Date', dateInput);
+    dateInput.addEventListener('input', () => {
+        incomeDraft.date = dateInput.value;
+        clearError(dateField);
+    });
+
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.autocomplete = 'off';
+    noteInput.value = incomeDraft.note;
+    const noteField = buildField('home-income-note', 'Note (optional)', noteInput);
+    noteInput.addEventListener('input', () => {
+        incomeDraft.note = noteInput.value;
+    });
+
+    if (incomeDraft.error !== '') {
+        if (incomeDraft.errorField === 'category') {
+            setError(categoryField, incomeDraft.error);
+        } else if (incomeDraft.errorField === 'amount') {
+            setError(amountField, incomeDraft.error);
+        } else if (incomeDraft.errorField === 'date') {
+            setError(dateField, incomeDraft.error);
+        }
+    }
+
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.className = 'btn btn-primary';
+    submit.textContent = 'Add extra income';
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        clearError(categoryField);
+        clearError(amountField);
+        clearError(dateField);
+        incomeDraft.error = '';
+        incomeDraft.errorField = '';
+
+        incomeDraft.incomeCategoryId = categorySelect.value;
+        incomeDraft.amount = amountInput.value;
+        incomeDraft.date = dateInput.value;
+        incomeDraft.note = noteInput.value;
+
+        if (incomeDraft.incomeCategoryId === '') {
+            incomeDraft.errorField = 'category';
+            incomeDraft.error = 'Choose an income category.';
+            setError(categoryField, incomeDraft.error);
+            categorySelect.focus();
+            return;
+        }
+
+        const amountCents = parseAmount(incomeDraft.amount);
+        if (amountCents === null) {
+            incomeDraft.errorField = 'amount';
+            incomeDraft.error = 'Enter a valid amount greater than zero.';
+            setError(amountField, incomeDraft.error);
+            amountInput.focus();
+            return;
+        }
+
+        if (incomeDraft.date === '' || monthKeyOf(incomeDraft.date) === null) {
+            incomeDraft.errorField = 'date';
+            incomeDraft.error = 'Enter a valid date.';
+            setError(dateField, incomeDraft.error);
+            dateInput.focus();
+            return;
+        }
+
+        ctx.data.incomes.push({
+            id: createId('inc'),
+            incomeCategoryId: incomeDraft.incomeCategoryId,
+            amountCents,
+            note: incomeDraft.note.trim(),
+            date: incomeDraft.date,
+        });
+        freezeMonthPlan(ctx.data, monthKeyOf(incomeDraft.date));
+
+        incomeDraft.incomeCategoryId = '';
+        incomeDraft.amount = '';
+        incomeDraft.date = todayISO();
+        incomeDraft.note = '';
+        incomeDraft.error = '';
+        incomeDraft.errorField = '';
+
+        if (ctx.save() === false) {
+            ctx.data.incomes.pop();
+            ctx.toast('Could not save to this device');
+            return;
+        }
+
+        openAddPanel('home');
+        ctx.render();
+        ctx.toast('Extra income added');
+    });
+
+    form.append(
+        categoryField.wrapper,
+        amountField.wrapper,
+        dateField.wrapper,
+        noteField.wrapper,
+        submit,
+        backToHomeButton(ctx),
+    );
+    root.append(form);
+}
+
 export function render(root, ctx) {
+    if (panel === 'home') {
+        renderHome(root, ctx);
+        return;
+    }
+    if (panel === 'income') {
+        renderIncomeForm(root, ctx);
+        return;
+    }
+    renderExpenseForm(root, ctx);
+}
+
+function renderExpenseForm(root, ctx) {
     const categories = selectableCategories(ctx.data);
 
     if (draft.date === '') {
@@ -531,6 +792,7 @@ export function render(root, ctx) {
         dateField.wrapper,
         formError,
         submitButton,
+        backToHomeButton(ctx),
     );
     rebuildSubcategories();
     root.append(form);

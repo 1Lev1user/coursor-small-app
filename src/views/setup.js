@@ -66,7 +66,7 @@ function displayPercent(percent) {
 }
 
 function draftBudgetCents() {
-    return parseAmount(draft.budget) ?? 0;
+    return parseAmount(draft.budget, { allowZero: true }) ?? 0;
 }
 
 function savingsHelperText(amountRaw, unit, budgetCents) {
@@ -133,20 +133,22 @@ function buildSavingsField(ctx) {
     unitBtn.addEventListener('click', () => {
         const budgetCents = draftBudgetCents();
         const nextUnit = draft.savingsUnit === 'euro' ? 'percent' : 'euro';
-        if (nextUnit === 'euro' && budgetCents <= 0) {
-            setError(field, 'Enter a monthly spend budget first.');
+        if (nextUnit === 'euro' && draft.budget.trim() !== '' && parseAmount(draft.budget, { allowZero: true }) === null) {
+            setError(field, 'Enter a valid monthly spend budget first.');
             return;
         }
 
         if (draft.savingsUnit === 'percent') {
             const percent = parsePercent(draft.savingsAmount);
-            if (percent !== null && budgetCents > 0) {
+            if (percent !== null && budgetCents >= 0) {
                 draft.savingsAmount = formatPlain(euroCentsFromPercent(percent, budgetCents));
             }
         } else {
             const cents = parseAmount(draft.savingsAmount, { allowZero: true });
             if (cents !== null && budgetCents > 0) {
                 draft.savingsAmount = String(Math.round(percentFromEuroCents(cents, budgetCents) * 10) / 10);
+            } else if (cents === 0 && budgetCents === 0) {
+                draft.savingsAmount = '0';
             }
         }
 
@@ -172,9 +174,9 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
     draft.savingsAmount = savingsField.control.value;
     draft.income = incomeField.control.value;
 
-    const budgetCents = parseAmount(draft.budget);
+    const budgetCents = parseAmount(draft.budget, { allowZero: true });
     if (budgetCents === null) {
-        setError(budgetField, 'Enter a valid amount greater than zero.');
+        setError(budgetField, 'Enter a valid amount of zero or more.');
         budgetField.control.focus();
         return;
     }
@@ -186,12 +188,6 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
     let savingsLimitCents;
 
     if (unit === 'euro') {
-        if (budgetCents <= 0) {
-            setError(budgetField, 'Enter a valid amount greater than zero.');
-            budgetField.control.focus();
-            return;
-        }
-
         const cents = parseAmount(savingsRaw, { allowZero: true });
         if (cents === null) {
             setError(savingsField, 'Enter a valid amount of zero or more.');
@@ -219,9 +215,9 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
         savingsLimitCents = euroCentsFromPercent(savingsPercent, budgetCents);
     }
 
-    const incomeCents = parseAmount(draft.income);
+    const incomeCents = parseAmount(draft.income, { allowZero: true });
     if (incomeCents === null) {
-        setError(incomeField, 'Enter a valid amount greater than zero.');
+        setError(incomeField, 'Enter a valid amount of zero or more.');
         incomeField.control.focus();
         return;
     }
@@ -255,10 +251,10 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
 
 export function render(root, ctx) {
     const settings = ctx.data.settings;
-    if (draft.budget === '' && settings.monthlyBudgetCents > 0) {
+    if (draft.budget === '' && Number.isFinite(settings.monthlyBudgetCents)) {
         draft.budget = formatPlain(settings.monthlyBudgetCents);
     }
-    if (draft.income === '' && settings.usualMonthlyIncomeCents > 0) {
+    if (draft.income === '' && Number.isFinite(settings.usualMonthlyIncomeCents)) {
         draft.income = formatPlain(settings.usualMonthlyIncomeCents);
     }
     if (draft.savingsAmount === '') {
@@ -280,7 +276,7 @@ export function render(root, ctx) {
         element(
             'p',
             'muted',
-            'Set your monthly plan once. You can change these numbers later in More.',
+            'Set your monthly plan once. You can change these numbers later in Settings.',
         ),
     );
 
@@ -334,6 +330,11 @@ export function render(root, ctx) {
         savingsField.wrapper,
         element('p', 'muted', 'Example: 10% of a €1000 budget pins €100 to Savings.'),
         incomeField.wrapper,
+        element(
+            'p',
+            'muted',
+            'Usual monthly income is counted automatically each month. Later you only add extra income from Home, not this salary again.',
+        ),
         submit,
     );
     layout.append(form);

@@ -4,7 +4,7 @@ import { parseAmount, formatEuro, formatPlain } from './money.js';
 import { createId } from './model.js';
 import { freezeMonthPlan } from './budget.js';
 import { dueSubscriptions } from './subscriptions.js';
-import { render as renderAdd } from './views/add.js';
+import { render as renderAdd, openAddPanel, addScreenTitle } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
@@ -13,10 +13,10 @@ import { render as renderSetup } from './views/setup.js';
 const TOAST_MS = 2000;
 
 const views = {
-    add: { title: 'Add expense', render: renderAdd },
+    add: { title: 'Home', render: renderAdd },
     month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: renderChart },
-    more: { title: 'More', render: renderMore },
+    more: { title: 'Settings', render: renderMore },
 };
 
 const app = {
@@ -70,12 +70,16 @@ function setMonthKey(key) {
     render();
 }
 
-function goTo(tab) {
+function goTo(tab, options = {}) {
     if (!app.data.settings.setupComplete) {
         return;
     }
     if (!Object.hasOwn(views, tab)) {
         return;
+    }
+
+    if (tab === 'add') {
+        openAddPanel(options.panel ?? 'home');
     }
 
     app.tab = tab;
@@ -389,8 +393,8 @@ function render() {
 
     const view = views[app.tab];
 
-    titleElement.textContent = view.title;
-    document.title = `${view.title} - My Expenses`;
+    titleElement.textContent = app.tab === 'add' ? addScreenTitle() : view.title;
+    document.title = `${titleElement.textContent} - My Expenses`;
 
     for (const button of tabButtons) {
         const isActive = button.dataset.tab === app.tab;

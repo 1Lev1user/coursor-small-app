@@ -80,7 +80,7 @@ function renderOverview(layout, ctx, totals) {
         ));
         const add = element('button', 'btn btn-primary', 'Add an expense');
         add.type = 'button';
-        add.addEventListener('click', () => ctx.goTo('add'));
+        add.addEventListener('click', () => ctx.goTo('add', { panel: 'expense' }));
         empty.append(add);
         layout.append(empty);
         return;

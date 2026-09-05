@@ -826,7 +826,7 @@ function centsInputValue(cents, draftValue) {
     if (draftValue !== null) {
         return draftValue;
     }
-    if (!cents) {
+    if (typeof cents !== 'number' || !Number.isFinite(cents)) {
         return '';
     }
     return formatPlain(cents);
@@ -1059,19 +1059,19 @@ function savePlan(ctx, budgetField, incomeField) {
     planDraft.budget = budgetField.control.value;
     planDraft.income = incomeField.control.value;
 
-    const budgetCents = parseAmount(planDraft.budget);
+    const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
         planDraft.errorField = 'budget';
-        planDraft.error = 'Enter a valid amount greater than zero.';
+        planDraft.error = 'Enter a valid amount of zero or more.';
         setError(budgetField, planDraft.error);
         budgetField.control.focus();
         return;
     }
 
-    const incomeCents = parseAmount(planDraft.income);
+    const incomeCents = parseAmount(planDraft.income, { allowZero: true });
     if (incomeCents === null) {
         planDraft.errorField = 'income';
-        planDraft.error = 'Enter a valid amount greater than zero.';
+        planDraft.error = 'Enter a valid amount of zero or more.';
         setError(incomeField, planDraft.error);
         incomeField.control.focus();
         return;
@@ -1143,6 +1143,12 @@ function renderPlanSection(ctx) {
     form.append(
         budgetField.wrapper,
         incomeField.wrapper,
+        element(
+            'p',
+            'muted',
+            'Usual monthly income is applied automatically each month in Month totals. '
+                + 'Add only extra income (bonus, gift, side job) from Home — not this salary again.',
+        ),
         submit,
     );
     section.append(form);
@@ -1494,6 +1500,12 @@ function renderSubscriptionsSection(ctx, plan) {
     const form = element('form', 'stack add-subscription-form');
     form.noValidate = true;
     form.append(element('h3', 'category-name', 'Add subscription'));
+    form.append(element(
+        'p',
+        'muted',
+        'Each month on this day the app reminds you to log the charge as an expense. '
+            + 'It does not create income — only a due reminder for the subscription amount.',
+    ));
 
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
@@ -1588,6 +1600,11 @@ function renderIncomeSection(ctx) {
     const addForm = element('form', 'stack add-extra-income-form');
     addForm.noValidate = true;
     addForm.append(element('h3', 'category-name', 'Add extra income'));
+    addForm.append(element(
+        'p',
+        'muted',
+        'Extra income only. Usual salary from Plan is automatic each month — do not enter it here again.',
+    ));
 
     const categorySelect = document.createElement('select');
     categorySelect.required = true;
@@ -2170,10 +2187,10 @@ function renderCategoriesSection(ctx, plan) {
 export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
     const layout = element('div', 'stack more-page');
-    layout.append(element('h2', 'section-title', 'More'));
+    layout.append(element('h2', 'section-title', 'Settings'));
 
     const jumps = element('nav', 'more-jumps');
-    jumps.setAttribute('aria-label', 'More sections');
+    jumps.setAttribute('aria-label', 'Settings sections');
     for (const [id, label] of [
         ['more-plan', 'Plan'],
         ['more-income', 'Income'],

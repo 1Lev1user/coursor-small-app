@@ -916,6 +916,22 @@ body.is-setup .tabbar {
     border-color: var(--accent);
 }
 
+.home-page {
+    width: 100%;
+}
+
+.home-hero .home-auto-note {
+    margin: 0;
+}
+
+.home-actions {
+    gap: var(--s3);
+}
+
+.home-actions .btn {
+    width: 100%;
+}
+
 .add-quick-panel {
     padding: var(--s3);
     border: 1px solid var(--border);

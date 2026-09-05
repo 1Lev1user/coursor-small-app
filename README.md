@@ -21,11 +21,11 @@ On first launch you set:
 2. **Savings %** — share of usual income pinned to Savings
 3. **Usual monthly income** (EUR)
 
-You can change these later under More → Settings.
+You can change these later under **Settings**.
 
 ## Backup, import, and CSV
 
-Under **More → Backup & export**:
+Under **Settings → Backup & export**:
 
 - **Export backup (JSON)** — full restore file for this or another device
 - **Import backup** — replaces local data after confirmation

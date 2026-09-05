@@ -827,7 +827,7 @@ function renderEntries(root, ctx, entries, label) {
         const message = element('p', '', `Nothing recorded in ${label}.`);
         const button = element('button', 'btn btn-primary', 'Add an expense');
         button.type = 'button';
-        button.addEventListener('click', () => ctx.goTo('add'));
+        button.addEventListener('click', () => ctx.goTo('add', { panel: 'expense' }));
         empty.append(message, button);
         root.append(empty);
         return;
