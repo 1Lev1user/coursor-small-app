@@ -199,6 +199,7 @@ export function render(root, ctx) {
     form.append(
         budgetField.wrapper,
         savingsField.wrapper,
+        element('p', 'muted', 'Example: 10% of a €1000 budget pins €100 to Savings.'),
         incomeField.wrapper,
         submit,
     );
