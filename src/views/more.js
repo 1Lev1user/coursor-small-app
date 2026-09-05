@@ -30,6 +30,7 @@ const addDraft = {
 };
 
 const planDraft = {
+    userName: null,
     budget: null,
     income: null,
     errorField: '',
@@ -1050,14 +1051,25 @@ function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, budgetField, incomeField) {
+function savePlan(ctx, nameField, budgetField, incomeField) {
+    clearError(nameField);
     clearError(budgetField);
     clearError(incomeField);
     planDraft.error = '';
     planDraft.errorField = '';
 
+    planDraft.userName = nameField.control.value;
     planDraft.budget = budgetField.control.value;
     planDraft.income = incomeField.control.value;
+
+    const userName = String(planDraft.userName ?? '').trim();
+    if (userName === '') {
+        planDraft.errorField = 'name';
+        planDraft.error = 'Enter your name.';
+        setError(nameField, planDraft.error);
+        nameField.control.focus();
+        return;
+    }
 
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
@@ -1077,11 +1089,13 @@ function savePlan(ctx, budgetField, incomeField) {
         return;
     }
 
+    ctx.data.settings.userName = userName;
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     syncCategoryPlanFields(ctx.data.categories, budgetCents);
     ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
+    planDraft.userName = null;
     planDraft.budget = null;
     planDraft.income = null;
     planDraft.error = '';
@@ -1100,6 +1114,18 @@ function renderPlanSection(ctx) {
 
     const form = element('form', 'stack plan-form');
     form.noValidate = true;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'given-name';
+    nameInput.placeholder = 'Your first name';
+    nameInput.maxLength = 40;
+    nameInput.value = planDraft.userName ?? settings.userName ?? '';
+    const nameField = buildField('plan-name', 'Your name', nameInput);
+    nameInput.addEventListener('input', () => {
+        planDraft.userName = nameInput.value;
+        clearError(nameField);
+    });
 
     const budgetInput = document.createElement('input');
     budgetInput.type = 'text';
@@ -1126,7 +1152,9 @@ function renderPlanSection(ctx) {
     });
 
     if (planDraft.error !== '') {
-        if (planDraft.errorField === 'budget') {
+        if (planDraft.errorField === 'name') {
+            setError(nameField, planDraft.error);
+        } else if (planDraft.errorField === 'budget') {
             setError(budgetField, planDraft.error);
         } else if (planDraft.errorField === 'income') {
             setError(incomeField, planDraft.error);
@@ -1137,10 +1165,11 @@ function renderPlanSection(ctx) {
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        savePlan(ctx, budgetField, incomeField);
+        savePlan(ctx, nameField, budgetField, incomeField);
     });
 
     form.append(
+        nameField.wrapper,
         budgetField.wrapper,
         incomeField.wrapper,
         element(

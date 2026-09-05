@@ -269,23 +269,26 @@ def build():
     story.append(side_by_side(
         s, "screen-setup.png", "First-run setup",
         [
+            "<b>Your name</b> — used to personalise Home.",
             "<b>Monthly spend budget</b> field (euros; 0 allowed).",
             "<b>Savings</b> as € or % of that budget.",
             "<b>Usual monthly income</b> field (euros; 0 allowed).",
             "A continue / save control at the bottom.",
         ],
         [
+            "Enter your name (you can change it later in Settings → Plan).",
             "Enter how much you plan to spend each month.",
             "Set Savings (0 is fine; cannot go over 100% of the budget).",
             "Enter usual income — counted automatically every month later.",
-            "Save to open the app. Change these anytime in <b>Settings → Plan</b>.",
+            "Save to open the app.",
         ],
     ))
 
     story.append(side_by_side(
         s, "screen-home.png", "Home (first tab)",
         [
-            "Short intro: track income &amp; expenses on this device.",
+            "Greeting with your name (for example <b>Hi, Alex</b>).",
+            "Short intro that also uses your name.",
             "Note that usual salary (Plan) and subscription reminders run automatically.",
             "Two big buttons: <b>Add expense</b> and <b>Add extra income</b>.",
             "Bottom tabs: Home · Month · Chart · Settings.",
@@ -293,6 +296,7 @@ def build():
         [
             "Tap <b>Add expense</b> for day-to-day spending.",
             "Tap <b>Add extra income</b> for bonus, gift, side job — not regular salary.",
+            "Change your name anytime in <b>Settings → Plan</b>.",
             "Use Month / Chart / Settings tabs for overview and setup.",
         ],
     ))
@@ -359,12 +363,12 @@ def build():
         s, "screen-settings.png", "Settings",
         [
             "Jump links: Plan · Income · Subscriptions · Categories · Backup.",
-            "Plan block for monthly spend budget and usual income.",
+            "Plan block for your name, monthly spend budget, and usual income.",
             "Subscriptions: budget share + recurring list (day of month).",
             "Categories editor (Savings is protected) and Backup &amp; export.",
         ],
         [
-            "Edit Plan (budget / usual income — 0 allowed).",
+            "Edit Plan (name, budget / usual income — 0 allowed).",
             "Manage extra-income categories and subscription reminders.",
             "Tune category limits (% or €); Savings stays fixed and ≤ 100% of budget.",
             "Export / import JSON backup, or export a month CSV.",

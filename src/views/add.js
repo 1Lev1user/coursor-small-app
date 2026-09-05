@@ -160,14 +160,15 @@ function backToHomeButton(ctx) {
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const card = element('section', 'card stack home-hero');
+    const userName = String(ctx.data.settings.userName ?? '').trim();
+    const heading = userName === '' ? 'Track income & expenses' : `Hi, ${userName}`;
+    const intro = userName === ''
+        ? 'This app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.'
+        : `${userName}, this app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.`;
 
     card.append(
-        element('h2', 'section-title', 'Track income & expenses'),
-        element(
-            'p',
-            '',
-            'This app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.',
-        ),
+        element('h2', 'section-title', heading),
+        element('p', '', intro),
         element(
             'p',
             'muted home-auto-note',

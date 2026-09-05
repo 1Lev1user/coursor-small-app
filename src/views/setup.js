@@ -6,6 +6,7 @@ import {
 } from '../budget.js';
 
 const draft = {
+    userName: '',
     budget: '',
     savingsAmount: '',
     savingsUnit: 'euro',
@@ -165,14 +166,23 @@ function savingsCategory(data) {
     return data.categories.find(({ id }) => id === 'savings');
 }
 
-function submitSetup(ctx, budgetField, savingsField, incomeField) {
+function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
+    clearError(nameField);
     clearError(budgetField);
     clearError(savingsField);
     clearError(incomeField);
 
+    draft.userName = nameField.control.value;
     draft.budget = budgetField.control.value;
     draft.savingsAmount = savingsField.control.value;
     draft.income = incomeField.control.value;
+
+    const userName = draft.userName.trim();
+    if (userName === '') {
+        setError(nameField, 'Enter your name.');
+        nameField.control.focus();
+        return;
+    }
 
     const budgetCents = parseAmount(draft.budget, { allowZero: true });
     if (budgetCents === null) {
@@ -229,6 +239,7 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
         return;
     }
 
+    ctx.data.settings.userName = userName;
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     savings.pinned = true;
@@ -238,6 +249,7 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
     ctx.data.settings.setupComplete = true;
     refreshCurrentMonthPlan(ctx.data);
 
+    draft.userName = '';
     draft.budget = '';
     draft.savingsAmount = '';
     draft.savingsUnit = 'euro';
@@ -251,6 +263,9 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
 
 export function render(root, ctx) {
     const settings = ctx.data.settings;
+    if (draft.userName === '' && typeof settings.userName === 'string' && settings.userName !== '') {
+        draft.userName = settings.userName;
+    }
     if (draft.budget === '' && Number.isFinite(settings.monthlyBudgetCents)) {
         draft.budget = formatPlain(settings.monthlyBudgetCents);
     }
@@ -276,12 +291,25 @@ export function render(root, ctx) {
         element(
             'p',
             'muted',
-            'Set your monthly plan once. You can change these numbers later in Settings.',
+            'Tell us your name and set your monthly plan once. You can change these later in Settings.',
         ),
     );
 
     const form = element('form', 'card stack setup-form');
     form.noValidate = true;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'given-name';
+    nameInput.placeholder = 'Your first name';
+    nameInput.required = true;
+    nameInput.maxLength = 40;
+    nameInput.value = draft.userName;
+    const nameField = buildField('setup-name', 'Your name', nameInput);
+    nameInput.addEventListener('input', () => {
+        draft.userName = nameInput.value;
+        clearError(nameField);
+    });
 
     const budgetInput = document.createElement('input');
     budgetInput.type = 'text';
@@ -322,10 +350,11 @@ export function render(root, ctx) {
 
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        submitSetup(ctx, budgetField, savingsField, incomeField);
+        submitSetup(ctx, nameField, budgetField, savingsField, incomeField);
     });
 
     form.append(
+        nameField.wrapper,
         budgetField.wrapper,
         savingsField.wrapper,
         element('p', 'muted', 'Example: 10% of a €1000 budget pins €100 to Savings.'),
@@ -339,5 +368,5 @@ export function render(root, ctx) {
     );
     layout.append(form);
     root.append(layout);
-    budgetInput.focus();
+    nameInput.focus();
 }

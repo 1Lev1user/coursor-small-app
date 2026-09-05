@@ -11,6 +11,7 @@ const key = 'my-expenses-v1';
 const data = {
     version: 1,
     settings: {
+        userName: 'Alex',
         monthlyBudgetCents: 100000,
         usualMonthlyIncomeCents: 200000,
         setupComplete: true,

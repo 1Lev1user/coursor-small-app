@@ -70,6 +70,7 @@ export function defaultData() {
     return {
         version: SCHEMA_VERSION,
         settings: {
+            userName: '',
             monthlyBudgetCents: 0,
             usualMonthlyIncomeCents: 0,
             setupComplete: false,
@@ -179,6 +180,11 @@ export function normalise(raw) {
         }
         if (!Object.hasOwn(data.settings, 'othersSeeded')) {
             data.settings.othersSeeded = false;
+        }
+        if (typeof data.settings.userName !== 'string') {
+            data.settings.userName = '';
+        } else {
+            data.settings.userName = data.settings.userName.trim();
         }
 
         const budget = data.settings.monthlyBudgetCents;

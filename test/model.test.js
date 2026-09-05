@@ -93,6 +93,7 @@ test('defaultData returns the exact initial data shape and seeds', () => {
     assert.deepEqual(defaultData(), {
         version: 1,
         settings: {
+            userName: '',
             monthlyBudgetCents: 0,
             usualMonthlyIncomeCents: 0,
             setupComplete: false,
@@ -179,6 +180,7 @@ test('normalise fills optional fields, adds system category, and clones input', 
     const raw = defaultData();
     delete raw.monthPlans;
     delete raw.settings.lastBackupISO;
+    delete raw.settings.userName;
     raw.categories = raw.categories.filter(({ id }) => id !== UNCATEGORISED_ID);
 
     const result = normalise(raw);
@@ -186,6 +188,7 @@ test('normalise fills optional fields, adds system category, and clones input', 
     assert.equal(result.ok, true);
     assert.deepEqual(result.data.monthPlans, {});
     assert.equal(result.data.settings.lastBackupISO, null);
+    assert.equal(result.data.settings.userName, '');
     assert.deepEqual(result.data.categories.at(-1), expectedCategories.at(-1));
     assert.notEqual(result.data, raw);
     assert.notEqual(result.data.settings, raw.settings);
