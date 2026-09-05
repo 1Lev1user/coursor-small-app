@@ -7,6 +7,8 @@ import {
     resolvePlan,
     freezeMonthPlan,
     syncCategoryPlanFields,
+    percentFromEuroCents,
+    euroCentsFromPercent,
 } from '../budget.js';
 import { exportBackup, importBackup, countRecords } from '../backup.js';
 import { buildMonthCsv, csvFilename } from '../csv.js';
@@ -15,13 +17,13 @@ import { downloadText } from '../files.js';
 const addDraft = {
     name: '',
     kind: 'flexible',
-    percent: '',
+    amount: '',
+    limitUnit: 'percent',
     error: '',
 };
 
 const planDraft = {
     budget: null,
-    savingsPercent: null,
     income: null,
     errorField: '',
     error: '',
@@ -51,8 +53,10 @@ const addSubscriptionDraft = {
 
 const addSubDrafts = new Map();
 const renameDrafts = new Map();
+const categoryPlanDrafts = new Map();
 
 let confirmCategoryId = null;
+let editPlanCategoryId = null;
 let confirmSubKey = null;
 let renameCategoryId = null;
 let renameSubKey = null;
@@ -101,6 +105,98 @@ function parsePercent(value) {
     }
     const percent = Number(trimmed);
     return Number.isFinite(percent) ? percent : null;
+}
+
+function limitHelperText(amountRaw, limitUnit, budgetCents) {
+    if (limitUnit === 'euro') {
+        const cents = parseAmount(amountRaw);
+        if (cents === null || budgetCents <= 0) {
+            return '';
+        }
+        return `${displayPercent(percentFromEuroCents(cents, budgetCents))} of budget`;
+    }
+
+    const percent = parsePercent(amountRaw);
+    if (percent === null || budgetCents <= 0) {
+        return '';
+    }
+    return formatEuro(euroCentsFromPercent(percent, budgetCents));
+}
+
+function buildLimitAmountField(id, labelText, draft, ctx, onInput) {
+    const wrapper = element('div', 'field limit-amount-field');
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = labelText;
+
+    const row = element('div', 'limit-amount-row');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.autocomplete = 'off';
+    input.placeholder = draft.limitUnit === 'euro' ? '100' : '10';
+    input.value = draft.amount;
+    input.id = id;
+    input.required = true;
+
+    const unitBtn = element('button', 'unit-toggle', draft.limitUnit === 'euro' ? '\u20AC' : '%');
+    unitBtn.type = 'button';
+    unitBtn.setAttribute(
+        'aria-label',
+        draft.limitUnit === 'euro' ? 'Switch to percent' : 'Switch to euro',
+    );
+
+    const error = element('p', 'error-text');
+    error.id = `${id}-error`;
+    error.hidden = true;
+
+    const helper = element(
+        'p',
+        'muted',
+        limitHelperText(draft.amount, draft.limitUnit, ctx.data.settings.monthlyBudgetCents),
+    );
+
+    const field = { wrapper, control: input, error, helper, row, unitBtn };
+
+    input.addEventListener('input', () => {
+        draft.amount = input.value;
+        draft.error = '';
+        clearError(field);
+        helper.textContent = limitHelperText(
+            draft.amount,
+            draft.limitUnit,
+            ctx.data.settings.monthlyBudgetCents,
+        );
+        onInput?.();
+    });
+
+    unitBtn.addEventListener('click', () => {
+        const budget = ctx.data.settings.monthlyBudgetCents;
+        const nextUnit = draft.limitUnit === 'euro' ? 'percent' : 'euro';
+        if (nextUnit === 'euro' && budget <= 0) {
+            setError(field, 'Save a monthly spend budget first.');
+            return;
+        }
+
+        if (draft.limitUnit === 'percent') {
+            const percent = parsePercent(draft.amount);
+            if (percent !== null && budget > 0) {
+                draft.amount = formatPlain(euroCentsFromPercent(percent, budget));
+            }
+        } else {
+            const cents = parseAmount(draft.amount);
+            if (cents !== null && budget > 0) {
+                draft.amount = String(Math.round(percentFromEuroCents(cents, budget) * 10) / 10);
+            }
+        }
+
+        draft.limitUnit = nextUnit;
+        ctx.render();
+    });
+
+    row.append(input, unitBtn);
+    wrapper.append(label, row, error, helper);
+    return field;
 }
 
 function persist(ctx) {
@@ -202,6 +298,8 @@ function closeTransientUi() {
     pendingImportCounts = null;
     importError = '';
     renameDrafts.clear();
+    editPlanCategoryId = null;
+    categoryPlanDrafts.clear();
 }
 
 function hasBackupWorthyData(data) {
@@ -814,9 +912,9 @@ function addSubcategory(ctx, category, rawName, field) {
     }
 }
 
-function addCategory(ctx, nameField, percentField) {
+function addCategory(ctx, nameField, amountField) {
     addDraft.name = nameField.control.value;
-    addDraft.percent = percentField.control.value;
+    addDraft.amount = amountField.control.value;
     addDraft.error = '';
     const name = addDraft.name.trim();
     if (name === '') {
@@ -826,37 +924,70 @@ function addCategory(ctx, nameField, percentField) {
         return;
     }
 
+    const budget = ctx.data.settings.monthlyBudgetCents;
+    let pinned = false;
+    let limitMode = 'percent';
     let percent = 0;
-    if (addDraft.kind === 'pinned') {
-        percent = parsePercent(addDraft.percent);
-        if (percent === null) {
-            addDraft.error = 'Enter a percentage.';
-            setError(percentField, addDraft.error);
-            percentField.control.focus();
-            return;
-        }
+    let limitCents = 0;
 
-        const check = canSetPinned(ctx.data.categories, null, percent);
-        if (check.ok !== true) {
-            addDraft.error = check.reason;
-            setError(percentField, check.reason);
-            percentField.control.focus();
-            return;
+    if (addDraft.kind === 'pinned') {
+        pinned = true;
+        if (addDraft.limitUnit === 'euro') {
+            if (budget <= 0) {
+                addDraft.error = 'Save a monthly spend budget first.';
+                setError(amountField, addDraft.error);
+                amountField.control.focus();
+                return;
+            }
+
+            const cents = parseAmount(addDraft.amount);
+            if (cents === null) {
+                addDraft.error = 'Enter a valid amount greater than zero.';
+                setError(amountField, addDraft.error);
+                amountField.control.focus();
+                return;
+            }
+
+            limitMode = 'euro';
+            limitCents = cents;
+            percent = percentFromEuroCents(cents, budget);
+        } else {
+            percent = parsePercent(addDraft.amount);
+            if (percent === null) {
+                addDraft.error = 'Enter a percentage.';
+                setError(amountField, addDraft.error);
+                amountField.control.focus();
+                return;
+            }
+
+            const check = canSetPinned(ctx.data.categories, null, percent);
+            if (check.ok !== true) {
+                addDraft.error = check.reason;
+                setError(amountField, check.reason);
+                amountField.control.focus();
+                return;
+            }
+
+            limitCents = euroCentsFromPercent(percent, budget);
         }
     }
 
     ctx.data.categories.push({
         id: createId('cat'),
         name,
-        pinned: addDraft.kind === 'pinned',
+        pinned,
         percent,
+        limitMode,
+        limitCents,
         system: false,
         subcategories: [],
     });
+    syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
     addDraft.name = '';
     addDraft.kind = 'flexible';
-    addDraft.percent = '';
+    addDraft.amount = '';
+    addDraft.limitUnit = 'percent';
     addDraft.error = '';
     if (persist(ctx)) {
         ctx.toast('Category added');
@@ -912,15 +1043,13 @@ function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, budgetField, savingsField, incomeField) {
+function savePlan(ctx, budgetField, incomeField) {
     clearError(budgetField);
-    clearError(savingsField);
     clearError(incomeField);
     planDraft.error = '';
     planDraft.errorField = '';
 
     planDraft.budget = budgetField.control.value;
-    planDraft.savingsPercent = savingsField.control.value;
     planDraft.income = incomeField.control.value;
 
     const budgetCents = parseAmount(planDraft.budget);
@@ -929,24 +1058,6 @@ function savePlan(ctx, budgetField, savingsField, incomeField) {
         planDraft.error = 'Enter a valid amount greater than zero.';
         setError(budgetField, planDraft.error);
         budgetField.control.focus();
-        return;
-    }
-
-    const savingsPercent = parsePercent(planDraft.savingsPercent);
-    if (savingsPercent === null) {
-        planDraft.errorField = 'savings';
-        planDraft.error = 'Enter a savings percentage from 0 to 100.';
-        setError(savingsField, planDraft.error);
-        savingsField.control.focus();
-        return;
-    }
-
-    const pinCheck = canSetPinned(ctx.data.categories, 'savings', savingsPercent);
-    if (pinCheck.ok !== true) {
-        planDraft.errorField = 'savings';
-        planDraft.error = pinCheck.reason;
-        setError(savingsField, pinCheck.reason);
-        savingsField.control.focus();
         return;
     }
 
@@ -959,25 +1070,12 @@ function savePlan(ctx, budgetField, savingsField, incomeField) {
         return;
     }
 
-    const savings = savingsCategory(ctx.data);
-    if (savings === undefined) {
-        planDraft.errorField = 'savings';
-        planDraft.error = 'Savings category is missing.';
-        setError(savingsField, planDraft.error);
-        savingsField.control.focus();
-        return;
-    }
-
     ctx.data.settings.monthlyBudgetCents = budgetCents;
-    savings.pinned = true;
-    savings.limitMode = 'percent';
-    savings.percent = savingsPercent;
     syncCategoryPlanFields(ctx.data.categories, budgetCents);
     ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
     planDraft.budget = null;
-    planDraft.savingsPercent = null;
     planDraft.income = null;
     planDraft.error = '';
     planDraft.errorField = '';
@@ -989,7 +1087,6 @@ function savePlan(ctx, budgetField, savingsField, incomeField) {
 
 function renderPlanSection(ctx) {
     const settings = ctx.data.settings;
-    const savings = savingsCategory(ctx.data);
     const section = element('section', 'card stack');
     section.id = 'more-plan';
     section.append(element('h2', 'section-title', 'Plan'));
@@ -1009,20 +1106,6 @@ function renderPlanSection(ctx) {
         clearError(budgetField);
     });
 
-    const savingsInput = document.createElement('input');
-    savingsInput.type = 'text';
-    savingsInput.inputMode = 'decimal';
-    savingsInput.autocomplete = 'off';
-    savingsInput.placeholder = '10';
-    savingsInput.value = planDraft.savingsPercent !== null
-        ? planDraft.savingsPercent
-        : String(savings?.percent ?? 0);
-    const savingsField = buildField('plan-savings', 'Savings %', savingsInput);
-    savingsInput.addEventListener('input', () => {
-        planDraft.savingsPercent = savingsInput.value;
-        clearError(savingsField);
-    });
-
     const incomeInput = document.createElement('input');
     incomeInput.type = 'text';
     incomeInput.inputMode = 'decimal';
@@ -1038,8 +1121,6 @@ function renderPlanSection(ctx) {
     if (planDraft.error !== '') {
         if (planDraft.errorField === 'budget') {
             setError(budgetField, planDraft.error);
-        } else if (planDraft.errorField === 'savings') {
-            setError(savingsField, planDraft.error);
         } else if (planDraft.errorField === 'income') {
             setError(incomeField, planDraft.error);
         }
@@ -1049,12 +1130,11 @@ function renderPlanSection(ctx) {
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        savePlan(ctx, budgetField, savingsField, incomeField);
+        savePlan(ctx, budgetField, incomeField);
     });
 
     form.append(
         budgetField.wrapper,
-        savingsField.wrapper,
         incomeField.wrapper,
         submit,
     );
@@ -1650,20 +1730,176 @@ function renderAddSubcategory(ctx, category) {
     return form;
 }
 
-function shareLabel(category, plan) {
-    if (category.pinned === true) {
-        return `Pinned · ${displayPercent(category.percent)}`;
+function shareLabel(category, plan, budgetCents) {
+    const entry = plan.entries.find(({ id }) => id === category.id);
+    if (category.pinned !== true) {
+        if (budgetCents > 0 && entry !== undefined) {
+            return `Flexible · ~${formatEuro(entry.limitCents)}`;
+        }
+        return 'Flexible';
     }
-    return `Flexible · ${displayPercent(plan.flexiblePercentEach)}`;
+
+    const percent = category.percent;
+    const limitCents = entry?.limitCents ?? category.limitCents ?? 0;
+    if (category.limitMode === 'euro') {
+        return `Fixed · ${formatEuro(limitCents)} · ${displayPercent(percent)}`;
+    }
+    return `Fixed · ${displayPercent(percent)} · ${formatEuro(limitCents)}`;
+}
+
+function saveCategoryPlan(ctx, category, draft, amountField) {
+    const budget = ctx.data.settings.monthlyBudgetCents;
+    clearError(amountField);
+    draft.error = '';
+
+    if (draft.kind === 'flexible') {
+        category.pinned = false;
+        syncCategoryPlanFields(ctx.data.categories, budget);
+        refreshCurrentMonthPlan(ctx.data);
+        closeTransientUi();
+        if (persist(ctx)) {
+            ctx.toast('Plan updated');
+        }
+        return;
+    }
+
+    if (draft.limitUnit === 'euro') {
+        if (budget <= 0) {
+            draft.error = 'Save a monthly spend budget first.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
+        const cents = parseAmount(draft.amount);
+        if (cents === null) {
+            draft.error = 'Enter a valid amount greater than zero.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
+        category.pinned = true;
+        category.limitMode = 'euro';
+        category.limitCents = cents;
+        category.percent = percentFromEuroCents(cents, budget);
+    } else {
+        const percent = parsePercent(draft.amount);
+        if (percent === null) {
+            draft.error = 'Enter a percentage.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
+        const check = canSetPinned(ctx.data.categories, category.id, percent);
+        if (check.ok !== true) {
+            draft.error = check.reason;
+            setError(amountField, check.reason);
+            amountField.control.focus();
+            return;
+        }
+
+        category.pinned = true;
+        category.limitMode = 'percent';
+        category.percent = percent;
+        category.limitCents = euroCentsFromPercent(percent, budget);
+    }
+
+    syncCategoryPlanFields(ctx.data.categories, budget);
+    refreshCurrentMonthPlan(ctx.data);
+    closeTransientUi();
+    if (persist(ctx)) {
+        ctx.toast('Plan updated');
+    }
+}
+
+function renderCategoryPlanKindChoice(draft, amountField, ctx) {
+    const fieldset = element('fieldset', 'choice-set');
+    const legend = document.createElement('legend');
+    legend.textContent = 'Share';
+    fieldset.append(legend);
+
+    const row = element('div', 'choice-row');
+    const options = [
+        { value: 'flexible', label: 'Flexible' },
+        { value: 'pinned', label: 'Fixed' },
+    ];
+
+    for (const option of options) {
+        const choice = element('label', 'choice');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = `edit-plan-kind-${editPlanCategoryId}`;
+        radio.value = option.value;
+        radio.checked = draft.kind === option.value;
+        radio.addEventListener('change', () => {
+            draft.kind = option.value;
+            amountField.wrapper.hidden = draft.kind !== 'pinned';
+            if (draft.kind !== 'pinned') {
+                clearError(amountField);
+            }
+            ctx.render();
+        });
+        choice.append(radio, document.createTextNode(option.label));
+        row.append(choice);
+    }
+
+    fieldset.append(row);
+    return fieldset;
+}
+
+function renderCategoryPlanEditor(ctx, category) {
+    const draft = categoryPlanDrafts.get(category.id) ?? {
+        kind: category.pinned ? 'pinned' : 'flexible',
+        limitUnit: category.limitMode === 'euro' ? 'euro' : 'percent',
+        amount: '',
+        error: '',
+    };
+
+    const form = element('form', 'inline-form category-plan-form');
+    form.noValidate = true;
+
+    const amountField = buildLimitAmountField(
+        `edit-plan-amount-${category.id}`,
+        'Fixed amount',
+        draft,
+        ctx,
+    );
+    amountField.wrapper.hidden = draft.kind !== 'pinned';
+    if (draft.error !== '') {
+        setError(amountField, draft.error);
+    }
+
+    const saveButton = element('button', 'btn btn-primary', 'Save');
+    saveButton.type = 'submit';
+    const cancelButton = actionButton('btn', 'Cancel', () => {
+        closeTransientUi();
+        ctx.render();
+    });
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveCategoryPlan(ctx, category, draft, amountField);
+    });
+
+    form.append(
+        renderCategoryPlanKindChoice(draft, amountField, ctx),
+        amountField.wrapper,
+        saveButton,
+        cancelButton,
+    );
+    return form;
 }
 
 function renderCategory(ctx, category, plan) {
+    const budgetCents = ctx.data.settings.monthlyBudgetCents;
     const item = element('article', 'category-item more-category');
     const head = element('div', 'more-category-head');
     const titles = element('div', 'more-category-titles');
     titles.append(
         element('h3', 'category-name', category.name),
-        element('p', 'muted', shareLabel(category, plan)),
+        element('p', 'muted', shareLabel(category, plan, budgetCents)),
     );
     head.append(titles);
 
@@ -1686,6 +1922,8 @@ function renderCategory(ctx, category, plan) {
                 },
             ),
         );
+    } else if (editPlanCategoryId === category.id) {
+        item.append(head, renderCategoryPlanEditor(ctx, category));
     } else if (confirmCategoryId === category.id) {
         item.append(
             head,
@@ -1701,6 +1939,21 @@ function renderCategory(ctx, category, plan) {
     } else {
         const actions = element('div', 'more-actions');
         actions.append(
+            actionButton('btn btn-ghost', 'Edit plan', () => {
+                closeTransientUi();
+                editPlanCategoryId = category.id;
+                categoryPlanDrafts.set(category.id, {
+                    kind: category.pinned ? 'pinned' : 'flexible',
+                    limitUnit: category.limitMode === 'euro' ? 'euro' : 'percent',
+                    amount: category.pinned
+                        ? (category.limitMode === 'euro'
+                            ? formatPlain(category.limitCents)
+                            : String(category.percent))
+                        : '',
+                    error: '',
+                });
+                ctx.render();
+            }),
             actionButton('btn btn-ghost', 'Rename', () => {
                 closeTransientUi();
                 renameCategoryId = category.id;
@@ -1731,7 +1984,7 @@ function renderCategory(ctx, category, plan) {
     return item;
 }
 
-function renderKindChoice(percentField) {
+function renderKindChoice(amountField, ctx) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
     legend.textContent = 'Share';
@@ -1752,10 +2005,11 @@ function renderKindChoice(percentField) {
         radio.checked = addDraft.kind === option.value;
         radio.addEventListener('change', () => {
             addDraft.kind = option.value;
-            percentField.wrapper.hidden = addDraft.kind !== 'pinned';
+            amountField.wrapper.hidden = addDraft.kind !== 'pinned';
             if (addDraft.kind !== 'pinned') {
-                clearError(percentField);
+                clearError(amountField);
             }
+            ctx.render();
         });
         choice.append(radio, document.createTextNode(option.label));
         row.append(choice);
@@ -1782,23 +2036,20 @@ function renderAddCategory(ctx) {
         clearError(nameField);
     });
 
-    const percentInput = document.createElement('input');
-    percentInput.type = 'text';
-    percentInput.inputMode = 'decimal';
-    percentInput.autocomplete = 'off';
-    percentInput.placeholder = '10';
-    percentInput.value = addDraft.percent;
-    const percentField = buildField('add-category-percent', 'Percent', percentInput);
-    percentField.wrapper.hidden = addDraft.kind !== 'pinned';
-    percentInput.addEventListener('input', () => {
-        addDraft.percent = percentInput.value;
-        addDraft.error = '';
-        clearError(percentField);
-    });
+    const amountField = buildLimitAmountField(
+        'add-category-amount',
+        'Fixed amount',
+        addDraft,
+        ctx,
+        () => {
+            addDraft.error = '';
+        },
+    );
+    amountField.wrapper.hidden = addDraft.kind !== 'pinned';
 
     if (addDraft.error !== '') {
         if (addDraft.kind === 'pinned' && addDraft.error !== 'Enter a name.') {
-            setError(percentField, addDraft.error);
+            setError(amountField, addDraft.error);
         } else {
             setError(nameField, addDraft.error);
         }
@@ -1808,13 +2059,13 @@ function renderAddCategory(ctx) {
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        addCategory(ctx, nameField, percentField);
+        addCategory(ctx, nameField, amountField);
     });
 
     form.append(
         nameField.wrapper,
-        renderKindChoice(percentField),
-        percentField.wrapper,
+        renderKindChoice(amountField, ctx),
+        amountField.wrapper,
         submit,
     );
     return form;

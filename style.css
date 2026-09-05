@@ -859,6 +859,29 @@ body.is-setup .tabbar {
     color: var(--accent);
 }
 
+.limit-amount-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--s2);
+    width: 100%;
+}
+
+.limit-amount-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.unit-toggle {
+    min-height: var(--tap);
+    min-width: var(--tap);
+    padding: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+}
+
 .add-category-form {
     padding-top: var(--s4);
     border-top: 1px solid var(--border);
