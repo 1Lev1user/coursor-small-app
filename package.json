@@ -1,0 +1,11 @@
+{
+    "name": "my-expenses",
+    "version": "1.0.0",
+    "description": "Local-only EUR expense and income tracker (PWA)",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "node --test test/",
+        "serve": "python -m http.server 8080"
+    }
+}
