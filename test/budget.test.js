@@ -32,7 +32,9 @@ function income(id, amountCents, date) {
 test('resolvePlan splits leftover equally in original order and rounds only through splitShares', () => {
     const data = defaultData();
     data.settings.monthlyBudgetCents = 100000;
-    data.categories.find(({ id }) => id === 'savings').percent = 10;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 10;
 
     const plan = resolvePlan(data.categories, data.settings.monthlyBudgetCents);
 
@@ -88,7 +90,9 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
 test('resolvePlan gives flexible categories zero when pinned total is 100', () => {
     const data = defaultData();
     data.settings.monthlyBudgetCents = 99999;
-    data.categories.find(({ id }) => id === 'savings').percent = 100;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 100;
     data.categories = data.categories.filter(({ id }) => (
         id === 'necessary'
         || id === 'subscriptions'
@@ -173,7 +177,9 @@ test('resolvePlan handles a zero budget and excludes the system category from ev
     const system = data.categories.find(({ id }) => id === UNCATEGORISED_ID);
     system.pinned = true;
     system.percent = 100;
-    data.categories.find(({ id }) => id === 'savings').percent = 10;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 10;
 
     const plan = resolvePlan(data.categories, 0);
 
@@ -293,7 +299,9 @@ test('buildPlanSnapshot has the frozen shape and does not store anything', () =>
     const data = defaultData();
     data.settings.monthlyBudgetCents = 12345;
     data.settings.usualMonthlyIncomeCents = 54321;
-    data.categories.find(({ id }) => id === 'savings').percent = 10;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 10;
 
     const snapshot = buildPlanSnapshot(data);
 
@@ -385,7 +393,9 @@ test('monthTotals calculates budget, cash, incomes, and strict over-limit catego
     const data = defaultData();
     data.settings.monthlyBudgetCents = 100000;
     data.settings.usualMonthlyIncomeCents = 150000;
-    data.categories.find(({ id }) => id === 'savings').percent = 10;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 10;
     freezeMonthPlan(data, '2026-09');
     data.expenses = [
         expense('e1', 'necessary', 30001, '2026-09-01', 'rent'),

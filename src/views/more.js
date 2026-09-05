@@ -1,6 +1,12 @@
 import { parseAmount, formatEuro, formatPlain } from '../money.js';
 import { todayISO, monthKeyOf } from '../months.js';
-import { UNCATEGORISED_ID, createId, deleteCategory, deleteSubcategory } from '../model.js';
+import {
+    UNCATEGORISED_ID,
+    SAVINGS_ID,
+    createId,
+    deleteCategory,
+    deleteSubcategory,
+} from '../model.js';
 import {
     canSetPinned,
     refreshCurrentMonthPlan,
@@ -1748,6 +1754,13 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
     clearError(amountField);
     draft.error = '';
 
+    if (category.id === SAVINGS_ID) {
+        draft.kind = 'pinned';
+        if (draft.limitUnit !== 'euro' && draft.limitUnit !== 'percent') {
+            draft.limitUnit = 'euro';
+        }
+    }
+
     if (draft.kind === 'flexible') {
         category.pinned = false;
         category.limitMode = 'percent';
@@ -1777,6 +1790,13 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
             return;
         }
 
+        if (category.id === SAVINGS_ID && cents > budget) {
+            draft.error = 'Savings cannot exceed the monthly spend budget.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
         category.pinned = true;
         category.limitMode = 'euro';
         category.limitCents = cents;
@@ -1785,6 +1805,13 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
         const percent = parsePercent(draft.amount);
         if (percent === null) {
             draft.error = 'Enter a percentage.';
+            setError(amountField, draft.error);
+            amountField.control.focus();
+            return;
+        }
+
+        if (category.id === SAVINGS_ID && percent > 100) {
+            draft.error = 'Savings cannot exceed 100% of the monthly spend budget.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;
@@ -1812,7 +1839,7 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
     }
 }
 
-function renderCategoryPlanKindChoice(draft, amountField, ctx) {
+function renderCategoryPlanKindChoice(draft, amountField, ctx, { allowFlexible = true } = {}) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
     legend.textContent = 'Share';
@@ -1820,7 +1847,7 @@ function renderCategoryPlanKindChoice(draft, amountField, ctx) {
 
     const row = element('div', 'choice-row');
     const options = [
-        { value: 'flexible', label: 'Flexible' },
+        ...(allowFlexible ? [{ value: 'flexible', label: 'Flexible' }] : []),
         { value: 'pinned', label: 'Fixed' },
     ];
 
@@ -1848,19 +1875,26 @@ function renderCategoryPlanKindChoice(draft, amountField, ctx) {
 }
 
 function renderCategoryPlanEditor(ctx, category) {
+    const isSavings = category.id === SAVINGS_ID;
     const draft = categoryPlanDrafts.get(category.id) ?? {
-        kind: category.pinned ? 'pinned' : 'flexible',
-        limitUnit: category.limitMode === 'euro' ? 'euro' : 'percent',
+        kind: 'pinned',
+        limitUnit: 'euro',
         amount: '',
         error: '',
     };
+    if (isSavings) {
+        draft.kind = 'pinned';
+        if (draft.limitUnit !== 'percent') {
+            draft.limitUnit = 'euro';
+        }
+    }
 
     const form = element('form', 'inline-form category-plan-form');
     form.noValidate = true;
 
     const amountField = buildLimitAmountField(
         `edit-plan-amount-${category.id}`,
-        'Fixed amount',
+        isSavings ? 'Savings amount' : 'Fixed amount',
         draft,
         ctx,
     );
@@ -1882,7 +1916,7 @@ function renderCategoryPlanEditor(ctx, category) {
     });
 
     form.append(
-        renderCategoryPlanKindChoice(draft, amountField, ctx),
+        renderCategoryPlanKindChoice(draft, amountField, ctx, { allowFlexible: !isSavings }),
         amountField.wrapper,
         saveButton,
         cancelButton,
@@ -1940,11 +1974,15 @@ function renderCategory(ctx, category, plan) {
             actionButton('btn btn-ghost', 'Edit plan', () => {
                 closeTransientUi();
                 editPlanCategoryId = category.id;
+                const isSavings = category.id === SAVINGS_ID;
+                const limitUnit = isSavings
+                    ? (category.limitMode === 'percent' ? 'percent' : 'euro')
+                    : (category.limitMode === 'euro' ? 'euro' : 'percent');
                 categoryPlanDrafts.set(category.id, {
-                    kind: category.pinned ? 'pinned' : 'flexible',
-                    limitUnit: category.limitMode === 'euro' ? 'euro' : 'percent',
-                    amount: category.pinned
-                        ? (category.limitMode === 'euro'
+                    kind: isSavings || category.pinned ? 'pinned' : 'flexible',
+                    limitUnit,
+                    amount: (isSavings || category.pinned)
+                        ? (limitUnit === 'euro'
                             ? formatPlain(category.limitCents)
                             : String(category.percent))
                         : '',
@@ -1959,12 +1997,16 @@ function renderCategory(ctx, category, plan) {
                 focusId = `rename-cat-${category.id}`;
                 ctx.render();
             }),
-            actionButton('btn btn-ghost-danger', 'Delete', () => {
-                closeTransientUi();
-                confirmCategoryId = category.id;
-                ctx.render();
-            }),
         );
+        if (category.id !== SAVINGS_ID) {
+            actions.append(
+                actionButton('btn btn-ghost-danger', 'Delete', () => {
+                    closeTransientUi();
+                    confirmCategoryId = category.id;
+                    ctx.render();
+                }),
+            );
+        }
         head.append(actions);
         item.append(head);
     }

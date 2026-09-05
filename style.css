@@ -152,6 +152,8 @@ body.is-setup .tabbar {
 
 .card {
     width: 100%;
+    min-width: 0;
+    overflow-x: clip;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -515,6 +517,8 @@ body.is-setup .tabbar {
 .field input,
 .field select {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     min-height: var(--tap);
     padding: var(--s3);
     font: inherit;
@@ -522,6 +526,14 @@ body.is-setup .tabbar {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
+    box-sizing: border-box;
+}
+
+.field input[type='date'] {
+    /* Native date controls have a large intrinsic min-width on mobile */
+    appearance: none;
+    -webkit-appearance: none;
+    max-width: 100%;
 }
 
 .field select {

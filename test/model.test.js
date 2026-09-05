@@ -57,7 +57,7 @@ const expectedCategories = [
         name: 'Savings',
         pinned: true,
         percent: 0,
-        limitMode: 'percent',
+        limitMode: 'euro',
         limitCents: 0,
         system: false,
         subcategories: [],
@@ -317,6 +317,8 @@ test('defaultData seeds Others as flexible user category and limitMode on all us
     assert.equal(others.pinned, false);
     assert.equal(others.limitMode, 'percent');
     assert.equal(others.limitCents, 0);
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    assert.equal(savings.limitMode, 'euro');
     for (const category of data.categories.filter(({ system }) => !system)) {
         assert.ok(category.limitMode === 'percent' || category.limitMode === 'euro');
         assert.equal(typeof category.limitCents, 'number');
@@ -385,4 +387,24 @@ test('normalise does not recreate Others if user deleted it', () => {
     const second = normalise(secondRaw);
     assert.equal(second.ok, true);
     assert.ok(!second.data.categories.some(({ name }) => name.toLowerCase() === 'others'));
+});
+
+test('deleteCategory refuses Savings', () => {
+    const data = defaultData();
+    const result = deleteCategory(data, 'savings');
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /Savings cannot be deleted/i);
+    assert.ok(data.categories.some(({ id }) => id === 'savings'));
+});
+
+test('normalise restores missing Savings as fixed euro', () => {
+    const raw = defaultData();
+    raw.categories = raw.categories.filter(({ id }) => id !== 'savings');
+    const result = normalise(raw);
+    assert.equal(result.ok, true);
+    const savings = result.data.categories.find(({ id }) => id === 'savings');
+    assert.ok(savings);
+    assert.equal(savings.pinned, true);
+    assert.equal(savings.limitMode, 'euro');
+    assert.equal(savings.limitCents, 0);
 });

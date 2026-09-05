@@ -1,5 +1,6 @@
 export const SCHEMA_VERSION = 1;
 export const UNCATEGORISED_ID = 'uncategorised';
+export const SAVINGS_ID = 'savings';
 
 const UNCATEGORISED_CATEGORY = {
     id: UNCATEGORISED_ID,
@@ -7,6 +8,17 @@ const UNCATEGORISED_CATEGORY = {
     pinned: true,
     percent: 0,
     system: true,
+    subcategories: [],
+};
+
+const SAVINGS_CATEGORY = {
+    id: SAVINGS_ID,
+    name: 'Savings',
+    pinned: true,
+    percent: 0,
+    limitMode: 'euro',
+    limitCents: 0,
+    system: false,
     subcategories: [],
 };
 
@@ -24,6 +36,13 @@ const OTHERS_CATEGORY = {
 function newOthersCategory() {
     return {
         ...OTHERS_CATEGORY,
+        subcategories: [],
+    };
+}
+
+function newSavingsCategory() {
+    return {
+        ...SAVINGS_CATEGORY,
         subcategories: [],
     };
 }
@@ -98,16 +117,7 @@ export function defaultData() {
                     { id: 'random-other', name: 'Other' },
                 ],
             },
-            {
-                id: 'savings',
-                name: 'Savings',
-                pinned: true,
-                percent: 0,
-                limitMode: 'percent',
-                limitCents: 0,
-                system: false,
-                subcategories: [],
-            },
+            newSavingsCategory(),
             newOthersCategory(),
             newUncategorisedCategory(),
         ],
@@ -204,6 +214,22 @@ export function normalise(raw) {
             data.settings.othersSeeded = true;
         }
 
+        if (!data.categories.some((category) => category?.id === SAVINGS_ID)) {
+            const othersIndex = data.categories.findIndex(
+                (category) => category?.id === 'others'
+                    || (category?.system !== true && /^others$/i.test(category?.name ?? '')),
+            );
+            const uncategorisedIndex = data.categories.findIndex(
+                (category) => category?.id === UNCATEGORISED_ID,
+            );
+            const insertIndex = othersIndex !== -1
+                ? othersIndex
+                : uncategorisedIndex === -1
+                    ? data.categories.length
+                    : uncategorisedIndex;
+            data.categories.splice(insertIndex, 0, newSavingsCategory());
+        }
+
         const uncategorisedIndex = data.categories.findIndex(
             (category) => category?.id === UNCATEGORISED_ID,
         );
@@ -227,9 +253,15 @@ export function deleteCategory(data, categoryId) {
 
     if (
         categoryId === UNCATEGORISED_ID
+        || categoryId === SAVINGS_ID
         || data.categories[categoryIndex].system === true
     ) {
-        return { ok: false, reason: 'System category cannot be deleted.' };
+        return {
+            ok: false,
+            reason: categoryId === SAVINGS_ID
+                ? 'Savings cannot be deleted.'
+                : 'System category cannot be deleted.',
+        };
     }
 
     let movedCount = 0;

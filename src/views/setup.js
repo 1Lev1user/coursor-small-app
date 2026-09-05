@@ -8,7 +8,7 @@ import {
 const draft = {
     budget: '',
     savingsAmount: '',
-    savingsUnit: 'percent',
+    savingsUnit: 'euro',
     income: '',
 };
 
@@ -198,6 +198,11 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
             savingsField.control.focus();
             return;
         }
+        if (cents > budgetCents) {
+            setError(savingsField, 'Savings cannot exceed the monthly spend budget.');
+            savingsField.control.focus();
+            return;
+        }
 
         limitMode = 'euro';
         savingsLimitCents = cents;
@@ -239,7 +244,7 @@ function submitSetup(ctx, budgetField, savingsField, incomeField) {
 
     draft.budget = '';
     draft.savingsAmount = '';
-    draft.savingsUnit = 'percent';
+    draft.savingsUnit = 'euro';
     draft.income = '';
 
     if (ctx.save() !== false) {
