@@ -206,10 +206,16 @@ body.is-setup .tabbar {
 /* Month */
 
 .month-navigator {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
     width: 100%;
 }
 
-.month-navigator .btn {
+.month-navigator .month-nav-arrow {
+    flex: 0 0 auto;
     width: var(--tap);
     min-width: var(--tap);
     padding-inline: 0;
@@ -217,7 +223,48 @@ body.is-setup .tabbar {
     line-height: 1;
 }
 
-.month-title,
+.month-nav-center {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap);
+}
+
+.month-navigator .month-title {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-inline: var(--s3);
+    font-size: clamp(1.05rem, 1rem + 0.35vw, 1.25rem);
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.month-picker-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.01;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: transparent;
+    background: transparent;
+    font-size: 1rem;
+}
+
 .section-title {
     font-size: clamp(1.05rem, 1rem + 0.35vw, 1.25rem);
     line-height: 1.3;
