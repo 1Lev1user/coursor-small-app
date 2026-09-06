@@ -78,6 +78,24 @@ body {
 
 /* Shell */
 
+.rights-mark {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 11;
+    margin: 0;
+    padding: 0.35rem calc(var(--s4) + env(safe-area-inset-right)) calc(0.35rem + env(safe-area-inset-bottom)) calc(var(--s4) + env(safe-area-inset-left));
+    text-align: center;
+    font-size: 0.68rem;
+    line-height: 1.25;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    pointer-events: none;
+}
+
 .app-header {
     position: sticky;
     top: 0;
@@ -96,15 +114,17 @@ body {
 }
 
 #view {
+    position: relative;
+    z-index: 2;
     width: 100%;
     padding: var(--s4);
     padding-left: calc(var(--s4) + env(safe-area-inset-left));
     padding-right: calc(var(--s4) + env(safe-area-inset-right));
-    padding-bottom: calc(var(--tabbar-height) + var(--s5) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--tabbar-height) + 2.5rem + var(--s5) + env(safe-area-inset-bottom));
 }
 
 body.is-setup #view {
-    padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
+    padding-bottom: calc(2.5rem + var(--s5) + env(safe-area-inset-bottom));
 }
 
 body.is-setup .tabbar {
@@ -113,7 +133,9 @@ body.is-setup .tabbar {
 
 .tabbar {
     position: fixed;
-    inset: auto 0 0 0;
+    left: 0;
+    right: 0;
+    bottom: calc(1.6rem + env(safe-area-inset-bottom));
     z-index: 10;
     display: flex;
     width: 100%;
@@ -122,7 +144,7 @@ body.is-setup .tabbar {
     background: var(--surface);
     border-top: 1px solid var(--border);
     padding-inline: calc(var(--s4) + env(safe-area-inset-left)) calc(var(--s4) + env(safe-area-inset-right));
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: 0;
 }
 
 .tab {

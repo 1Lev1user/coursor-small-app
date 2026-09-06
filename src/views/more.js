@@ -2243,6 +2243,52 @@ function renderCategoriesSection(ctx, plan) {
     return section;
 }
 
+function renderRightsSection() {
+    const section = element('section', 'card stack');
+    section.id = 'more-rights';
+    section.append(element('h2', 'section-title', 'Rights & privacy'));
+
+    section.append(
+        element('h3', 'category-name', 'All rights reserved'),
+        element(
+            'p',
+            '',
+            '© Ļevs Krilovs. All rights reserved. '
+                + 'My Expenses — including the app, its design, code presentation, and related materials '
+                + '(such as the user guide) — is his work. Rights to share, copy, distribute, or republish '
+                + 'it remain exclusively with him.',
+        ),
+        element(
+            'p',
+            '',
+            'Personal use is allowed only if he gave you access. '
+                + 'Sharing the app, its link, screenshots for redistribution, or the guide '
+                + 'without his permission is not allowed.',
+        ),
+        element('h3', 'category-name', 'Your data'),
+        element(
+            'p',
+            '',
+            'This app does not create an account and does not sync to a cloud. '
+                + 'Your expenses, income, and settings stay only on this device '
+                + '(in this browser / Home Screen app).',
+        ),
+        element(
+            'p',
+            'muted',
+            'If you delete the app, clear site data, or lose the device without a backup, '
+                + 'your data is gone. Export a JSON backup from Backup & export if you want a copy.',
+        ),
+        element(
+            'p',
+            'muted rights-footer-line',
+            '© Ļevs Krilovs · All rights reserved · Share only with his permission',
+        ),
+    );
+
+    return section;
+}
+
 export function openSettingsSection(sectionId) {
     pendingScrollId = sectionId;
 }
@@ -2260,6 +2306,7 @@ export function render(root, ctx) {
         ['more-subscriptions', 'Subscriptions'],
         ['more-categories', 'Categories'],
         ['more-backup', 'Backup'],
+        ['more-rights', 'Rights'],
     ]) {
         const link = element('a', 'more-jump', label);
         link.href = `#${id}`;
@@ -2279,6 +2326,7 @@ export function render(root, ctx) {
         renderSubscriptionsSection(ctx, plan),
         renderCategoriesSection(ctx, plan),
         renderBackupSection(ctx),
+        renderRightsSection(),
     );
     root.append(layout);
 
