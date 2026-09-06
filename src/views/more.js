@@ -76,6 +76,10 @@ let renameSubKey = null;
 let confirmIncomeCategoryId = null;
 let renameIncomeCategoryId = null;
 let confirmSubscriptionId = null;
+let editSubscriptionId = null;
+let subscriptionEditDraft = null;
+let subscriptionEditError = '';
+let focusSubscriptionEditError = false;
 let editIncomeId = null;
 let confirmIncomeEntryId = null;
 let incomeEntryDraft = null;
@@ -307,6 +311,10 @@ function closeTransientUi() {
     confirmIncomeCategoryId = null;
     renameIncomeCategoryId = null;
     confirmSubscriptionId = null;
+    editSubscriptionId = null;
+    subscriptionEditDraft = null;
+    subscriptionEditError = '';
+    focusSubscriptionEditError = false;
     editIncomeId = null;
     confirmIncomeEntryId = null;
     incomeEntryDraft = null;
@@ -960,7 +968,12 @@ function addCategory(ctx, nameField, amountField) {
     let percent = 0;
     let limitCents = 0;
 
-    if (addDraft.kind === 'pinned') {
+    if (addDraft.kind === 'none') {
+        pinned = false;
+        limitMode = 'none';
+        percent = 0;
+        limitCents = 0;
+    } else if (addDraft.kind === 'pinned') {
         pinned = true;
         if (addDraft.limitUnit === 'euro') {
             if (budget <= 0) {
@@ -1458,6 +1471,178 @@ function confirmDeleteSubscription(ctx, subscription) {
     }
 }
 
+function openEditSubscription(ctx, subscription) {
+    closeTransientUi();
+    editSubscriptionId = subscription.id;
+    subscriptionEditDraft = {
+        name: subscription.name,
+        amount: formatPlain(subscription.amountCents),
+        dayOfMonth: String(subscription.dayOfMonth),
+    };
+    subscriptionEditError = '';
+    focusSubscriptionEditError = false;
+    ctx.render();
+}
+
+function saveSubscriptionEdit(ctx, subscription, fields) {
+    const draft = subscriptionEditDraft;
+    subscriptionEditError = '';
+
+    for (const field of Object.values(fields)) {
+        clearError(field);
+    }
+
+    const name = fields.name.control.value.trim();
+    const amountCents = parseAmount(fields.amount.control.value);
+    const dayOfMonth = parseDayOfMonth(fields.day.control.value);
+    let firstInvalid = null;
+
+    draft.name = fields.name.control.value;
+    draft.amount = fields.amount.control.value;
+    draft.dayOfMonth = fields.day.control.value;
+
+    if (name === '') {
+        setError(fields.name, 'Enter a name.');
+        firstInvalid ??= fields.name.control;
+    }
+    if (amountCents === null) {
+        setError(fields.amount, 'Enter a valid amount greater than zero.');
+        firstInvalid ??= fields.amount.control;
+    }
+    if (dayOfMonth === null) {
+        setError(fields.day, 'Enter a day from 1 to 31.');
+        firstInvalid ??= fields.day.control;
+    }
+
+    if (firstInvalid !== null) {
+        firstInvalid.focus();
+        return;
+    }
+
+    const snapshot = {
+        name: subscription.name,
+        amountCents: subscription.amountCents,
+        dayOfMonth: subscription.dayOfMonth,
+    };
+
+    subscription.name = name;
+    subscription.amountCents = amountCents;
+    subscription.dayOfMonth = dayOfMonth;
+
+    if (ctx.save() === false) {
+        subscription.name = snapshot.name;
+        subscription.amountCents = snapshot.amountCents;
+        subscription.dayOfMonth = snapshot.dayOfMonth;
+        subscriptionEditError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        focusSubscriptionEditError = true;
+        ctx.render();
+        return;
+    }
+
+    closeTransientUi();
+    ctx.render();
+    ctx.toast('Subscription updated');
+}
+
+function renderSubscriptionEditor(ctx, subscription) {
+    const draft = subscriptionEditDraft;
+
+    const form = element('form', 'inline-form entry-edit-form stack');
+    form.noValidate = true;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'off';
+    nameInput.required = true;
+    nameInput.value = draft.name;
+    const nameField = buildField(`edit-subscription-name-${subscription.id}`, 'Name', nameInput);
+
+    const amountInput = document.createElement('input');
+    amountInput.type = 'text';
+    amountInput.inputMode = 'decimal';
+    amountInput.autocomplete = 'off';
+    amountInput.required = true;
+    amountInput.value = draft.amount;
+    const amountField = buildField(
+        `edit-subscription-amount-${subscription.id}`,
+        'Usual amount (EUR)',
+        amountInput,
+    );
+
+    const dayInput = document.createElement('input');
+    dayInput.type = 'number';
+    dayInput.min = '1';
+    dayInput.max = '31';
+    dayInput.inputMode = 'numeric';
+    dayInput.required = true;
+    dayInput.value = draft.dayOfMonth;
+    const dayField = buildField(
+        `edit-subscription-day-${subscription.id}`,
+        'Day of month',
+        dayInput,
+    );
+
+    const formError = element('p', 'error-text');
+    formError.id = `edit-subscription-form-error-${subscription.id}`;
+    formError.setAttribute('role', 'alert');
+    formError.tabIndex = -1;
+    formError.hidden = true;
+
+    nameInput.addEventListener('input', () => {
+        draft.name = nameInput.value;
+        clearError(nameField);
+    });
+    amountInput.addEventListener('input', () => {
+        draft.amount = amountInput.value;
+        clearError(amountField);
+    });
+    dayInput.addEventListener('input', () => {
+        draft.dayOfMonth = dayInput.value;
+        clearError(dayField);
+    });
+
+    const saveButton = element('button', 'btn btn-primary', 'Save');
+    saveButton.type = 'submit';
+    const cancelButton = actionButton('btn', 'Cancel', () => {
+        closeTransientUi();
+        ctx.render();
+    });
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveSubscriptionEdit(ctx, subscription, {
+            name: nameField,
+            amount: amountField,
+            day: dayField,
+        });
+    });
+
+    form.append(
+        nameField.wrapper,
+        amountField.wrapper,
+        dayField.wrapper,
+        formError,
+        saveButton,
+        cancelButton,
+    );
+
+    if (subscriptionEditError !== '') {
+        formError.textContent = subscriptionEditError;
+        formError.hidden = false;
+    }
+
+    queueMicrotask(() => {
+        if (focusSubscriptionEditError) {
+            focusSubscriptionEditError = false;
+            formError.focus();
+        } else {
+            nameInput.focus();
+        }
+    });
+
+    return form;
+}
+
 function renderSubscriptionRow(ctx, subscription) {
     const item = element('article', 'subscription-item');
 
@@ -1470,6 +1655,11 @@ function renderSubscriptionRow(ctx, subscription) {
                 ctx.render();
             },
         ));
+        return item;
+    }
+
+    if (editSubscriptionId === subscription.id && subscriptionEditDraft !== null) {
+        item.append(renderSubscriptionEditor(ctx, subscription));
         return item;
     }
 
@@ -1487,6 +1677,9 @@ function renderSubscriptionRow(ctx, subscription) {
 
     const actions = element('div', 'more-actions');
     actions.append(
+        actionButton('btn btn-ghost', 'Edit', () => {
+            openEditSubscription(ctx, subscription);
+        }),
         actionButton('btn btn-ghost-danger', 'Delete', () => {
             closeTransientUi();
             confirmSubscriptionId = subscription.id;
@@ -1505,8 +1698,14 @@ function openCategoryPlanEditor(ctx, category) {
     const limitUnit = isSavings
         ? (category.limitMode === 'percent' ? 'percent' : 'euro')
         : (category.limitMode === 'euro' ? 'euro' : 'percent');
+    let kind = 'flexible';
+    if (isSavings || category.pinned) {
+        kind = 'pinned';
+    } else if (category.limitMode === 'none') {
+        kind = 'none';
+    }
     categoryPlanDrafts.set(category.id, {
-        kind: isSavings || category.pinned ? 'pinned' : 'flexible',
+        kind,
         limitUnit,
         amount: (isSavings || category.pinned)
             ? (limitUnit === 'euro'
@@ -1858,6 +2057,9 @@ function renderAddSubcategory(ctx, category) {
 
 function shareLabel(category, plan, budgetCents) {
     const entry = plan.entries.find(({ id }) => id === category.id);
+    if (category.limitMode === 'none' || entry?.noLimit === true) {
+        return 'No limit · tracks spend as % of budget';
+    }
     if (category.pinned !== true) {
         if (budgetCents > 0 && entry !== undefined) {
             return `Flexible · ~${formatEuro(entry.limitCents)}`;
@@ -1883,6 +2085,20 @@ function saveCategoryPlan(ctx, category, draft, amountField) {
         if (draft.limitUnit !== 'euro' && draft.limitUnit !== 'percent') {
             draft.limitUnit = 'euro';
         }
+    }
+
+    if (draft.kind === 'none') {
+        category.pinned = false;
+        category.limitMode = 'none';
+        category.percent = 0;
+        category.limitCents = 0;
+        syncCategoryPlanFields(ctx.data.categories, budget);
+        refreshCurrentMonthPlan(ctx.data);
+        closeTransientUi();
+        if (persist(ctx)) {
+            ctx.toast('Plan updated');
+        }
+        return;
     }
 
     if (draft.kind === 'flexible') {
@@ -1982,7 +2198,10 @@ function renderCategoryPlanKindChoice(draft, amountField, ctx, { allowFlexible =
 
     const row = element('div', 'choice-row');
     const options = [
-        ...(allowFlexible ? [{ value: 'flexible', label: 'Flexible' }] : []),
+        ...(allowFlexible ? [
+            { value: 'flexible', label: 'Flexible' },
+            { value: 'none', label: 'No limit' },
+        ] : []),
         { value: 'pinned', label: 'Fixed' },
     ];
 
@@ -2006,6 +2225,13 @@ function renderCategoryPlanKindChoice(draft, amountField, ctx, { allowFlexible =
     }
 
     fieldset.append(row);
+    if (draft.kind === 'none') {
+        fieldset.append(element(
+            'p',
+            'muted',
+            'No planned share. Spending still counts in Month and Chart, and shows as % of your budget.',
+        ));
+    }
     return fieldset;
 }
 
@@ -2152,6 +2378,7 @@ function renderKindChoice(amountField, ctx) {
     const row = element('div', 'choice-row');
     const options = [
         { value: 'flexible', label: 'Flexible' },
+        { value: 'none', label: 'No limit' },
         { value: 'pinned', label: 'Fixed' },
     ];
 
@@ -2175,6 +2402,13 @@ function renderKindChoice(amountField, ctx) {
     }
 
     fieldset.append(row);
+    if (addDraft.kind === 'none') {
+        fieldset.append(element(
+            'p',
+            'muted',
+            'No planned share. Spending still counts and shows as % of your budget.',
+        ));
+    }
     return fieldset;
 }
 
@@ -2315,16 +2549,17 @@ export function render(root, ctx) {
     layout.append(jumps);
 
     const reminder = renderBackupReminder(ctx);
-    if (reminder !== null) {
-        layout.append(reminder);
-    }
-
     renderWarnings(layout, plan);
     layout.append(
         renderPlanSection(ctx),
         renderIncomeSection(ctx),
         renderSubscriptionsSection(ctx, plan),
         renderCategoriesSection(ctx, plan),
+    );
+    if (reminder !== null) {
+        layout.append(reminder);
+    }
+    layout.append(
         renderBackupSection(ctx),
         renderRightsSection(),
     );

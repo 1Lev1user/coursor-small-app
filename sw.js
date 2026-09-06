@@ -1,5 +1,5 @@
 /* My Expenses service worker — bump CACHE_NAME on every deploy. */
-const CACHE_NAME = 'my-expenses-v1-watermark';
+const CACHE_NAME = 'my-expenses-v1-no-limit';
 
 const CORE_ASSETS = [
     './',

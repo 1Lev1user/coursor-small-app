@@ -388,6 +388,11 @@ body.is-setup .tabbar {
     background: var(--danger);
 }
 
+.progress-fill.is-track-only {
+    background: color-mix(in srgb, var(--accent) 55%, var(--muted));
+    opacity: 0.85;
+}
+
 .category-details {
     min-height: 24px;
 }

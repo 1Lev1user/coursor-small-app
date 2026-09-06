@@ -42,9 +42,11 @@ function renderLegend(rows, { drillInto, showPlanned } = {}) {
             details.append(element(
                 'span',
                 'muted',
-                rowData.limitCents === 0
-                    ? 'no budget'
-                    : `planned ${formatEuro(rowData.limitCents)}`,
+                rowData.noLimit === true
+                    ? 'no limit'
+                    : rowData.limitCents === 0
+                        ? 'no budget'
+                        : `planned ${formatEuro(rowData.limitCents)}`,
             ));
         } else if (rowData.fromPlan === true) {
             details.append(element('span', 'muted', 'from Settings → Plan'));
