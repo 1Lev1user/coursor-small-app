@@ -20,6 +20,11 @@ import {
 import { exportBackup, importBackup, countRecords } from '../backup.js';
 import { buildMonthCsv, csvFilename } from '../csv.js';
 import { downloadText } from '../files.js';
+import {
+    canAddExpenseCategory,
+    canAddIncomeCategory,
+    canAddSubcategory,
+} from '../limits.js';
 
 const addDraft = {
     name: '',
@@ -911,6 +916,14 @@ function addSubcategory(ctx, category, rawName, field) {
         return;
     }
 
+    const allowed = canAddSubcategory(ctx.data);
+    if (allowed.ok !== true) {
+        addSubDrafts.set(category.id, { name: rawName, error: allowed.reason });
+        setError(field, allowed.reason);
+        field.control.focus();
+        return;
+    }
+
     category.subcategories.push({
         id: createId('sub'),
         name,
@@ -929,6 +942,14 @@ function addCategory(ctx, nameField, amountField) {
     if (name === '') {
         addDraft.error = 'Enter a name.';
         setError(nameField, addDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    const allowed = canAddExpenseCategory(ctx.data);
+    if (allowed.ok !== true) {
+        addDraft.error = allowed.reason;
+        setError(nameField, allowed.reason);
         nameField.control.focus();
         return;
     }
@@ -1252,6 +1273,14 @@ function addIncomeCategory(ctx, nameField) {
     if (name === '') {
         addIncomeCategoryDraft.error = 'Enter a name.';
         setError(nameField, addIncomeCategoryDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    const allowed = canAddIncomeCategory(ctx.data);
+    if (allowed.ok !== true) {
+        addIncomeCategoryDraft.error = allowed.reason;
+        setError(nameField, allowed.reason);
         nameField.control.focus();
         return;
     }

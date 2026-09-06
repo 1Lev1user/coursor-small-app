@@ -14,7 +14,22 @@ export const PALETTE = [
     '#0891b2',
     '#db2777',
     '#4d7c0f',
+    '#ea580c',
+    '#0f766e',
+    '#9333ea',
+    '#b45309',
 ];
+
+/** Distinct chart colour for any index — fixed palette first, then HSL steps. */
+export function chartColour(index) {
+    if (index < PALETTE.length) {
+        return PALETTE[index];
+    }
+    const hue = Math.round((index * 137.508) % 360);
+    const saturation = 55 + (index % 3) * 8;
+    const lightness = 38 + (index % 4) * 5;
+    return `hsl(${hue} ${saturation}% ${lightness}%)`;
+}
 
 function point(radius, angle) {
     const radians = angle * Math.PI / 180;
@@ -73,7 +88,7 @@ export function donutSlices(items) {
             startAngle,
             endAngle,
             path: annulusPath(startAngle, endAngle),
-            colour: PALETTE[index % PALETTE.length],
+            colour: chartColour(index),
         };
     });
 }

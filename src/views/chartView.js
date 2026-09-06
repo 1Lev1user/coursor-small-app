@@ -1,5 +1,5 @@
 import { monthTotals, subcategoryTotals, incomeBreakdown } from '../budget.js';
-import { PALETTE, renderDonut } from '../donut.js';
+import { chartColour, renderDonut } from '../donut.js';
 import { formatEuro } from '../money.js';
 import { monthLabel } from '../months.js';
 import { renderMonthNav } from './monthNav.js';
@@ -33,7 +33,7 @@ function renderLegend(rows, { drillInto, showPlanned } = {}) {
             ? element('div', 'chart-legend-row')
             : element('button', 'chart-legend-row chart-legend-button');
         const swatch = element('span', 'chart-swatch');
-        swatch.style.backgroundColor = PALETTE[index % PALETTE.length];
+        swatch.style.backgroundColor = chartColour(index);
         swatch.setAttribute('aria-hidden', 'true');
 
         const details = element('span', 'chart-legend-details');

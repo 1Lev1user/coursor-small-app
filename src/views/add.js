@@ -12,6 +12,11 @@ import {
     applySurplusToSavings,
     savingsRoomCents,
 } from '../monthReview.js';
+import {
+    canAddExpenseCategory,
+    canAddIncomeCategory,
+    canAddSubcategory,
+} from '../limits.js';
 import { openSettingsSection } from './more.js';
 
 /** @type {'home' | 'expense' | 'income'} */
@@ -138,6 +143,10 @@ function closeQuickPanels() {
 }
 
 function createFlexibleCategory(ctx, name) {
+    const allowed = canAddExpenseCategory(ctx.data);
+    if (allowed.ok !== true) {
+        return null;
+    }
     const budget = ctx.data.settings.monthlyBudgetCents;
     const category = {
         id: createId('cat'),
@@ -156,6 +165,10 @@ function createFlexibleCategory(ctx, name) {
 }
 
 function createIncomeCategory(ctx, name) {
+    const allowed = canAddIncomeCategory(ctx.data);
+    if (allowed.ok !== true) {
+        return null;
+    }
     const category = {
         id: createId('incat'),
         name,
@@ -511,6 +524,12 @@ function renderIncomeForm(root, ctx) {
             }
 
             const category = createIncomeCategory(ctx, name);
+            if (category === null) {
+                addIncomeCategoryError = canAddIncomeCategory(ctx.data).reason;
+                setError(nameField, addIncomeCategoryError);
+                nameInput.focus();
+                return;
+            }
             incomeDraft.incomeCategoryId = category.id;
             addingIncomeCategory = false;
             addIncomeCategoryName = '';
@@ -864,6 +883,12 @@ function renderExpenseForm(root, ctx) {
             }
 
             const category = createFlexibleCategory(ctx, name);
+            if (category === null) {
+                addCategoryError = canAddExpenseCategory(ctx.data).reason;
+                setError(nameField, addCategoryError);
+                nameInput.focus();
+                return;
+            }
             draft.categoryId = category.id;
             draft.subcategoryId = '';
             closeQuickPanels();
@@ -938,6 +963,15 @@ function renderExpenseForm(root, ctx) {
                 confirmNoteAsSub = false;
                 ctx.render();
                 ctx.toast('Subcategory already exists');
+                return;
+            }
+
+            const allowed = canAddSubcategory(ctx.data);
+            if (allowed.ok !== true) {
+                confirmNoteAsSub = false;
+                saveError = allowed.reason;
+                focusSaveErrorOnRender = true;
+                ctx.render();
                 return;
             }
 

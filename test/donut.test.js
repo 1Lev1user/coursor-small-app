@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTE, donutSlices } from '../src/donut.js';
+import { PALETTE, chartColour, donutSlices } from '../src/donut.js';
 
 test('donutSlices calculates fractions and contiguous clockwise angles', () => {
     const slices = donutSlices([
@@ -45,14 +45,14 @@ test('donutSlices emits a non-empty full-circle path for one item', () => {
     assert.equal(slice.endAngle, 360);
 });
 
-test('PALETTE starts with the accent and has at least eight distinct colours', () => {
+test('PALETTE starts with the accent and has distinct colours', () => {
     assert.equal(PALETTE[0], '#2563eb');
     assert.ok(PALETTE.length >= 8);
     assert.equal(new Set(PALETTE).size, PALETTE.length);
 });
 
-test('donutSlices cycles colours through the palette', () => {
-    const items = Array.from({ length: PALETTE.length + 2 }, (_, index) => ({
+test('donutSlices uses fixed palette then gradient colours', () => {
+    const items = Array.from({ length: PALETTE.length + 3 }, (_, index) => ({
         id: String(index),
         label: `Item ${index}`,
         valueCents: 1,
@@ -60,7 +60,9 @@ test('donutSlices cycles colours through the palette', () => {
     const slices = donutSlices(items);
 
     assert.deepEqual(
-        slices.map(({ colour }) => colour),
-        items.map((_, index) => PALETTE[index % PALETTE.length]),
+        slices.slice(0, PALETTE.length).map(({ colour }) => colour),
+        PALETTE,
     );
+    assert.equal(slices[PALETTE.length].colour, chartColour(PALETTE.length));
+    assert.notEqual(slices[PALETTE.length].colour, slices[PALETTE.length + 1].colour);
 });
