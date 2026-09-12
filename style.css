@@ -992,6 +992,23 @@ body.is-setup .tabbar {
     border-color: var(--accent);
 }
 
+.added-box {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+}
+
+.added-box .section-title {
+    color: #15803d;
+}
+
+.added-box .big-number {
+    margin: 0;
+}
+
+.added-box .btn {
+    width: 100%;
+}
+
 .home-hero .home-auto-note {
     margin: 0;
 }

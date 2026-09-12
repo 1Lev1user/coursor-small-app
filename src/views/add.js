@@ -19,7 +19,7 @@ import {
 } from '../limits.js';
 import { openSettingsSection } from './more.js';
 
-/** @type {'home' | 'expense' | 'income'} */
+/** @type {'home' | 'expense' | 'income' | 'added'} */
 let panel = 'home';
 
 // Keep category/date after a successful save; clear amount and note for the next entry.
@@ -54,8 +54,16 @@ let addingIncomeCategory = false;
 let addIncomeCategoryName = '';
 let addIncomeCategoryError = '';
 
+/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string }} */
+let lastAdded = null;
+
 export function openAddPanel(next = 'home') {
-    panel = next === 'expense' || next === 'income' ? next : 'home';
+    if (next === 'expense' || next === 'income' || next === 'added') {
+        panel = next;
+    } else {
+        panel = 'home';
+        lastAdded = null;
+    }
     if (panel === 'home') {
         closeQuickPanels();
         incomeDraft.error = '';
@@ -78,6 +86,9 @@ export function addScreenTitle() {
     }
     if (panel === 'income') {
         return 'Add extra income';
+    }
+    if (panel === 'added') {
+        return lastAdded?.kind === 'income' ? 'Extra income added' : 'Expense added';
     }
     return 'Home';
 }
@@ -190,6 +201,57 @@ function element(tag, className, text) {
         node.textContent = text;
     }
     return node;
+}
+
+function expenseEntryLabel(data, categoryId, subcategoryId) {
+    const category = data.categories.find(({ id }) => id === categoryId);
+    const categoryName = category?.name ?? 'Expense';
+    if (subcategoryId === '' || subcategoryId === undefined) {
+        return categoryName;
+    }
+    const subcategory = category?.subcategories?.find(({ id }) => id === subcategoryId);
+    return subcategory === undefined
+        ? categoryName
+        : `${categoryName} \u00b7 ${subcategory.name}`;
+}
+
+function incomeEntryLabel(data, incomeCategoryId) {
+    return data.incomeCategories.find(({ id }) => id === incomeCategoryId)?.name
+        ?? 'Income';
+}
+
+function renderAddedConfirm(root, ctx) {
+    if (lastAdded === null) {
+        openAddPanel('home');
+        renderHome(root, ctx);
+        return;
+    }
+
+    const layout = element('div', 'stack home-page');
+    const card = element('section', 'card stack added-box');
+    card.setAttribute('role', 'status');
+
+    const ok = element('button', 'btn btn-primary', 'OK');
+    ok.type = 'button';
+    ok.addEventListener('click', () => {
+        lastAdded = null;
+        openAddPanel('home');
+        ctx.render();
+    });
+
+    card.append(
+        element(
+            'h2',
+            'section-title',
+            lastAdded.kind === 'income' ? 'Extra income added' : 'Expense added',
+        ),
+        element('p', 'big-number', formatEuro(lastAdded.amountCents)),
+        element('p', 'muted', lastAdded.label),
+        ok,
+    );
+    layout.append(card);
+    root.append(layout);
+    queueMicrotask(() => ok.focus());
 }
 
 function backToHomeButton(ctx) {
@@ -594,9 +656,10 @@ function renderIncomeForm(root, ctx) {
             return;
         }
 
+        const incomeCategoryId = incomeDraft.incomeCategoryId;
         ctx.data.incomes.push({
             id: createId('inc'),
-            incomeCategoryId: incomeDraft.incomeCategoryId,
+            incomeCategoryId,
             amountCents,
             note: incomeDraft.note.trim(),
             date: incomeDraft.date,
@@ -613,16 +676,20 @@ function renderIncomeForm(root, ctx) {
         addIncomeCategoryName = '';
         addIncomeCategoryError = '';
 
-        openAddPanel('home');
+        lastAdded = {
+            kind: 'income',
+            amountCents,
+            label: incomeEntryLabel(ctx.data, incomeCategoryId),
+        };
+        openAddPanel('added');
         if (ctx.save() === false) {
             ctx.data.incomes.pop();
+            lastAdded = null;
             openAddPanel('income');
             ctx.render();
             ctx.toast('Could not save to this device');
             return;
         }
-
-        ctx.toast('Extra income added');
     });
 
     form.append(
@@ -648,6 +715,10 @@ export function render(root, ctx) {
     }
     if (panel === 'income') {
         renderIncomeForm(root, ctx);
+        return;
+    }
+    if (panel === 'added') {
+        renderAddedConfirm(root, ctx);
         return;
     }
     renderExpenseForm(root, ctx);
@@ -1054,12 +1125,22 @@ function renderExpenseForm(root, ctx) {
         ctx.data.expenses.push(expense);
         freezeMonthPlan(ctx.data, monthKey);
 
+        lastAdded = {
+            kind: 'expense',
+            amountCents,
+            label: expenseEntryLabel(ctx.data, categoryId, subcategoryId),
+        };
+        closeQuickPanels();
+        openAddPanel('added');
+
         if (ctx.save() === false) {
             ctx.data.expenses.splice(ctx.data.expenses.indexOf(expense), 1);
             if (!planWasAlreadyFrozen) {
                 delete ctx.data.monthPlans[monthKey];
             }
 
+            lastAdded = null;
+            openAddPanel('expense');
             saveError = 'Could not save to this device. Nothing was recorded \u2014 your entry is'
                 + ' still here, try again.';
             focusSaveErrorOnRender = true;
@@ -1072,11 +1153,6 @@ function renderExpenseForm(root, ctx) {
         draft.amount = '';
         draft.note = '';
         draft.date = date;
-        closeQuickPanels();
-        focusAmountOnRender = true;
-
-        ctx.render();
-        ctx.toast('Added');
     });
 
     form.append(
