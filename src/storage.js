@@ -145,7 +145,10 @@ export function storedIsNewer(storage = globalThis.localStorage) {
         if (raw === null) {
             return false;
         }
-        const version = versionOf(parseStored(raw));
+        // The app always writes version first, so most saves avoid parsing
+        // the whole history just to read it.
+        const leading = /^\{"version":(\d+),/.exec(raw);
+        const version = leading ? Number(leading[1]) : versionOf(parseStored(raw));
         return version !== null && version > SCHEMA_VERSION;
     } catch {
         return false;

@@ -142,13 +142,20 @@ export function findDuplicates(data, rows) {
         }
     });
 
+    // Group stored entries by direction and amount once, so large histories
+    // and long statements are not compared entry by entry for every row.
+    const byAmount = new Map();
+    for (const item of stored) {
+        const key = `${item.direction}|${item.entry.amountCents}`;
+        byAmount.set(key, [...(byAmount.get(key) ?? []), item]);
+    }
+    const sameAmount = (row) => byAmount.get(`${row.direction}|${row.amountCents}`) ?? [];
+
     rows.forEach((row, index) => {
         if (results[index].level !== null || !Number.isInteger(row.amountCents)) return;
-        const item = stored.find(({ entry, direction }) => !claimed.has(entry.id)
+        const item = sameAmount(row).find(({ entry }) => !claimed.has(entry.id)
             && isManual(entry)
-            && direction === row.direction
-            && entry.date === row.date
-            && entry.amountCents === row.amountCents);
+            && entry.date === row.date);
         if (item) claim(index, 'probable', item);
     });
 
@@ -158,12 +165,8 @@ export function findDuplicates(data, rows) {
         if (day === null) return;
         let best = null;
         let bestDistance = Infinity;
-        for (const item of stored) {
-            if (
-                claimed.has(item.entry.id)
-                || item.direction !== row.direction
-                || item.entry.amountCents !== row.amountCents
-            ) continue;
+        for (const item of sameAmount(row)) {
+            if (claimed.has(item.entry.id)) continue;
             const other = dayNumber(item.entry.date);
             if (other === null) continue;
             const distance = Math.abs(other - day);

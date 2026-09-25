@@ -99,3 +99,10 @@ test('compareMonthKeys orders month keys chronologically', () => {
     assert.equal(compareMonthKeys('2026-09', '2026-09'), 0);
     assert.ok(compareMonthKeys('2027-01', '2026-12') > 0);
 });
+
+test('short date helpers format month keys and dates', async () => {
+    const { shortMonthName, shortDate, fullDate } = await import('../src/months.js');
+    assert.equal(shortMonthName('2026-09'), 'Sep');
+    assert.equal(shortDate('2026-09-03'), '3 Sep');
+    assert.equal(fullDate('2026-12-31'), '31 Dec 2026');
+});

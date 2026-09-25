@@ -1,10 +1,14 @@
 import { parseAmount, formatEuro } from '../money.js';
-import { currentMonthKey, monthKeyOf, monthLabel, todayISO } from '../months.js';
+import {
+    currentMonthKey,
+    monthKeyOf,
+    monthLabel,
+    shortDate,
+    todayISO,
+} from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
 import { addTemplate, templateToExpense } from '../templates.js';
 import { describeForeign } from '../currency.js';
-import { exportBackup } from '../backup.js';
-import { downloadText } from '../files.js';
 import {
     freezeMonthPlan,
     syncCategoryPlanFields,
@@ -24,6 +28,7 @@ import {
     canAddSubcategory,
 } from '../limits.js';
 import { openSettingsSection } from './more.js';
+import { doExportBackup } from './settings/backup.js';
 import { renderGoalCard } from './goalCard.js';
 import { entryAmountText } from './entryDisplay.js';
 import {
@@ -400,13 +405,6 @@ function renderMonthReviewCard(ctx, suggestion) {
     return card;
 }
 
-const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function shortDate(date) {
-    const [, month, day] = date.split('-').map(Number);
-    return `${day} ${SHORT_MONTHS[month - 1]}`;
-}
-
 function recentTexts(data, { type, entry }) {
     const note = typeof entry.note === 'string' ? entry.note.trim() : '';
     if (type === 'income') {
@@ -537,14 +535,7 @@ function renderBackupReminder(ctx, reminder) {
 
     const exportBtn = element('button', strong ? 'btn btn-primary' : 'btn', 'Export backup');
     exportBtn.type = 'button';
-    exportBtn.addEventListener('click', () => {
-        const { filename, json } = exportBackup(ctx.data);
-        downloadText(filename, json, 'application/json');
-        ctx.data.settings.lastBackupISO = todayISO();
-        if (ctx.save() !== false) {
-            ctx.toast('Backup exported');
-        }
-    });
+    exportBtn.addEventListener('click', () => doExportBackup(ctx));
 
     const laterBtn = element('button', 'btn btn-ghost', 'Later');
     laterBtn.type = 'button';

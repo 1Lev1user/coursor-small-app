@@ -1,9 +1,13 @@
 import { categoryChanges, monthSeries } from '../analytics.js';
 import { formatEuro } from '../money.js';
-import { addMonths, isInMonth, monthLabel } from '../months.js';
+import {
+    addMonths,
+    isInMonth,
+    monthLabel,
+    shortMonthName,
+} from '../months.js';
 
 const TOP_CHANGES = 5;
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const axisEuro = new Intl.NumberFormat('en-IE', {
     style: 'currency',
@@ -28,7 +32,7 @@ function element(tagName, className, text) {
 }
 
 function monthShort(monthKey) {
-    return MONTH_SHORT[Number(monthKey.slice(5, 7)) - 1];
+    return shortMonthName(monthKey);
 }
 
 /**

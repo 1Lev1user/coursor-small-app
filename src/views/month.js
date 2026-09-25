@@ -1,6 +1,12 @@
 import { monthTotals, freezeMonthPlan } from '../budget.js';
 import { formatEuro, formatPlain } from '../money.js';
-import { addMonths, isInMonth, monthKeyOf, monthLabel } from '../months.js';
+import {
+    addMonths,
+    isInMonth,
+    monthKeyOf,
+    monthLabel,
+    shortDate,
+} from '../months.js';
 import { SAVINGS_ID, UNCATEGORISED_ID } from '../model.js';
 import { describeForeign } from '../currency.js';
 import { renderMonthNav } from './monthNav.js';
@@ -12,21 +18,6 @@ import {
 } from './currencyFields.js';
 import { entryAmountText, entryTags } from './entryDisplay.js';
 import { renderSearchPanel } from './searchPanel.js';
-
-const SHORT_MONTH_NAMES = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-];
 
 /** @type {{ mode: null | 'edit' | 'confirm-delete', type: null | 'expense' | 'income', id: null | string, draft: object | null, saveError: string, focusError: boolean }} */
 const entryUi = {
@@ -47,11 +38,6 @@ function element(tagName, className, text) {
         node.textContent = text;
     }
     return node;
-}
-
-function shortDate(date) {
-    const [, month, day] = date.split('-').map(Number);
-    return `${day} ${SHORT_MONTH_NAMES[month - 1]}`;
 }
 
 function displayPercent(percent) {

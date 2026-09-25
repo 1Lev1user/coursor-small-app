@@ -1,9 +1,9 @@
+import { fullDate } from '../months.js';
 import { searchEntries } from '../search.js';
 import { parseAmount } from '../money.js';
 import { describeForeign } from '../currency.js';
 import { entryAmountText, entryTagLabels } from './entryDisplay.js';
 
-const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const RESULT_LIMIT = 100;
 
 /** Pure view state; survives re-renders, never saved. */
@@ -110,11 +110,6 @@ export function searchFiltersFrom(state) {
         || filters.from !== ''
         || filters.to !== '';
     return { filters, errors: { minAmount: min.error, maxAmount: max.error }, active };
-}
-
-function fullDate(date) {
-    const [year, month, day] = date.split('-').map(Number);
-    return `${day} ${SHORT_MONTHS[month - 1]} ${year}`;
 }
 
 function resultTexts(data, { type, entry }) {

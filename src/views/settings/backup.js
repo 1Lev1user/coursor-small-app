@@ -56,7 +56,8 @@ function replaceAppData(ctx, next) {
     Object.assign(ctx.data, next);
 }
 
-function doExportBackup(ctx) {
+/** Downloads a full backup and records today as the last backup day. */
+export function doExportBackup(ctx) {
     const { filename, json } = exportBackup(ctx.data);
     downloadText(filename, json, 'application/json');
     ctx.data.settings.lastBackupISO = todayISO();
