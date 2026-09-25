@@ -15,6 +15,26 @@ export function euroCentsFromPercent(percent, monthlyBudgetCents) {
     return splitShares(monthlyBudgetCents, [percent])[0];
 }
 
+/** A refund (money back from a shop) lowers spending; everything else raises it. */
+export function spendCents(expense) {
+    return expense.refund === true ? -expense.amountCents : expense.amountCents;
+}
+
+export const SALARY_INCOME_ID = 'salary';
+
+/** True when a salary for this month came in through a bank import. */
+export function hasImportedSalary(data, monthKey) {
+    return data.incomes.some((income) => income.incomeCategoryId === SALARY_INCOME_ID
+        && typeof income.importId === 'string'
+        && income.importId !== ''
+        && isInMonth(income.date, monthKey));
+}
+
+/** The plan's usual income, unless the real salary was imported for that month. */
+function plannedIncomeCents(data, plan, monthKey) {
+    return hasImportedSalary(data, monthKey) ? 0 : plan.usualMonthlyIncomeCents;
+}
+
 export function isNoLimitCategory(category) {
     return category?.system !== true
         && category?.pinned !== true
@@ -182,10 +202,10 @@ export function monthTotals(data, monthKey) {
     const monthExpenses = data.expenses.filter(({ date }) => isInMonth(date, monthKey));
     const spendingByCategory = new Map();
 
-    for (const { categoryId, amountCents } of monthExpenses) {
+    for (const expense of monthExpenses) {
         spendingByCategory.set(
-            categoryId,
-            (spendingByCategory.get(categoryId) ?? 0) + amountCents,
+            expense.categoryId,
+            (spendingByCategory.get(expense.categoryId) ?? 0) + spendCents(expense),
         );
     }
 
@@ -208,13 +228,13 @@ export function monthTotals(data, monthKey) {
     }
 
     const spentCents = monthExpenses.reduce(
-        (total, expense) => total + expense.amountCents,
+        (total, expense) => total + spendCents(expense),
         0,
     );
     const extraIncomeCents = data.incomes
         .filter(({ date }) => isInMonth(date, monthKey))
         .reduce((total, entry) => total + entry.amountCents, 0);
-    const usualIncomeCents = plan.usualMonthlyIncomeCents;
+    const usualIncomeCents = plannedIncomeCents(data, plan, monthKey);
     const incomeCents = usualIncomeCents + extraIncomeCents;
     const budgetCents = plan.monthlyBudgetCents;
 
@@ -272,7 +292,7 @@ export function subcategoryTotals(data, monthKey, categoryId) {
             : '';
         spendingBySubcategory.set(
             id,
-            (spendingBySubcategory.get(id) ?? 0) + expense.amountCents,
+            (spendingBySubcategory.get(id) ?? 0) + spendCents(expense),
         );
     }
 
@@ -303,7 +323,7 @@ export function incomeBreakdown(data, monthKey) {
     }
 
     const entries = [];
-    const usualIncomeCents = plan.usualMonthlyIncomeCents;
+    const usualIncomeCents = plannedIncomeCents(data, plan, monthKey);
     if (usualIncomeCents > 0) {
         entries.push({
             id: 'usual-plan',
