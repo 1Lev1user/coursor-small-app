@@ -7,6 +7,11 @@ import { renderCategoriesSection } from './settings/categories.js';
 import { renderBackupReminder, renderBackupSection } from './settings/backup.js';
 import { renderRightsSection } from './settings/rights.js';
 import { renderGoalsSection } from './settings/goals.js';
+import {
+    renderImportSection,
+    renderRulesSection,
+    renderLayoutsSection,
+} from './settings/importSettings.js';
 
 let pendingScrollId = null;
 
@@ -27,6 +32,8 @@ export function render(root, ctx) {
         ['more-subscriptions', 'Subscriptions'],
         ['more-categories', 'Categories'],
         ['more-goals', 'Goals'],
+        ['more-import', 'Import'],
+        ['more-rules', 'Rules'],
         ['more-backup', 'Backup'],
         ['more-rights', 'Rights'],
     ]) {
@@ -44,6 +51,9 @@ export function render(root, ctx) {
         renderSubscriptionsSection(ctx, plan),
         renderCategoriesSection(ctx, plan),
         renderGoalsSection(ctx),
+        renderImportSection(ctx),
+        renderRulesSection(ctx),
+        renderLayoutsSection(ctx),
     );
     if (reminder !== null) {
         layout.append(reminder);

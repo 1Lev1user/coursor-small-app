@@ -15,6 +15,7 @@ import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
 import { render as renderSetup } from './views/setup.js';
+import { render as renderImport } from './views/import.js';
 
 const TOAST_MS = 2000;
 
@@ -23,6 +24,7 @@ const views = {
     month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: renderChart },
     more: { title: 'Settings', render: renderMore },
+    import: { title: 'Import', render: renderImport, parentTab: 'more' },
 };
 
 const opened = openStorage();
@@ -477,7 +479,7 @@ function render() {
     document.title = `${titleElement.textContent} - My Expenses`;
 
     for (const button of tabButtons) {
-        const isActive = button.dataset.tab === app.tab;
+        const isActive = button.dataset.tab === (view.parentTab ?? app.tab);
         button.classList.toggle('is-active', isActive);
         if (isActive) {
             button.setAttribute('aria-current', 'page');
