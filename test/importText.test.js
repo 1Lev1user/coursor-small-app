@@ -688,3 +688,13 @@ test('Cyrillic direction values set the direction and zero amounts are skipped',
     assert.deepEqual(result.rows.map(({ description, direction }) => `${description}:${direction}`), ['RIMI:out', 'SALARY:in']);
     assert.equal(result.skipped[0].reason, 'zero amount');
 });
+
+test('a title line padded with delimiters is not taken as the header', () => {
+    const { rows } = parseDelimited([
+        'Konta izraksts;;;;',
+        'Datums;Saņēmējs/Maksātājs;Apraksts;Summa;D/K',
+        '02.09.2026;SIA Kārlis;Pirkums 1234;23,40;D',
+        '05.09.2026;SIA Employer;Alga;2015,00;K',
+    ].join('\n'));
+    assert.equal(findHeaderRow(rows), 1);
+});

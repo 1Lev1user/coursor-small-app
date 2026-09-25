@@ -233,6 +233,11 @@ export function findHeaderRow(rows) {
             continue;
         }
         const nonEmpty = row.filter((cell) => cell.trim() !== '');
+        // A title line like 'Konta izraksts;;;;' has the right width but
+        // only one filled cell; a header names at least half the columns.
+        if (nonEmpty.length < Math.max(2, Math.ceil(dominant / 2))) {
+            continue;
+        }
         const numericCount = nonEmpty.filter(isNumericOrDateCell).length;
         if (numericCount === 0) {
             return i;
@@ -244,7 +249,7 @@ export function findHeaderRow(rows) {
 
 const KEYWORDS = {
     date: ['datums', 'дата', 'kuupaev', 'data', 'date', 'laikas'],
-    debit: ['debit', 'debets', 'дебет', 'deebet', 'isxodящ'],
+    debit: ['debit', 'debets', 'дебет', 'deebet', 'исходящ'],
     credit: ['credit', 'kredit', 'кредит', 'kreedit'],
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
     direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'тип', 'type'],
