@@ -2,6 +2,7 @@ import { todayISO } from '../../months.js';
 import { exportBackup, importBackup, countRecords } from '../../backup.js';
 import { buildMonthCsv, csvFilename } from '../../csv.js';
 import { downloadText } from '../../files.js';
+import { readPreUpdateCopy } from '../../storage.js';
 import {
     element,
     persist,
@@ -215,5 +216,21 @@ export function renderBackupSection(ctx) {
         }),
     );
     section.append(csvActions);
+
+    const preUpdate = readPreUpdateCopy();
+    if (preUpdate !== null) {
+        section.append(
+            element('h3', 'category-name', 'Data from before version 2.0'),
+            element(
+                'p',
+                'muted',
+                'This device kept a copy of your data as it was before the 2.0 update.'
+                    + ' If something looks wrong, download it and restore it with Import backup.',
+            ),
+            actionButton('btn', 'Download pre-update copy', () => {
+                downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
+            }),
+        );
+    }
     return section;
 }
