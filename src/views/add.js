@@ -25,6 +25,7 @@ import {
 } from '../limits.js';
 import { openSettingsSection } from './more.js';
 import { renderGoalCard } from './goalCard.js';
+import { entryAmountText } from './entryDisplay.js';
 import {
     amountErrorText,
     buildCurrencyFields,
@@ -417,7 +418,9 @@ function recentTexts(data, { type, entry }) {
     }
 
     const category = data.categories.find(({ id }) => id === entry.categoryId);
-    const categoryName = category?.name ?? 'Expense';
+    const categoryName = entry.refund === true
+        ? `Refund \u00b7 ${category?.name ?? 'Expense'}`
+        : category?.name ?? 'Expense';
     const subcategory = category?.subcategories?.find(({ id }) => id === entry.subcategoryId);
     if (note !== '') {
         return { title: note, detail: categoryName };
@@ -450,10 +453,12 @@ function renderRecent(ctx) {
         }
 
         const values = element('div', 'home-recent-values');
-        const amount = item.type === 'income'
-            ? `+${formatEuro(item.entry.amountCents)}`
-            : formatEuro(item.entry.amountCents);
-        values.append(element('p', item.type === 'income' ? 'home-recent-amount is-ok' : 'home-recent-amount', amount));
+        const amount = entryAmountText(item.type, item.entry);
+        values.append(element(
+            'p',
+            amount.positive ? 'home-recent-amount is-ok' : 'home-recent-amount',
+            amount.text,
+        ));
         const time = element('time', 'muted', shortDate(item.entry.date));
         time.setAttribute('datetime', item.entry.date);
         values.append(time);
