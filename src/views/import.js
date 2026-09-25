@@ -49,7 +49,7 @@ const SKIP_REASONS = {
 };
 
 const DUPLICATE_GROUPS = [
-    ['exact', 'Exact', 'Already saved. The bank reference or every detail matches.'],
+    ['exact', 'Exact', 'Already imported. The bank reference or every detail matches.'],
     ['probable', 'Probable', 'Same date and amount as an entry you added yourself.'],
     ['weak', 'Weak', 'Same amount within 2 days of a saved entry.'],
 ];
@@ -970,6 +970,26 @@ function renderDuplicates(ctx) {
                 const row = state.rows[index];
                 const match = storedEntry(ctx.data, state.duplicates[index]);
                 const item = element('li', 'entry-item stack imp-dup');
+                const duplicate = state.duplicates[index];
+                if (duplicate.matchType === 'ignored') {
+                    const earlier = element('div', 'imp-pair');
+                    earlier.append(
+                        entrySummary('In the file', row.date, amountText(row), describeRow(row)),
+                        element('p', 'imp-side imp-note', duplicate.ignoredKind === 'transfer'
+                            ? 'Marked as transfer in an earlier import'
+                            : 'Skipped in an earlier import'),
+                    );
+                    item.append(earlier, checkRow(
+                        `imp-dup-${index}`,
+                        'Import anyway',
+                        state.decisions[index].include === true,
+                        (checked) => {
+                            state.decisions[index].include = checked;
+                        },
+                    ));
+                    list.append(item);
+                    continue;
+                }
                 const pair = element('div', 'imp-pair');
                 pair.append(
                     entrySummary('In the file', row.date, amountText(row), describeRow(row)),
@@ -1107,9 +1127,56 @@ function renderDecisionRow(ctx, index) {
     }
     item.append(grid);
 
+    const hint = element('p', 'muted imp-hint', rememberHint(ctx.data, decision));
+    hint.id = `imp-hint-${index}`;
+    const updateHint = () => {
+        hint.textContent = rememberHint(ctx.data, decision);
+    };
+
+    const applySlot = element('div', 'imp-apply-slot');
+    const offerApplyAll = () => {
+        if (applySlot.childElementCount > 0) return;
+        const others = samePatternIndexes(state.rows, state.decisions, index);
+        if (others.length === 0) return;
+        applySlot.append(button(
+            'btn btn-ghost imp-link',
+            `Apply to all ${plural(others.length + 1, 'row', 'rows')} with ${patternFor(row)}`,
+            () => {
+                for (const other of others) {
+                    copyChoice(state.decisions[other], decision);
+                    state.rowErrors.delete(other);
+                }
+                ctx.toast(`Applied to ${plural(others.length, 'more row', 'more rows')}`);
+                state.touched.delete(index);
+                refresh(ctx, kindId);
+            },
+        ));
+    };
+
+    if (counted) {
+        const showAsInput = document.createElement('input');
+        showAsInput.type = 'text';
+        showAsInput.autocomplete = 'off';
+        showAsInput.maxLength = 120;
+        showAsInput.placeholder = bankTextOf(row);
+        showAsInput.value = decision.showAs ?? '';
+        showAsInput.addEventListener('input', () => {
+            decision.showAs = showAsInput.value;
+            state.touched.add(index);
+            updateHint();
+            offerApplyAll();
+        });
+        item.append(buildField(
+            `imp-showas-${index}`,
+            'Show as',
+            showAsInput,
+            'The note on the entry. Leave empty to keep the bank text.',
+        ));
+    }
+
     const pattern = decision.pattern ?? '';
     if (pattern !== '' || decision.remember) {
-        item.append(checkRow(
+        const remember = checkRow(
             `imp-remember-${index}`,
             `Remember for ${pattern || 'this text'}`,
             decision.remember === true,
@@ -1117,7 +1184,8 @@ function renderDecisionRow(ctx, index) {
                 decision.remember = checked;
                 refresh(ctx, `imp-remember-${index}`);
             },
-        ));
+        );
+        item.append(remember);
         if (decision.remember) {
             const patternInput = document.createElement('input');
             patternInput.type = 'text';
@@ -1126,35 +1194,16 @@ function renderDecisionRow(ctx, index) {
             patternInput.value = pattern;
             patternInput.addEventListener('input', () => {
                 decision.pattern = patternInput.value.toUpperCase();
+                remember.querySelector('span').textContent = `Remember for ${decision.pattern.trim() || 'this text'}`;
+                updateHint();
             });
-            patternInput.addEventListener('change', () => refresh(ctx, `imp-pattern-${index}`));
-            item.append(buildField(
-                `imp-pattern-${index}`,
-                'Match text',
-                patternInput,
-                'Future rows whose description contains this text get the same choice.',
-            ));
+            item.append(buildField(`imp-pattern-${index}`, 'Match text', patternInput), hint);
+            patternInput.setAttribute('aria-describedby', hint.id);
         }
     }
 
-    if (state.touched.has(index)) {
-        const others = samePatternIndexes(state.rows, state.decisions, index);
-        if (others.length > 0) {
-            item.append(button(
-                'btn btn-ghost imp-link',
-                `Apply to all ${plural(others.length + 1, 'row', 'rows')} with ${patternFor(row)}`,
-                () => {
-                    for (const other of others) {
-                        copyChoice(state.decisions[other], decision);
-                        state.rowErrors.delete(other);
-                    }
-                    ctx.toast(`Applied to ${plural(others.length, 'more row', 'more rows')}`);
-                    state.touched.delete(index);
-                    refresh(ctx, kindId);
-                },
-            ));
-        }
-    }
+    item.append(applySlot);
+    if (state.touched.has(index)) offerApplyAll();
 
     const error = state.rowErrors.get(index);
     if (error) item.append(alertText(error, `imp-row-error-${index}`));

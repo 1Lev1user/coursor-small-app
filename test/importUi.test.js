@@ -6,8 +6,6 @@ import { buildImport } from '../src/import/core.js';
 import {
     headerSignature,
     findSavedLayout,
-    refineColumns,
-    markForeignRows,
     kindsForDirection,
     patternFor,
     samePatternIndexes,
@@ -17,6 +15,8 @@ import {
     upsertLayout,
     dateQuestion,
     layoutFitsSample,
+    rememberHint,
+    bankTextOf,
 } from '../src/views/import.js';
 import { importCountsText, ruleTargetText } from '../src/views/settings/importSettings.js';
 
@@ -45,40 +45,6 @@ test('findSavedLayout matches the exact signature and ignores an empty one', () 
     assert.equal(findSavedLayout(undefined, 'date|amount'), null);
 });
 
-test('refineColumns turns a D/K debit guess into the direction column', () => {
-    const sample = [
-        ['03.08.2026', '20', 'RIMI', '23,45', 'D'],
-        ['15.08.2026', '20', 'Alga', '1850,00', 'K'],
-    ];
-    const result = refineColumns(columns({ date: 0, direction: 1, description: 2, amount: 3, debit: 4 }), sample);
-    assert.equal(result.direction, 4);
-    assert.equal(result.debit, -1);
-    assert.equal(result.amount, 3);
-});
-
-test('refineColumns drops a Type column that is not a direction', () => {
-    const sample = [['CARD_PAYMENT', '-18.27'], ['TOPUP', '500.00']];
-    const result = refineColumns(columns({ direction: 0, amount: 1 }), sample);
-    assert.equal(result.direction, -1);
-});
-
-test('refineColumns keeps real debit and credit amount columns', () => {
-    const sample = [['12,00', ''], ['', '50,00']];
-    const result = refineColumns(columns({ debit: 0, credit: 1 }), sample);
-    assert.equal(result.debit, 0);
-    assert.equal(result.credit, 1);
-});
-
-test('markForeignRows clears the EUR amount of foreign rows only', () => {
-    const rows = markForeignRows([
-        row('2026-09-10', 5000, 'out', 'Amazon', { currency: 'USD' }),
-        row('2026-09-11', 1200, 'out', 'Lidl'),
-    ]);
-    assert.equal(rows[0].amountCents, null);
-    assert.equal(rows[0].originalAmountCents, 5000);
-    assert.equal(rows[1].amountCents, 1200);
-});
-
 test('kindsForDirection offers only kinds valid for the money direction', () => {
     assert.deepEqual(kindsForDirection('out'), ['expense', 'transfer', 'skip']);
     assert.deepEqual(kindsForDirection('in'), ['refund', 'income', 'transfer', 'skip']);
@@ -98,11 +64,13 @@ test('samePatternIndexes finds other included rows with the same merchant and di
     assert.deepEqual(samePatternIndexes(rows, decisions, 3), []);
 });
 
-test('copyChoice copies kind and categories only', () => {
-    const target = { include: true, kind: 'expense', categoryId: 'x', subcategoryId: '', incomeCategoryId: 'salary', remember: true };
-    copyChoice(target, { include: false, kind: 'refund', categoryId: 'necessary', subcategoryId: 'groceries', incomeCategoryId: 'income-other', remember: false });
+test('copyChoice copies kind, categories and Show as only', () => {
+    const target = { include: true, kind: 'expense', categoryId: 'x', subcategoryId: '', incomeCategoryId: 'salary', remember: true, showAs: '' };
+    copyChoice(target, {
+        include: false, kind: 'refund', categoryId: 'necessary', subcategoryId: 'groceries', incomeCategoryId: 'income-other', remember: false, showAs: 'Produkti',
+    });
     assert.deepEqual(target, {
-        include: true, kind: 'refund', categoryId: 'necessary', subcategoryId: 'groceries', incomeCategoryId: 'income-other', remember: true,
+        include: true, kind: 'refund', categoryId: 'necessary', subcategoryId: 'groceries', incomeCategoryId: 'income-other', remember: true, showAs: 'Produkti',
     });
 });
 
@@ -196,4 +164,19 @@ test('layoutFitsSample rejects a saved layout whose decimals or dates do not fit
     assert.equal(layoutFitsSample(saved, [['2026/31/12', 'x', '-1,00']]), false);
     assert.equal(layoutFitsSample(saved, [['03.09.2026', 'x', '-1.234,50']]), true);
     assert.equal(layoutFitsSample(saved, [['03.09.2026', 'x', '-15']]), true);
+});
+
+test('rememberHint describes what the rule will do next time', () => {
+    const data = defaultData();
+    const expense = { kind: 'expense', categoryId: 'necessary', subcategoryId: 'groceries', pattern: 'karlis', showAs: 'Produkti' };
+    assert.equal(rememberHint(data, expense), 'Next time: KARLIS \u2192 Necessary expenses \u00b7 Groceries as "Produkti"');
+    assert.equal(rememberHint(data, { ...expense, showAs: '  ' }), 'Next time: KARLIS \u2192 Necessary expenses \u00b7 Groceries');
+    assert.equal(rememberHint(data, { ...expense, kind: 'refund', subcategoryId: '' }), 'Next time: KARLIS \u2192 Refund to Necessary expenses as "Produkti"');
+    assert.equal(rememberHint(data, { kind: 'income', incomeCategoryId: 'salary', pattern: 'ALGA', showAs: '' }), 'Next time: ALGA \u2192 Salary');
+    assert.equal(rememberHint(data, { kind: 'transfer', pattern: '', showAs: 'x' }), 'Next time: this text \u2192 Transfer');
+});
+
+test('bankTextOf prefers the counterparty and collapses spaces', () => {
+    assert.equal(bankTextOf(row('2026-09-01', 100, 'out', 'PIRKUMS  1', { counterparty: 'SIA  Kārlis' })), 'SIA Kārlis');
+    assert.equal(bankTextOf(row('2026-09-01', 100, 'out', 'Lidl')), 'Lidl');
 });

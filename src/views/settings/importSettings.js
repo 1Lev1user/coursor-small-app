@@ -1,4 +1,10 @@
-import { undoImport, upsertRule, deleteRule, ruleKind } from '../../import/core.js';
+import {
+    undoImport,
+    upsertRule,
+    deleteRule,
+    ruleKind,
+    applyRuleToExisting,
+} from '../../import/core.js';
 import { resetImport } from '../import.js';
 import { element, actionButton, persist } from './shared.js';
 
@@ -198,6 +204,7 @@ function startEdit(ctx, rule) {
         categoryId: rule.categoryId,
         subcategoryId: rule.subcategoryId,
         incomeCategoryId: rule.incomeCategoryId,
+        note: rule.note ?? '',
     };
     rerender(ctx, `rule-kind-${rule.id}`);
 }
@@ -257,6 +264,26 @@ function ruleEditForm(ctx, rule) {
             },
         ));
     }
+    if (draft.kind !== 'transfer' && draft.kind !== 'skip') {
+        const wrapper = element('div', 'field');
+        const label = element('label', '', 'Show as');
+        label.htmlFor = `rule-note-${rule.id}`;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `rule-note-${rule.id}`;
+        input.autocomplete = 'off';
+        input.maxLength = 120;
+        input.placeholder = 'Bank text';
+        input.value = draft.note;
+        input.addEventListener('input', () => {
+            draft.note = input.value;
+        });
+        const hint = element('p', 'muted', 'The note on imported entries. Leave empty to keep the bank text.');
+        hint.id = `rule-note-hint-${rule.id}`;
+        input.setAttribute('aria-describedby', hint.id);
+        wrapper.append(label, input, hint);
+        form.append(wrapper);
+    }
     if (local.ruleError !== '') {
         const error = element('p', 'error-text', local.ruleError);
         error.setAttribute('role', 'alert');
@@ -278,6 +305,7 @@ function ruleEditForm(ctx, rule) {
                 categoryId: draft.categoryId,
                 subcategoryId: draft.subcategoryId,
                 incomeCategoryId: draft.incomeCategoryId,
+                note: draft.kind === 'transfer' || draft.kind === 'skip' ? '' : draft.note,
             });
             if (!result.ok) {
                 local.ruleError = result.reason;
@@ -311,6 +339,9 @@ function ruleItem(ctx, rule) {
         element('p', 'entry-name imp-pattern', rule.pattern),
         element('p', 'muted', ruleTargetText(ctx.data, rule)),
     );
+    if (rule.note) {
+        text.append(element('p', 'muted imp-note', `Shown as "${rule.note}"`));
+    }
     row.append(text);
     item.append(row);
 
@@ -345,7 +376,24 @@ function ruleItem(ctx, rule) {
     remove.id = `rule-delete-${rule.id}`;
     remove.setAttribute('aria-label', `Delete rule ${rule.pattern}`);
     const actions = element('div', 'entry-actions');
-    actions.append(edit, remove);
+    actions.append(edit);
+    if (rule.kind === 'expense' || rule.kind === 'income') {
+        const reapply = actionButton('btn btn-ghost', 'Apply to earlier imports', () => {
+            const changed = applyRuleToExisting(ctx.data, rule.id);
+            if (changed === 0) {
+                ctx.toast('No earlier imports match');
+                return;
+            }
+            if (persist(ctx)) {
+                ctx.toast(`Updated ${plural(changed, 'entry', 'entries')}`);
+                focusLater(`rule-apply-${rule.id}`);
+            }
+        });
+        reapply.id = `rule-apply-${rule.id}`;
+        reapply.setAttribute('aria-label', `Apply rule ${rule.pattern} to earlier imports`);
+        actions.append(reapply);
+    }
+    actions.append(remove);
     item.append(actions);
     return item;
 }
