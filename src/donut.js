@@ -5,15 +5,16 @@ const CENTRE = 50;
 const OUTER_RADIUS = 45;
 const INNER_RADIUS = 28;
 
+// Colours live in style.css (--cat-1 … --cat-8) so light and dark themes each get their own steps.
 export const PALETTE = [
-    '#2563eb',
-    '#059669',
-    '#d97706',
-    '#7c3aed',
-    '#dc2626',
-    '#0891b2',
-    '#db2777',
-    '#4d7c0f',
+    'var(--cat-1)',
+    'var(--cat-2)',
+    'var(--cat-3)',
+    'var(--cat-4)',
+    'var(--cat-5)',
+    'var(--cat-6)',
+    'var(--cat-7)',
+    'var(--cat-8)',
 ];
 
 function point(radius, angle) {
@@ -95,8 +96,7 @@ export function renderDonut(items, options = {}) {
     for (const slice of donutSlices(items)) {
         const path = svgElement('path');
         path.setAttribute('d', slice.path);
-        path.setAttribute('fill', slice.colour);
-        path.setAttribute('stroke', '#ffffff');
+        path.style.fill = slice.colour;
         path.setAttribute('stroke-width', '1');
 
         if (typeof onSelect === 'function') {

@@ -26,3 +26,15 @@ Export a JSON backup regularly; browsers can clear site data.
 ## Install on phone
 
 Open the link in Safari (iPhone) or Chrome (Android), then **Add to Home Screen** / **Install app**.
+
+## Development
+
+- `npm test` runs all tests (Node 22, no packages to install). GitHub runs them on every push and pull request.
+- Releasing: raise `version` in `package.json` and `VERSION` in `sw.js` together. A test fails if they differ or if a file in `src/` or `fonts/` is missing from the offline cache list in `sw.js`.
+- Colours, fonts, radii and motion are design tokens at the top of `style.css`, with a dark theme below them.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+The fonts in `fonts/` (Onest and Unbounded) are under the SIL Open Font License 1.1; see `fonts/LICENSE-*.txt`.

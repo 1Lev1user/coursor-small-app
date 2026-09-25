@@ -157,7 +157,7 @@ await page.screenshot({ path: join(out, 'screen-expense.png') });
 
 await page.getByRole('button', { name: 'Back to Home' }).click();
 await page.waitForTimeout(200);
-await page.getByRole('button', { name: 'Add extra income' }).click();
+await page.getByRole('button', { name: 'Add income' }).click();
 await page.waitForTimeout(300);
 await dismissOverlays(page);
 await page.screenshot({ path: join(out, 'screen-income.png') });

@@ -1,4 +1,10 @@
-import { load, save as saveToStorage, requestPersistence } from './storage.js';
+import {
+    open as openStorage,
+    save as saveToStorage,
+    storedIsNewer,
+    requestPersistence,
+} from './storage.js';
+import { downloadText } from './files.js';
 import { currentMonthKey, monthKeyOf, todayISO } from './months.js';
 import { parseAmount, formatEuro, formatPlain } from './money.js';
 import { createId } from './model.js';
@@ -19,10 +25,13 @@ const views = {
     more: { title: 'Settings', render: renderMore },
 };
 
+const opened = openStorage();
+
 const app = {
-    data: load(),
+    data: opened.data,
     tab: 'add',
     monthKey: currentMonthKey(),
+    storageIssue: opened.status === 'ok' ? null : opened,
 };
 
 const titleElement = document.getElementById('screen-title');
@@ -59,7 +68,11 @@ function toast(message) {
 function save() {
     const saved = saveToStorage(app.data);
     if (!saved) {
-        toast('Could not save to this device');
+        if (storedIsNewer()) {
+            app.storageIssue = { status: 'newer' };
+        } else {
+            toast('Could not save to this device');
+        }
     }
     render();
     return saved;
@@ -371,7 +384,74 @@ function renderDuePrompt(subscription) {
     amountInput.select();
 }
 
+async function reloadWithUpdate() {
+    try {
+        const registration = await navigator.serviceWorker?.getRegistration();
+        await registration?.update();
+    } catch {
+        // Reload anyway; the browser also checks for updates on navigation.
+    }
+    location.reload();
+}
+
+function storageIssueButton(className, text, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.textContent = text;
+    button.addEventListener('click', onClick);
+    return button;
+}
+
+function renderStorageIssue(issue) {
+    removeDueOverlay();
+    document.body.classList.add('is-setup');
+    tabbarElement.hidden = true;
+    viewElement.replaceChildren();
+
+    const card = document.createElement('section');
+    card.className = 'card stack';
+    const heading = document.createElement('h2');
+    heading.className = 'section-title';
+    const copy = document.createElement('p');
+    card.append(heading, copy);
+
+    if (issue.status === 'newer') {
+        titleElement.textContent = 'Update needed';
+        heading.textContent = 'This copy of the app is out of date';
+        copy.textContent = 'Your data was saved by a newer version of My Expenses. '
+            + 'This copy will not change it. Reload to get the new version.';
+        card.append(storageIssueButton('btn btn-primary', 'Reload', reloadWithUpdate));
+    } else {
+        titleElement.textContent = 'Data problem';
+        heading.textContent = 'Saved data could not be read';
+        copy.textContent = 'The data on this device is damaged or in a format this version does not know. '
+            + 'A copy is kept on this device. Download it before you start again.';
+        const note = document.createElement('p');
+        note.className = 'muted';
+        note.textContent = 'Starting again opens setup with empty data.';
+        card.append(
+            note,
+            storageIssueButton('btn btn-primary', 'Download saved data', () => {
+                downloadText(`my-expenses-unreadable-${todayISO()}.json`, issue.raw, 'application/json');
+            }),
+            storageIssueButton('btn', 'Start again', () => {
+                app.storageIssue = null;
+                render();
+            }),
+        );
+    }
+
+    document.title = `${titleElement.textContent} - My Expenses`;
+    viewElement.append(card);
+}
+
 function render() {
+    if (app.storageIssue !== null) {
+        renderStorageIssue(app.storageIssue);
+        return;
+    }
+
     const setupComplete = app.data.settings.setupComplete === true;
     document.body.classList.toggle('is-setup', !setupComplete);
     tabbarElement.hidden = !setupComplete;

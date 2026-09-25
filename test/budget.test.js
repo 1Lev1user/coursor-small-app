@@ -14,6 +14,7 @@ import {
     percentFromEuroCents,
     euroCentsFromPercent,
     syncCategoryPlanFields,
+    recentEntries,
 } from '../src/budget.js';
 
 function expense(id, categoryId, amountCents, date, subcategoryId = '') {
@@ -619,4 +620,25 @@ test('incomeBreakdown is empty when there is no Plan salary and no extras', () =
         totalCents: 0,
         entries: [],
     });
+});
+
+test('recentEntries returns the newest expenses and incomes first', () => {
+    const data = {
+        expenses: [
+            { id: 'e1', date: '2026-09-21', amountCents: 2660 },
+            { id: 'e2', date: '2026-09-24', amountCents: 1840 },
+            { id: 'e3', date: '2026-08-30', amountCents: 500 },
+            { id: 'e4', date: '2026-09-24', amountCents: 320 },
+        ],
+        incomes: [
+            { id: 'i1', date: '2026-09-23', amountCents: 10000 },
+        ],
+    };
+
+    assert.deepEqual(
+        recentEntries(data).map(({ type, entry }) => `${type}:${entry.id}`),
+        ['expense:e4', 'expense:e2', 'income:i1'],
+    );
+    assert.equal(recentEntries(data, 10).length, 5);
+    assert.deepEqual(recentEntries({ expenses: [], incomes: [] }), []);
 });

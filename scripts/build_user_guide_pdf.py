@@ -30,17 +30,27 @@ DESKTOP = Path.home() / "Desktop" / "My-Expenses-User-Guide.pdf"
 ASSETS = ROOT / "docs" / "guide-assets"
 APP_URL = "https://1lev1user.github.io/coursor-small-app/"
 AUTHOR = "Ļevs Krilovs"
-ACCENT_CSS = "2563eb"
+ACCENT_CSS = "1F5C45"
 
-pdfmetrics.registerFont(TTFont("Guide", r"C:\Windows\Fonts\arial.ttf"))
-pdfmetrics.registerFont(TTFont("Guide-Bold", r"C:\Windows\Fonts\arialbd.ttf"))
+FONT_CANDIDATES = [
+    (r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\arialbd.ttf"),
+    (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
+]
+REGULAR_FONT, BOLD_FONT = next(
+    pair for pair in FONT_CANDIDATES if all(Path(path).exists() for path in pair)
+)
+pdfmetrics.registerFont(TTFont("Guide", REGULAR_FONT))
+pdfmetrics.registerFont(TTFont("Guide-Bold", BOLD_FONT))
 
-INK = HexColor("#111827")
-MUTED = HexColor("#4b5563")
-ACCENT = HexColor("#2563eb")
-LINE = HexColor("#d1d5db")
-SOFT = HexColor("#eff6ff")
-PANEL = HexColor("#f8fafc")
+INK = HexColor("#15201A")
+MUTED = HexColor("#44524A")
+ACCENT = HexColor("#1F5C45")
+LINE = HexColor("#D3DBCF")
+SOFT = HexColor("#E6ECE3")
+PANEL = HexColor("#F4F7F1")
 
 
 def styles():
@@ -159,7 +169,7 @@ def build():
         str(OUT), pagesize=A4,
         leftMargin=12 * mm, rightMargin=12 * mm,
         topMargin=10 * mm, bottomMargin=12 * mm,
-        title="My Expenses — Illustrated User Guide",
+        title="My Expenses - Illustrated User Guide",
         author=AUTHOR,
         subject="Install steps and screen-by-screen guide",
         creator=f"My Expenses guide by {AUTHOR}",
@@ -168,13 +178,13 @@ def build():
 
     # Cover
     story.append(Paragraph("My Expenses", s["title"]))
-    story.append(Paragraph("User guide — install &amp; every screen", s["sub"]))
+    story.append(Paragraph("User guide - install &amp; every screen", s["sub"]))
     story.append(HRFlowable(width="100%", thickness=0.8, color=LINE, spaceBefore=1, spaceAfter=6))
     story.append(Paragraph("App link (tap to open)", s["link_label"]))
     story.append(Paragraph(link_tag(), s["link_hero"]))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph(
-        "Local-only euro tracker for income and spending. No account and no cloud sync — "
+        "Local-only euro tracker for income and spending. No account and no cloud sync - "
         "everything stays on this device. Not an App Store / Google Play download: open the "
         "link in the right browser, then add it to your Home Screen.",
         s["note"],
@@ -192,20 +202,20 @@ def build():
         s["body"],
     ))
     story.append(side_by_side(
-        s, "iphone-tap-share.png", "Step A — Share",
+        s, "iphone-tap-share.png", "Step A - Share",
         [
             "Safari address bar and toolbar at the bottom.",
             "The square <b>Share</b> icon (arrow pointing up).",
         ],
         [
-            f"Open {link_tag('the app link')} — choose <b>Open in Safari</b> if asked.",
+            f"Open {link_tag('the app link')} - choose <b>Open in Safari</b> if asked.",
             "Wait until the page loads.",
             "Tap <b>Share</b>.",
         ],
         max_width_mm=52, max_height_mm=88,
     ))
     story.append(side_by_side(
-        s, "iphone-share-add-home.png", "Step B — Add to Home Screen",
+        s, "iphone-share-add-home.png", "Step B - Add to Home Screen",
         [
             "The iOS share sheet with app actions.",
             "The row <b>Add to Home Screen</b>.",
@@ -226,7 +236,7 @@ def build():
         s["body"],
     ))
     story.append(side_by_side(
-        s, "android-chrome-install.png", "Step A — Install from Chrome",
+        s, "android-chrome-install.png", "Step A - Install from Chrome",
         [
             "Chrome’s menu (<b>⋮</b>) or an Install banner.",
             "Options like <b>Install app</b> or <b>Add to Home screen</b>.",
@@ -240,7 +250,7 @@ def build():
         max_width_mm=52, max_height_mm=88,
     ))
     story.append(side_by_side(
-        s, "android-home-icon.png", "Step B — Open the icon",
+        s, "android-home-icon.png", "Step B - Open the icon",
         [
             "A Home Screen or app-drawer icon for My Expenses / Expenses.",
         ],
@@ -269,7 +279,7 @@ def build():
     story.append(side_by_side(
         s, "screen-setup.png", "First-run setup",
         [
-            "<b>Your name</b> — used to personalise Home.",
+            "<b>Your name</b> - used to personalise Home.",
             "<b>Monthly spend budget</b> field (euros; 0 allowed).",
             "<b>Savings</b> as € or % of that budget.",
             "<b>Usual monthly income</b> field (euros; 0 allowed).",
@@ -279,7 +289,7 @@ def build():
             "Enter your name (you can change it later in Settings → Plan).",
             "Enter how much you plan to spend each month.",
             "Set Savings (0 is fine; cannot go over 100% of the budget).",
-            "Enter usual income — counted automatically every month later.",
+            "Enter usual income - counted automatically every month later.",
             "Save to open the app.",
         ],
     ))
@@ -287,15 +297,15 @@ def build():
     story.append(side_by_side(
         s, "screen-home.png", "Home (first tab)",
         [
-            "Greeting with your name (for example <b>Hi, Alex</b>).",
-            "Short intro that also uses your name.",
-            "Note that usual salary (Plan) and subscription reminders run automatically.",
-            "Two big buttons: <b>Add expense</b> and <b>Add extra income</b>.",
+            "Your month with your name (for example <b>Alex’s September</b>).",
+            "Green block: how much of this month’s spend budget is left.",
+            "<b>Add expense</b> (main button) and <b>Add income</b>.",
+            "Your three latest entries, and <b>Open Month</b> for the full list.",
             "Bottom tabs: Home · Month · Chart · Settings.",
         ],
         [
             "Tap <b>Add expense</b> for day-to-day spending.",
-            "Tap <b>Add extra income</b> for bonus, gift, side job — not regular salary.",
+            "Tap <b>Add income</b> for a bonus, gift or side job. Your salary is added automatically.",
             "Change your name anytime in <b>Settings → Plan</b>.",
             "Use Month / Chart / Settings tabs for overview and setup.",
         ],
@@ -327,8 +337,8 @@ def build():
         ],
         [
             "Choose a category or tap <b>+</b> to add one (bonus, gift, freelance…).",
-            "Log one-off income only — not regular salary.",
-            "Save, then return Home — or switch tabs to check Month totals.",
+            "Log one-off income only - not regular salary.",
+            "Save, then return Home - or switch tabs to check Month totals.",
         ],
     ))
 
@@ -354,7 +364,7 @@ def build():
             "Two analytics: <b>Spending</b> and <b>Income</b>.",
             "Spending donut by expense category (tap a row to drill into subcategories).",
             "Income donut: usual salary from Plan + extra income by category.",
-            "Note: spend budget stays fixed — extra income only raises Cash left.",
+            "Note: spend budget stays fixed - extra income only raises Cash left.",
         ],
         [
             "Compare which expense areas take most of the budget.",
@@ -373,7 +383,7 @@ def build():
             "Categories editor (Savings is protected) and Backup &amp; export.",
         ],
         [
-            "Edit Plan (name, budget / usual income — 0 allowed).",
+            "Edit Plan (name, budget / usual income - 0 allowed).",
             "Manage extra-income categories and subscription reminders.",
             "Tune category limits (% or €); Savings stays fixed and ≤ 100% of budget.",
             "Export / import JSON backup, or export a month CSV.",
@@ -384,7 +394,7 @@ def build():
     story.append(Paragraph("5. Who this is for", s["h1"]))
     story.append(Paragraph(
         f"Personal use for people who receive access from <b>{AUTHOR}</b>. "
-        "Local-only euro tracker — no account, no cloud sync. "
+        "Local-only euro tracker - no account, no cloud sync. "
         f"Developed by {AUTHOR}; share only with his permission.",
         s["body"],
     ))
@@ -408,9 +418,10 @@ def build():
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     pages = len(PdfReader(str(OUT)).pages)
-    DESKTOP.write_bytes(OUT.read_bytes())
     print(f"{OUT} ({pages} pages)")
-    print(DESKTOP)
+    if DESKTOP.parent.is_dir():
+        DESKTOP.write_bytes(OUT.read_bytes())
+        print(DESKTOP)
 
 
 if __name__ == "__main__":

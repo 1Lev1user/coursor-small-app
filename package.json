@@ -1,8 +1,9 @@
 {
     "name": "my-expenses",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "description": "Local-only EUR expense and income tracker (PWA)",
     "private": true,
+    "license": "GPL-3.0-or-later",
     "type": "module",
     "scripts": {
         "test": "node --test",

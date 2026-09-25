@@ -321,3 +321,23 @@ export function incomeBreakdown(data, monthKey) {
         entries,
     };
 }
+
+/** Latest entries across all months, newest first; ties keep the newest added first. */
+export function recentEntries(data, limit = 3) {
+    const expenses = data.expenses.map((entry, index) => ({ type: 'expense', entry, index }));
+    const incomes = data.incomes.map((entry, index) => ({ type: 'income', entry, index }));
+
+    return [...expenses, ...incomes]
+        .sort((first, second) => {
+            const byDate = second.entry.date.localeCompare(first.entry.date);
+            if (byDate !== 0) {
+                return byDate;
+            }
+            if (first.type !== second.type) {
+                return first.type === 'expense' ? -1 : 1;
+            }
+            return second.index - first.index;
+        })
+        .slice(0, limit)
+        .map(({ type, entry }) => ({ type, entry }));
+}
