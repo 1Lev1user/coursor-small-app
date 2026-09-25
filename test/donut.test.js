@@ -45,8 +45,8 @@ test('donutSlices emits a non-empty full-circle path for one item', () => {
     assert.equal(slice.endAngle, 360);
 });
 
-test('PALETTE starts with the accent and has at least eight distinct colours', () => {
-    assert.equal(PALETTE[0], '#2563eb');
+test('PALETTE uses the theme category colours in fixed order', () => {
+    assert.equal(PALETTE[0], 'var(--cat-1)');
     assert.ok(PALETTE.length >= 8);
     assert.equal(new Set(PALETTE).size, PALETTE.length);
 });

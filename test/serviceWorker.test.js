@@ -30,6 +30,16 @@ test('offline cache lists every app module', () => {
     assert.deepEqual(missing, [], `add to CORE_ASSETS in sw.js: ${missing.join(', ')}`);
 });
 
+test('offline cache lists every font file', () => {
+    const cached = new Set(coreAssets());
+    const fonts = filesUnder(join(root, 'fonts'))
+        .filter((path) => path.endsWith('.woff2'))
+        .map((path) => `./${relative(root, path).split('\\').join('/')}`);
+
+    const missing = fonts.filter((path) => !cached.has(path));
+    assert.deepEqual(missing, [], `add to CORE_ASSETS in sw.js: ${missing.join(', ')}`);
+});
+
 test('offline cache lists only files that exist', () => {
     for (const asset of coreAssets()) {
         if (asset === './') {
