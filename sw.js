@@ -38,6 +38,8 @@ const CORE_ASSETS = [
     './src/monthReview.js',
     './src/limits.js',
     './src/import/types.js',
+    './src/import/detect.js',
+    './src/import/core.js',
     './src/import/xlsx.js',
     './src/import/xml.js',
     './src/views/add.js',
