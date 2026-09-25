@@ -1,5 +1,5 @@
 import {
-    undoImport,
+    undoImportAndSave,
     upsertRule,
     deleteRule,
     ruleKind,
@@ -143,8 +143,9 @@ function importItem(ctx, record) {
                 'Undo import',
                 () => {
                     local.confirmUndoId = null;
-                    undoImport(ctx.data, record.id);
-                    if (persist(ctx)) ctx.toast('Import undone');
+                    if (undoImportAndSave(ctx.data, record.id, () => persist(ctx)).ok) {
+                        ctx.toast('Import undone');
+                    }
                 },
                 () => {
                     local.confirmUndoId = null;

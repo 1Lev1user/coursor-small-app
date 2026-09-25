@@ -682,6 +682,21 @@ export function undoImport(data, importId, now = new Date()) {
     return removed;
 }
 
+/**
+ * Undoes an import and saves; if saving fails, puts every list back as it was.
+ * `save` returns false on failure (like ctx.save / persist).
+ */
+export function undoImportAndSave(data, importId, save) {
+    const keys = ['expenses', 'incomes', 'monthPlans', 'imports'];
+    const before = JSON.parse(JSON.stringify(Object.fromEntries(keys.map((key) => [key, data[key]]))));
+    const removed = undoImport(data, importId);
+    if (save() === false) {
+        Object.assign(data, before);
+        return { ok: false, removed: 0 };
+    }
+    return { ok: true, removed };
+}
+
 export function summarise(built) {
     const counts = built.importRecord.counts;
     return {

@@ -1,4 +1,5 @@
 import { formatEuro, parseAmount } from '../money.js';
+import { SALARY_INCOME_ID } from '../budget.js';
 import { monthKeyOf, monthLabel } from '../months.js';
 import { createId } from '../model.js';
 import { formatMoney } from '../currency.js';
@@ -19,7 +20,7 @@ import {
     extractPattern,
     buildImport,
     applyImport,
-    undoImport,
+    undoImportAndSave,
     summarise,
 } from '../import/core.js';
 
@@ -139,6 +140,26 @@ function categoryPath(data, categoryId, subcategoryId) {
 }
 
 /** 'Next time: RIMI → Necessary expenses · Groceries as "Produkti"' */
+/**
+ * Money in close to the usual monthly income (within 15%) with no rule is
+ * most likely the salary: suggest the Salary income category.
+ */
+export function suggestSalary(data, row, decision) {
+    const usual = data.settings?.usualMonthlyIncomeCents ?? 0;
+    const hasSalary = (data.incomeCategories ?? []).some(({ id }) => id === SALARY_INCOME_ID);
+    if (
+        usual <= 0
+        || !hasSalary
+        || decision.ruleId
+        || decision.kind !== 'income'
+        || !Number.isInteger(row.amountCents)
+        || Math.abs(row.amountCents - usual) > usual * 0.15
+    ) {
+        return {};
+    }
+    return { incomeCategoryId: SALARY_INCOME_ID };
+}
+
 export function rememberHint(data, decision) {
     const pattern = String(decision.pattern ?? '').trim().toUpperCase() || 'this text';
     let target;
@@ -613,7 +634,11 @@ function enterReview(ctx, rows, skipped, warnings) {
         state.rows = rows;
         state.duplicates = findDuplicates(ctx.data, rows);
         state.decisions = defaultDecisions(ctx.data, rows, state.duplicates)
-            .map((decision, index) => ({ ...decision, pattern: patternFor(rows[index]) }));
+            .map((decision, index) => ({
+                ...decision,
+                pattern: patternFor(rows[index]),
+                ...suggestSalary(ctx.data, rows[index], decision),
+            }));
         state.eurInputs = rows.map(() => '');
         state.touched = new Set();
         state.rowErrors = new Map();
@@ -1103,6 +1128,14 @@ function renderDecisionRow(ctx, index) {
             },
         );
         grid.append(buildField(incomeId, 'Income category', incomeSelect));
+        const usual = ctx.data.settings.usualMonthlyIncomeCents ?? 0;
+        if (decision.incomeCategoryId === SALARY_INCOME_ID && usual > 0) {
+            grid.append(element(
+                'p',
+                'muted imp-hint',
+                `Imported salary replaces your usual income (${formatEuro(usual)}) for that month.`,
+            ));
+        }
     }
 
     const counted = decision.kind !== 'transfer' && decision.kind !== 'skip';
@@ -1443,9 +1476,12 @@ function renderDone(ctx) {
             ctx.goTo('month');
         }),
         button('btn', 'Undo this import', () => {
-            const removed = undoImport(ctx.data, result.importId);
-            ctx.save();
-            state.undoneCount = removed;
+            const undone = undoImportAndSave(ctx.data, result.importId, () => ctx.save());
+            if (!undone.ok) {
+                ctx.render();
+                return;
+            }
+            state.undoneCount = undone.removed;
             ctx.toast('Import undone');
             state.focusStep = true;
             ctx.render();

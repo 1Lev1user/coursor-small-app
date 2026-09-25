@@ -609,3 +609,18 @@ test('applyRuleToExisting does nothing when the rule points to a deleted categor
     assert.equal(applyRuleToExisting(data, 'r1'), 0);
     assert.equal(data.expenses[0].categoryId, 'random');
 });
+
+test('undoImportAndSave puts everything back when saving fails', async () => {
+    const { undoImportAndSave } = await import('../src/import/core.js');
+    const data = defaultData();
+    const rows = [statementRow({ date: '2026-09-05', amountCents: 700, direction: 'out', description: 'SHOP' })];
+    const built = buildImport(data, defaultDecisions(data, rows), { rows, format: 'csv', fileName: 'a.csv' });
+    const applied = applyImport(data, built, {});
+    const snapshot = JSON.stringify(data);
+
+    assert.deepEqual(undoImportAndSave(data, applied.importId, () => false), { ok: false, removed: 0 });
+    assert.equal(JSON.stringify(data), snapshot);
+
+    assert.deepEqual(undoImportAndSave(data, applied.importId, () => true), { ok: true, removed: 1 });
+    assert.equal(data.expenses.length, 0);
+});

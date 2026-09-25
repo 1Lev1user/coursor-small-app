@@ -180,3 +180,18 @@ test('bankTextOf prefers the counterparty and collapses spaces', () => {
     assert.equal(bankTextOf(row('2026-09-01', 100, 'out', 'PIRKUMS  1', { counterparty: 'SIA  Kārlis' })), 'SIA Kārlis');
     assert.equal(bankTextOf(row('2026-09-01', 100, 'out', 'Lidl')), 'Lidl');
 });
+
+test('suggestSalary picks Salary for money in close to the usual income', async () => {
+    const { suggestSalary } = await import('../src/views/import.js');
+    const { defaultData } = await import('../src/model.js');
+    const data = defaultData();
+    data.settings.usualMonthlyIncomeCents = 200000;
+    const row = { amountCents: 195000, direction: 'in' };
+    const base = { kind: 'income', ruleId: '', incomeCategoryId: 'income-other' };
+
+    assert.deepEqual(suggestSalary(data, row, base), { incomeCategoryId: 'salary' });
+    assert.deepEqual(suggestSalary(data, { ...row, amountCents: 50000 }, base), {});
+    assert.deepEqual(suggestSalary(data, row, { ...base, ruleId: 'r1' }), {});
+    data.settings.usualMonthlyIncomeCents = 0;
+    assert.deepEqual(suggestSalary(data, row, base), {});
+});
