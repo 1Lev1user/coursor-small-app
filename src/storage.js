@@ -1,27 +1,98 @@
-import { defaultData, normalise } from './model.js';
+import { SCHEMA_VERSION, defaultData, normalise } from './model.js';
 
 export const STORAGE_KEY = 'my-expenses-v1';
+export const RESCUE_KEY = 'my-expenses-rescue';
 
-export function load(storage = globalThis.localStorage) {
+function parseStored(raw) {
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return undefined;
+    }
+}
+
+function versionOf(parsed) {
+    return parsed !== null
+        && typeof parsed === 'object'
+        && typeof parsed.version === 'number'
+        ? parsed.version
+        : null;
+}
+
+function keepRescueCopy(raw, storage) {
+    try {
+        if (storage.getItem(RESCUE_KEY) === null) {
+            storage.setItem(RESCUE_KEY, raw);
+        }
+    } catch {
+        // The caller still gets the raw text and can offer a download.
+    }
+}
+
+/*
+ * Reads saved data and says whether it can be used.
+ * status 'ok': data is usable (or nothing was saved yet).
+ * status 'newer': saved by a newer app version; this copy must not write.
+ * status 'unreadable': damaged or unknown format; raw text is kept aside.
+ */
+export function open(storage = globalThis.localStorage) {
     if (storage === undefined || storage === null) {
-        return defaultData();
+        return { status: 'ok', data: defaultData() };
     }
 
+    let raw;
     try {
-        const stored = storage.getItem(STORAGE_KEY);
-        if (stored === null) {
-            return defaultData();
-        }
-
-        const result = normalise(JSON.parse(stored));
-        return result.ok ? result.data : defaultData();
+        raw = storage.getItem(STORAGE_KEY);
     } catch {
-        return defaultData();
+        return { status: 'ok', data: defaultData() };
+    }
+    if (raw === null) {
+        return { status: 'ok', data: defaultData() };
+    }
+
+    const parsed = parseStored(raw);
+    if (parsed !== undefined) {
+        const result = normalise(parsed);
+        if (result.ok) {
+            return { status: 'ok', data: result.data };
+        }
+    }
+
+    keepRescueCopy(raw, storage);
+    const version = versionOf(parsed);
+    if (version !== null && version > SCHEMA_VERSION) {
+        return { status: 'newer', data: defaultData(), raw, version };
+    }
+    return { status: 'unreadable', data: defaultData(), raw };
+}
+
+export function load(storage = globalThis.localStorage) {
+    return open(storage).data;
+}
+
+export function storedIsNewer(storage = globalThis.localStorage) {
+    if (storage === undefined || storage === null) {
+        return false;
+    }
+    try {
+        const raw = storage.getItem(STORAGE_KEY);
+        if (raw === null) {
+            return false;
+        }
+        const version = versionOf(parseStored(raw));
+        return version !== null && version > SCHEMA_VERSION;
+    } catch {
+        return false;
     }
 }
 
 export function save(data, storage = globalThis.localStorage) {
     if (storage === undefined || storage === null) {
+        return false;
+    }
+
+    // An older copy of the app left open must never overwrite newer data.
+    if (storedIsNewer(storage)) {
         return false;
     }
 

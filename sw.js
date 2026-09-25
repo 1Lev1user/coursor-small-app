@@ -1,5 +1,10 @@
-/* My Expenses service worker — bump CACHE_NAME on every deploy. */
-const CACHE_NAME = 'my-expenses-v1-month-review';
+/*
+ * My Expenses service worker.
+ * VERSION must match package.json; a test checks it. Changing it renames
+ * the cache, which makes installed apps fetch the new files.
+ */
+const VERSION = '1.1.0';
+const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
     './',
@@ -22,6 +27,7 @@ const CORE_ASSETS = [
     './src/backup.js',
     './src/files.js',
     './src/donut.js',
+    './src/monthReview.js',
     './src/views/add.js',
     './src/views/month.js',
     './src/views/monthNav.js',

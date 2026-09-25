@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { defaultData } from '../src/model.js';
 import {
     STORAGE_KEY,
+    RESCUE_KEY,
+    open,
     load,
     save,
+    storedIsNewer,
     requestPersistence,
 } from '../src/storage.js';
 
@@ -75,6 +78,68 @@ test('save returns false when storage is absent or setItem throws', () => {
     assert.equal(save(defaultData(), null), false);
     assert.doesNotThrow(() => save(defaultData(), throwingStorage));
     assert.equal(save(defaultData(), throwingStorage), false);
+});
+
+test('open reports ok for usable data and for an empty device', () => {
+    const storage = fakeStorage();
+    assert.deepEqual(open(storage), { status: 'ok', data: defaultData() });
+
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 50000;
+    save(data, storage);
+    assert.deepEqual(open(storage), { status: 'ok', data });
+    assert.equal(storage.getItem(RESCUE_KEY), null);
+});
+
+test('open reports newer data and keeps a rescue copy', () => {
+    const raw = JSON.stringify({ ...defaultData(), version: 2 });
+    const storage = fakeStorage({ [STORAGE_KEY]: raw });
+
+    const result = open(storage);
+    assert.equal(result.status, 'newer');
+    assert.equal(result.version, 2);
+    assert.equal(result.raw, raw);
+    assert.deepEqual(result.data, defaultData());
+    assert.equal(storage.getItem(RESCUE_KEY), raw);
+    assert.equal(storage.getItem(STORAGE_KEY), raw);
+});
+
+test('open reports unreadable data and keeps the first rescue copy', () => {
+    const storage = fakeStorage({ [STORAGE_KEY]: '{bad json' });
+    const result = open(storage);
+    assert.equal(result.status, 'unreadable');
+    assert.equal(result.raw, '{bad json');
+    assert.equal(storage.getItem(RESCUE_KEY), '{bad json');
+
+    storage.setItem(STORAGE_KEY, '{other bad json');
+    open(storage);
+    assert.equal(storage.getItem(RESCUE_KEY), '{bad json');
+});
+
+test('save refuses to overwrite data saved by a newer version', () => {
+    const raw = JSON.stringify({ ...defaultData(), version: 2 });
+    const storage = fakeStorage({ [STORAGE_KEY]: raw });
+
+    assert.equal(storedIsNewer(storage), true);
+    assert.equal(save(defaultData(), storage), false);
+    assert.equal(storage.getItem(STORAGE_KEY), raw);
+});
+
+test('save may replace damaged data after the rescue copy exists', () => {
+    const storage = fakeStorage({ [STORAGE_KEY]: '{bad json' });
+    open(storage);
+
+    assert.equal(storedIsNewer(storage), false);
+    assert.equal(save(defaultData(), storage), true);
+    assert.deepEqual(load(storage), defaultData());
+    assert.equal(storage.getItem(RESCUE_KEY), '{bad json');
+});
+
+test('storedIsNewer is false for missing, current or unreadable data', () => {
+    assert.equal(storedIsNewer(null), false);
+    assert.equal(storedIsNewer(fakeStorage()), false);
+    assert.equal(storedIsNewer(fakeStorage({ [STORAGE_KEY]: JSON.stringify(defaultData()) })), false);
+    assert.equal(storedIsNewer(fakeStorage({ [STORAGE_KEY]: 'null' })), false);
 });
 
 test('requestPersistence returns false when persistence API is unavailable', async () => {

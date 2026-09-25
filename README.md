@@ -26,3 +26,12 @@ Export a JSON backup regularly; browsers can clear site data.
 ## Install on phone
 
 Open the link in Safari (iPhone) or Chrome (Android), then **Add to Home Screen** / **Install app**.
+
+## Development
+
+- `npm test` runs all tests (Node 22, no packages to install). GitHub runs them on every push and pull request.
+- Releasing: raise `version` in `package.json` and `VERSION` in `sw.js` together. A test fails if they differ or if a file in `src/` is missing from the offline cache list in `sw.js`.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
