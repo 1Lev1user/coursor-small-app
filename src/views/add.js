@@ -1,10 +1,12 @@
 import { parseAmount, formatEuro } from '../money.js';
-import { monthKeyOf, todayISO } from '../months.js';
+import { currentMonthKey, monthKeyOf, monthLabel, todayISO } from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
 import {
     freezeMonthPlan,
     syncCategoryPlanFields,
     refreshCurrentMonthPlan,
+    monthTotals,
+    recentEntries,
 } from '../budget.js';
 import {
     getMonthReviewSuggestion,
@@ -375,22 +377,101 @@ function renderMonthReviewCard(ctx, suggestion) {
     return card;
 }
 
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function shortDate(date) {
+    const [, month, day] = date.split('-').map(Number);
+    return `${day} ${SHORT_MONTHS[month - 1]}`;
+}
+
+function recentTexts(data, { type, entry }) {
+    const note = typeof entry.note === 'string' ? entry.note.trim() : '';
+    if (type === 'income') {
+        const name = data.incomeCategories.find(({ id }) => id === entry.incomeCategoryId)?.name
+            ?? 'Income';
+        return note === ''
+            ? { title: name, detail: 'Income' }
+            : { title: note, detail: `Income \u00b7 ${name}` };
+    }
+
+    const category = data.categories.find(({ id }) => id === entry.categoryId);
+    const categoryName = category?.name ?? 'Expense';
+    const subcategory = category?.subcategories?.find(({ id }) => id === entry.subcategoryId);
+    if (note !== '') {
+        return { title: note, detail: categoryName };
+    }
+    return {
+        title: subcategory?.name ?? categoryName,
+        detail: subcategory === undefined ? '' : categoryName,
+    };
+}
+
+function renderRecent(ctx) {
+    const items = recentEntries(ctx.data, 3);
+    if (items.length === 0) {
+        return null;
+    }
+
+    const section = element('section', 'stack home-recent');
+    section.setAttribute('aria-labelledby', 'home-recent-title');
+    const title = element('h2', 'home-recent-title', 'Recent');
+    title.id = 'home-recent-title';
+
+    const list = element('ul', 'home-recent-list');
+    for (const item of items) {
+        const { title: itemTitle, detail } = recentTexts(ctx.data, item);
+        const row = element('li', 'home-recent-item');
+        const text = element('div', 'home-recent-text');
+        text.append(element('p', 'home-recent-name', itemTitle));
+        if (detail !== '') {
+            text.append(element('p', 'muted', detail));
+        }
+
+        const values = element('div', 'home-recent-values');
+        const amount = item.type === 'income'
+            ? `+${formatEuro(item.entry.amountCents)}`
+            : formatEuro(item.entry.amountCents);
+        values.append(element('p', item.type === 'income' ? 'home-recent-amount is-ok' : 'home-recent-amount', amount));
+        const time = element('time', 'muted', shortDate(item.entry.date));
+        time.setAttribute('datetime', item.entry.date);
+        values.append(time);
+
+        row.append(text, values);
+        list.append(row);
+    }
+
+    const allButton = element('button', 'btn btn-ghost home-recent-all', 'Open Month');
+    allButton.type = 'button';
+    allButton.addEventListener('click', () => {
+        ctx.setMonthKey(currentMonthKey());
+        ctx.goTo('month');
+    });
+
+    section.append(title, list, allButton);
+    return section;
+}
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
-    const card = element('section', 'card stack home-hero');
+    const monthKey = currentMonthKey();
+    const totals = monthTotals(ctx.data, monthKey);
     const userName = String(ctx.data.settings.userName ?? '').trim();
-    const heading = userName === '' ? 'Track income & expenses' : `Hi, ${userName}`;
-    const intro = userName === ''
-        ? 'This app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.'
-        : `${userName}, this app helps you follow what you earn and what you spend. Everything stays on this device — no account and no cloud sync.`;
+    const monthName = monthLabel(monthKey).split(' ')[0];
+    const heading = userName === '' ? monthLabel(monthKey) : `${userName}\u2019s ${monthName}`;
 
-    card.append(
-        element('h2', 'section-title', heading),
-        element('p', '', intro),
+    const over = totals.budgetLeftCents < 0;
+    const figureText = formatEuro(Math.abs(totals.budgetLeftCents));
+    const figure = element('section', over ? 'home-figure is-over' : 'home-figure');
+    figure.setAttribute('aria-labelledby', 'home-figure-label');
+    const figureLabel = element('p', 'home-figure-label', over ? 'over budget by' : 'left to spend');
+    figureLabel.id = 'home-figure-label';
+    figure.append(
+        figureLabel,
+        element('p', figureText.length > 9 ? 'home-figure-value is-long' : 'home-figure-value', figureText),
         element(
             'p',
-            'muted home-auto-note',
-            'Your usual monthly income (Settings → Plan) is counted automatically each month. Subscriptions remind you on their day so you can log the charge. Here you only add day-to-day expenses and extra income (bonus, gift, side job) — not your regular salary.',
+            'home-figure-sub',
+            `${formatEuro(totals.spentCents)} spent of ${formatEuro(totals.budgetCents)}`,
         ),
     );
 
@@ -401,21 +482,35 @@ function renderHome(root, ctx) {
         ctx.render();
     });
 
-    const incomeBtn = element('button', 'btn btn-primary', 'Add extra income');
+    const incomeBtn = element('button', 'btn', 'Add income');
     incomeBtn.type = 'button';
     incomeBtn.addEventListener('click', () => {
         openAddPanel('income');
         ctx.render();
     });
 
-    const actions = element('div', 'home-actions stack');
+    const actions = element('div', 'home-actions');
     actions.append(expenseBtn, incomeBtn);
-    card.append(actions);
-    layout.append(card);
+
+    layout.append(
+        element('h2', 'home-title', heading),
+        figure,
+        actions,
+        element(
+            'p',
+            'muted home-auto-note',
+            'Salary and subscriptions are added for you. Everything stays on this device.',
+        ),
+    );
 
     const review = getMonthReviewSuggestion(ctx.data);
     if (review !== null) {
         layout.append(renderMonthReviewCard(ctx, review));
+    }
+
+    const recent = renderRecent(ctx);
+    if (recent !== null) {
+        layout.append(recent);
     }
 
     root.append(layout);
@@ -438,7 +533,7 @@ function renderIncomeForm(root, ctx) {
         element(
             'p',
             'muted home-auto-note',
-            'Extra income only. Your usual salary from Plan is applied automatically each month — do not enter it again here.',
+            'Extra income only, such as a bonus or a gift. Your salary is added automatically each month.',
         ),
     );
 
@@ -793,7 +888,7 @@ function renderExpenseForm(root, ctx) {
     noteRow.className = 'add-field-row';
     noteRow.append(noteInput, notePlus);
 
-    const noteField = buildField('add-note', 'Note \u2014 what was it?', noteRow);
+    const noteField = buildField('add-note', 'Note (what was it?)', noteRow);
     noteInput.id = 'add-note';
     noteField.control = noteInput;
 
@@ -1141,8 +1236,8 @@ function renderExpenseForm(root, ctx) {
 
             lastAdded = null;
             openAddPanel('expense');
-            saveError = 'Could not save to this device. Nothing was recorded \u2014 your entry is'
-                + ' still here, try again.';
+            saveError = 'Could not save to this device. Nothing was recorded.'
+                + ' Your entry is still here, so you can try again.';
             focusSaveErrorOnRender = true;
             ctx.render();
             return;

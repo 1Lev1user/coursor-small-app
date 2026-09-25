@@ -620,7 +620,7 @@ function saveIncomeEntryEdit(ctx, income, fields) {
             delete ctx.data.monthPlans[newMonthKey];
         }
 
-        incomeEntrySaveError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        incomeEntrySaveError = 'Could not save to this device. Nothing was changed. Try again.';
         focusIncomeEntryError = true;
         ctx.render();
         return;
@@ -642,7 +642,7 @@ function confirmDeleteIncomeEntry(ctx, income) {
     const [removed] = ctx.data.incomes.splice(index, 1);
     if (ctx.save() === false) {
         ctx.data.incomes.splice(index, 0, removed);
-        incomeEntrySaveError = 'Could not save to this device. Nothing was deleted \u2014 try again.';
+        incomeEntrySaveError = 'Could not save to this device. Nothing was deleted. Try again.';
         focusIncomeEntryError = true;
         ctx.render();
         return;
@@ -1057,8 +1057,8 @@ function renderWarnings(root, plan) {
             'p',
             '',
             `Unallocated ${displayPercent(plan.unallocatedPercent)}`
-                + ` (${formatEuro(plan.unallocatedCents)}) — no flexible categories`
-                + ' to receive the remainder.',
+                + ` (${formatEuro(plan.unallocatedCents)}). No flexible category`
+                + ' can receive the remainder.',
         ));
         root.append(unallocated);
     }
@@ -1211,7 +1211,7 @@ function renderPlanSection(ctx) {
             'p',
             'muted',
             'Usual monthly income is applied automatically each month in Month totals. '
-                + 'Add only extra income (bonus, gift, side job) from Home — not this salary again.',
+                + 'On Home, add only extra income such as a bonus or a gift. This salary is already counted.',
         ),
         submit,
     );
@@ -1533,7 +1533,7 @@ function saveSubscriptionEdit(ctx, subscription, fields) {
         subscription.name = snapshot.name;
         subscription.amountCents = snapshot.amountCents;
         subscription.dayOfMonth = snapshot.dayOfMonth;
-        subscriptionEditError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        subscriptionEditError = 'Could not save to this device. Nothing was changed. Try again.';
         focusSubscriptionEditError = true;
         ctx.render();
         return;
@@ -1762,7 +1762,7 @@ function renderSubscriptionsSection(ctx, plan) {
         'p',
         'muted',
         'Each month on this day the app reminds you to log the charge as an expense. '
-            + 'It does not create income — only a due reminder for the subscription amount.',
+            + 'It only reminds you. It does not add income.',
     ));
 
     const nameInput = document.createElement('input');
@@ -1861,7 +1861,7 @@ function renderIncomeSection(ctx) {
     addForm.append(element(
         'p',
         'muted',
-        'Extra income only. Usual salary from Plan is automatic each month — do not enter it here again.',
+        'Extra income only, such as a bonus or a gift. Your salary is added automatically each month.',
     ));
 
     const categorySelect = document.createElement('select');
@@ -2488,9 +2488,8 @@ function renderRightsSection() {
             'p',
             '',
             '© Ļevs Krilovs. All rights reserved. '
-                + 'My Expenses — including the app, its design, code presentation, and related materials '
-                + '(such as the user guide) — is his work. Rights to share, copy, distribute, or republish '
-                + 'it remain exclusively with him.',
+                + 'My Expenses is his work: the app, its design, its code and related materials '
+                + 'such as the user guide. Only he may share, copy, distribute or republish it.',
         ),
         element(
             'p',
@@ -2498,6 +2497,12 @@ function renderRightsSection() {
             'Personal use is allowed only if he gave you access. '
                 + 'Sharing the app, its link, screenshots for redistribution, or the guide '
                 + 'without his permission is not allowed.',
+        ),
+        element(
+            'p',
+            'muted',
+            'The fonts Onest and Unbounded are not his work. They are used under the '
+                + 'SIL Open Font License 1.1.',
         ),
         element('h3', 'category-name', 'Your data'),
         element(

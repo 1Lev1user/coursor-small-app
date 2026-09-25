@@ -1,5 +1,10 @@
-/* My Expenses service worker — bump CACHE_NAME on every deploy. */
-const CACHE_NAME = 'my-expenses-v1-added-ok';
+/*
+ * My Expenses service worker.
+ * VERSION must match package.json; a test checks it. Changing it renames
+ * the cache, which makes installed apps fetch the new files.
+ */
+const VERSION = '1.3.0';
+const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
     './',
@@ -11,6 +16,14 @@ const CORE_ASSETS = [
     './icons/icon-192-maskable.png',
     './icons/icon-512-maskable.png',
     './icons/apple-touch-icon.png',
+    './fonts/onest-latin-wght-normal.woff2',
+    './fonts/onest-latin-ext-wght-normal.woff2',
+    './fonts/onest-cyrillic-wght-normal.woff2',
+    './fonts/onest-cyrillic-ext-wght-normal.woff2',
+    './fonts/unbounded-latin-wght-normal.woff2',
+    './fonts/unbounded-latin-ext-wght-normal.woff2',
+    './fonts/unbounded-cyrillic-wght-normal.woff2',
+    './fonts/unbounded-cyrillic-ext-wght-normal.woff2',
     './src/app.js',
     './src/storage.js',
     './src/months.js',
@@ -22,6 +35,8 @@ const CORE_ASSETS = [
     './src/backup.js',
     './src/files.js',
     './src/donut.js',
+    './src/monthReview.js',
+    './src/limits.js',
     './src/views/add.js',
     './src/views/month.js',
     './src/views/monthNav.js',

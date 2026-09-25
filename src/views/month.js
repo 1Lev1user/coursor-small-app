@@ -1,7 +1,7 @@
 import { monthTotals, freezeMonthPlan } from '../budget.js';
 import { formatEuro, formatPlain, parseAmount } from '../money.js';
 import { addMonths, isInMonth, monthKeyOf, monthLabel } from '../months.js';
-import { UNCATEGORISED_ID } from '../model.js';
+import { SAVINGS_ID, UNCATEGORISED_ID } from '../model.js';
 import { renderMonthNav } from './monthNav.js';
 
 const SHORT_MONTH_NAMES = [
@@ -126,7 +126,11 @@ function headline(caption, amountCents, negativeMessage) {
 
 function renderSummary(root, totals) {
     const card = element('section', 'card stack');
-    const headlines = element('div', 'month-headlines');
+    const longest = Math.max(
+        formatEuro(totals.budgetLeftCents).length,
+        formatEuro(totals.cashLeftCents).length,
+    );
+    const headlines = element('div', longest > 9 ? 'month-headlines is-long' : 'month-headlines');
     headlines.append(
         headline('Budget left', totals.budgetLeftCents, 'over budget'),
         headline('Cash left', totals.cashLeftCents, 'more spent than came in'),
@@ -194,6 +198,8 @@ function renderCategories(root, categories, budgetCents) {
         fill.setAttribute('aria-hidden', 'true');
         if (category.over) {
             fill.classList.add('is-over');
+        } else if (category.id === SAVINGS_ID) {
+            fill.classList.add('is-savings');
         }
         track.setAttribute('role', 'progressbar');
         track.setAttribute('aria-label', category.name);
@@ -210,13 +216,14 @@ function renderCategories(root, categories, budgetCents) {
         }
         track.append(fill);
 
-        const details = element('div', 'row category-details');
+        item.append(heading, track);
         if (noLimit) {
+            const details = element('div', 'row category-details');
             details.append(element('span', 'muted', 'No limit'));
-        } else {
-            details.append(element('span', 'muted', displayPercent(category.percent)));
+            item.append(details);
         }
         if (category.over) {
+            const details = element('div', 'row category-details');
             details.append(
                 element(
                     'span',
@@ -224,9 +231,8 @@ function renderCategories(root, categories, budgetCents) {
                     `over by ${formatEuro(category.overByCents)}`,
                 ),
             );
+            item.append(details);
         }
-
-        item.append(heading, track, details);
         list.append(item);
     }
 
@@ -382,7 +388,7 @@ function saveExpenseEdit(ctx, expense, fields) {
             delete ctx.data.monthPlans[newMonthKey];
         }
 
-        entryUi.saveError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        entryUi.saveError = 'Could not save to this device. Nothing was changed. Try again.';
         entryUi.focusError = true;
         ctx.render();
         return;
@@ -457,7 +463,7 @@ function saveIncomeEdit(ctx, income, fields) {
             delete ctx.data.monthPlans[newMonthKey];
         }
 
-        entryUi.saveError = 'Could not save to this device. Nothing was changed \u2014 try again.';
+        entryUi.saveError = 'Could not save to this device. Nothing was changed. Try again.';
         entryUi.focusError = true;
         ctx.render();
         return;
@@ -480,7 +486,7 @@ function confirmDeleteEntry(ctx, type, entry) {
     const [removed] = list.splice(index, 1);
     if (ctx.save() === false) {
         list.splice(index, 0, removed);
-        entryUi.saveError = 'Could not save to this device. Nothing was deleted \u2014 try again.';
+        entryUi.saveError = 'Could not save to this device. Nothing was deleted. Try again.';
         entryUi.focusError = true;
         ctx.render();
         return;
@@ -534,7 +540,7 @@ function renderExpenseEditor(ctx, expense) {
     noteInput.autocomplete = 'off';
     noteInput.placeholder = 'Optional';
     noteInput.value = draft.note;
-    const noteField = buildField(`edit-exp-note-${expense.id}`, 'Note \u2014 what was it?', noteInput);
+    const noteField = buildField(`edit-exp-note-${expense.id}`, 'Note (what was it?)', noteInput);
 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';

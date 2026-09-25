@@ -14,7 +14,7 @@ function element(tagName, className, text) {
 export function renderMonthNav(root, ctx) {
     const navigator = element('div', 'month-navigator');
 
-    const previous = element('button', 'btn btn-ghost month-nav-arrow', '\u2039');
+    const previous = element('button', 'btn month-nav-arrow', '\u2039');
     previous.type = 'button';
     previous.setAttribute('aria-label', 'Previous month');
     previous.addEventListener('click', () => ctx.setMonthKey(addMonths(ctx.monthKey, -1)));
@@ -36,7 +36,7 @@ export function renderMonthNav(root, ctx) {
     const center = element('div', 'month-nav-center');
     center.append(label, picker);
 
-    const next = element('button', 'btn btn-ghost month-nav-arrow', '\u203a');
+    const next = element('button', 'btn month-nav-arrow', '\u203a');
     next.type = 'button';
     next.setAttribute('aria-label', 'Next month');
     next.addEventListener('click', () => ctx.setMonthKey(addMonths(ctx.monthKey, 1)));
