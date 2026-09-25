@@ -506,11 +506,57 @@ tabbarElement.addEventListener('click', (event) => {
 
 requestPersistence();
 
+function showUpdateBar(worker) {
+    if (document.getElementById('update-bar') !== null) {
+        return;
+    }
+    const bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.className = 'update-bar';
+    bar.setAttribute('role', 'status');
+    const text = document.createElement('p');
+    text.textContent = 'A new version is ready.';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-primary';
+    button.textContent = 'Update';
+    button.addEventListener('click', () => {
+        button.disabled = true;
+        worker.postMessage('SKIP_WAITING');
+    });
+    bar.append(text, button);
+    document.body.append(bar);
+}
+
+function watchForUpdates(registration) {
+    const offer = (worker) => {
+        if (worker !== null && navigator.serviceWorker.controller !== null) {
+            showUpdateBar(worker);
+        }
+    };
+    offer(registration.waiting);
+    registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed') {
+                offer(worker);
+            }
+        });
+    });
+}
+
 if (
     (location.protocol === 'http:' || location.protocol === 'https:')
     && 'serviceWorker' in navigator
 ) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!reloading) {
+            reloading = true;
+            location.reload();
+        }
+    });
+    navigator.serviceWorker.register('./sw.js').then(watchForUpdates).catch(() => {});
 }
 
 render();

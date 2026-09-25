@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultData } from '../src/model.js';
+import { SCHEMA_VERSION, defaultData } from '../src/model.js';
 import { countRecords, exportBackup, importBackup } from '../src/backup.js';
 
 test('exportBackup stringifies data without mutating it', () => {
@@ -32,7 +32,7 @@ test('importBackup rejects an empty object', () => {
 });
 
 test('importBackup rejects an unsupported schema version', () => {
-    const raw = JSON.stringify({ ...defaultData(), version: 2 });
+    const raw = JSON.stringify({ ...defaultData(), version: SCHEMA_VERSION + 1 });
     const result = importBackup(raw);
     assert.equal(result.ok, false);
     assert.match(result.reason, /version/i);
@@ -56,4 +56,15 @@ test('countRecords reports expenses, incomes, and subscriptions', () => {
         incomes: 1,
         subscriptions: 3,
     });
+});
+
+test('importBackup accepts a version 1 backup and migrates it', () => {
+    const old = { ...defaultData(), version: 1 };
+    delete old.rules;
+    old.incomes = [{ id: 'i1', incomeCategoryId: 'salary', amountCents: 1000, note: '', date: '2026-01-02' }];
+    const result = importBackup(JSON.stringify(old));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.version, SCHEMA_VERSION);
+    assert.equal(result.data.incomes[0].originalAmountCents, 1000);
+    assert.deepEqual(result.data.rules, []);
 });

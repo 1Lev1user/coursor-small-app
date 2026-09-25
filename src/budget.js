@@ -15,6 +15,11 @@ export function euroCentsFromPercent(percent, monthlyBudgetCents) {
     return splitShares(monthlyBudgetCents, [percent])[0];
 }
 
+/** A refund (money back from a shop) lowers spending; everything else raises it. */
+export function spendCents(expense) {
+    return expense.refund === true ? -expense.amountCents : expense.amountCents;
+}
+
 export function isNoLimitCategory(category) {
     return category?.system !== true
         && category?.pinned !== true
@@ -182,10 +187,10 @@ export function monthTotals(data, monthKey) {
     const monthExpenses = data.expenses.filter(({ date }) => isInMonth(date, monthKey));
     const spendingByCategory = new Map();
 
-    for (const { categoryId, amountCents } of monthExpenses) {
+    for (const expense of monthExpenses) {
         spendingByCategory.set(
-            categoryId,
-            (spendingByCategory.get(categoryId) ?? 0) + amountCents,
+            expense.categoryId,
+            (spendingByCategory.get(expense.categoryId) ?? 0) + spendCents(expense),
         );
     }
 
@@ -208,7 +213,7 @@ export function monthTotals(data, monthKey) {
     }
 
     const spentCents = monthExpenses.reduce(
-        (total, expense) => total + expense.amountCents,
+        (total, expense) => total + spendCents(expense),
         0,
     );
     const extraIncomeCents = data.incomes
@@ -272,7 +277,7 @@ export function subcategoryTotals(data, monthKey, categoryId) {
             : '';
         spendingBySubcategory.set(
             id,
-            (spendingBySubcategory.get(id) ?? 0) + expense.amountCents,
+            (spendingBySubcategory.get(id) ?? 0) + spendCents(expense),
         );
     }
 

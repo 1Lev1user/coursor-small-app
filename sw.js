@@ -3,7 +3,7 @@
  * VERSION must match package.json; a test checks it. Changing it renames
  * the cache, which makes installed apps fetch the new files.
  */
-const VERSION = '1.3.0';
+const VERSION = '2.0.0';
 const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
@@ -37,6 +37,7 @@ const CORE_ASSETS = [
     './src/donut.js',
     './src/monthReview.js',
     './src/limits.js',
+    './src/import/types.js',
     './src/views/add.js',
     './src/views/month.js',
     './src/views/monthNav.js',
@@ -45,11 +46,26 @@ const CORE_ASSETS = [
     './src/views/setup.js',
 ];
 
+// Versions before 2.0 cannot show the "Update" bar, so replace them at once.
+const LEGACY_CACHE = /^my-expenses-(v1-|1\.)/;
+
 self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)),
-    );
-    self.skipWaiting();
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.addAll(CORE_ASSETS);
+        const keys = await caches.keys();
+        if (keys.some((key) => LEGACY_CACHE.test(key))) {
+            await self.skipWaiting();
+        }
+    })());
+});
+
+// A newer version waits until the page asks for it, so one page never
+// mixes files from two versions.
+self.addEventListener('message', (event) => {
+    if (event.data === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('activate', (event) => {

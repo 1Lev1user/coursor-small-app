@@ -1510,3 +1510,27 @@ body.is-setup .tabbar {
     }
 }
 
+/* Update available */
+
+.update-bar {
+    position: fixed;
+    left: calc(var(--s4) + env(safe-area-inset-left));
+    right: calc(var(--s4) + env(safe-area-inset-right));
+    bottom: calc(var(--tabbar-height) + 1.6rem + var(--s3) + env(safe-area-inset-bottom));
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: var(--s3) var(--s3) var(--s3) var(--s4);
+    border-radius: var(--radius-sm);
+    background: var(--block);
+    color: var(--block-ink);
+    font-weight: 600;
+}
+
+.update-bar .btn-primary {
+    flex: none;
+    background: var(--block-ink);
+    color: var(--block);
+}

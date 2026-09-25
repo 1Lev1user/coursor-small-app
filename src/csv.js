@@ -2,7 +2,16 @@ import { formatPlain } from './money.js';
 import { isInMonth } from './months.js';
 
 const BOM = '\uFEFF';
-const HEADER_FIELDS = ['Date', 'Type', 'Category', 'Subcategory', 'Note', 'Amount'];
+const HEADER_FIELDS = [
+    'Date',
+    'Type',
+    'Category',
+    'Subcategory',
+    'Note',
+    'Amount',
+    'Currency',
+    'Original amount',
+];
 
 export function csvFilename(monthKey, flavour) {
     return `expenses-${monthKey}-${flavour}.csv`;
@@ -50,15 +59,18 @@ function monthRows(data, monthKey) {
         if (!isInMonth(expense.date, monthKey)) {
             continue;
         }
+        const sign = expense.refund === true ? -1 : 1;
         rows.push({
             date: expense.date,
-            type: 'Expense',
+            type: expense.refund === true ? 'Refund' : 'Expense',
             typeOrder: 0,
             id: expense.id,
             category: expenseCategoryName(data, expense),
             subcategory: expenseSubcategoryName(data, expense),
             note: expense.note ?? '',
-            amountCents: expense.amountCents,
+            amountCents: sign * expense.amountCents,
+            currency: expense.currency ?? 'EUR',
+            originalAmountCents: sign * (expense.originalAmountCents ?? expense.amountCents),
         });
     }
 
@@ -75,6 +87,8 @@ function monthRows(data, monthKey) {
             subcategory: '',
             note: income.note ?? '',
             amountCents: income.amountCents,
+            currency: income.currency ?? 'EUR',
+            originalAmountCents: income.originalAmountCents ?? income.amountCents,
         });
     }
 
@@ -105,6 +119,8 @@ export function buildMonthCsv(data, monthKey, flavour) {
         row.subcategory,
         row.note,
         formatPlain(row.amountCents, decimalSeparator),
+        row.currency,
+        formatPlain(row.originalAmountCents, decimalSeparator),
     ].map((field) => escapeField(field, delimiter)).join(delimiter));
 
     return `${BOM}${[header, ...rows].join('\n')}\n`;

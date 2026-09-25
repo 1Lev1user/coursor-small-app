@@ -15,6 +15,7 @@ import {
     euroCentsFromPercent,
     syncCategoryPlanFields,
     recentEntries,
+    spendCents,
 } from '../src/budget.js';
 
 function expense(id, categoryId, amountCents, date, subcategoryId = '') {
@@ -712,4 +713,21 @@ test('syncCategoryPlanFields clears plan fields on no-limit categories', () => {
     assert.equal(categories[0].pinned, false);
     assert.equal(categories[0].percent, 0);
     assert.equal(categories[0].limitCents, 0);
+});
+
+test('refunds lower month, category and subcategory spending', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    data.expenses = [
+        expense('e1', 'random', 5000, '2026-09-01', 'shopping'),
+        { ...expense('r1', 'random', 1200, '2026-09-03', 'shopping'), refund: true },
+    ];
+
+    const totals = monthTotals(data, '2026-09');
+    assert.equal(spendCents(data.expenses[1]), -1200);
+    assert.equal(totals.spentCents, 3800);
+    assert.equal(totals.categories.find(({ id }) => id === 'random').spentCents, 3800);
+    assert.deepEqual(subcategoryTotals(data, '2026-09', 'random'), [
+        { id: 'shopping', name: 'Shopping', spentCents: 3800 },
+    ]);
 });

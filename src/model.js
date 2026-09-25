@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const UNCATEGORISED_ID = 'uncategorised';
 export const SAVINGS_ID = 'savings';
 export const SUBSCRIPTIONS_ID = 'subscriptions';
@@ -77,6 +77,7 @@ export function defaultData() {
             lastBackupISO: null,
             othersSeeded: true,
             monthReviewDismissedFor: null,
+            backupSnoozedUntil: '',
         },
         categories: [
             {
@@ -132,7 +133,86 @@ export function defaultData() {
         incomes: [],
         subscriptions: [],
         monthPlans: {},
+        rules: [],
+        bankLayouts: [],
+        imports: [],
+        templates: [],
+        goals: [],
     };
+}
+
+const V2_ARRAYS = ['rules', 'bankLayouts', 'imports', 'templates', 'goals'];
+
+function isCurrencyCode(value) {
+    return typeof value === 'string' && /^[A-Z]{3}$/.test(value);
+}
+
+function stringOr(value, fallback = '') {
+    return typeof value === 'string' ? value : fallback;
+}
+
+/** Fills the v2 fields of one expense or income; `isExpense` adds refund and goalId. */
+export function normaliseEntry(entry, isExpense) {
+    entry.currency = isCurrencyCode(entry.currency) ? entry.currency : 'EUR';
+    if (!Number.isInteger(entry.originalAmountCents) || entry.originalAmountCents < 0) {
+        entry.originalAmountCents = entry.amountCents;
+    }
+    if (entry.currency === 'EUR') {
+        entry.originalAmountCents = entry.amountCents;
+    }
+    entry.importId = stringOr(entry.importId);
+    entry.bankRef = stringOr(entry.bankRef);
+    entry.fingerprint = stringOr(entry.fingerprint);
+    if (isExpense) {
+        entry.refund = entry.refund === true;
+        entry.goalId = stringOr(entry.goalId);
+    }
+    return entry;
+}
+
+/*
+ * Each step lifts saved data by exactly one version. Steps only add or
+ * reshape fields; they never drop user records.
+ */
+const MIGRATIONS = {
+    1(data) {
+        const next = JSON.parse(JSON.stringify(data));
+        next.version = 2;
+        for (const field of V2_ARRAYS) {
+            next[field] = [];
+        }
+        next.settings = { ...next.settings, backupSnoozedUntil: '' };
+        next.expenses = (next.expenses ?? []).map((entry) => normaliseEntry({ ...entry }, true));
+        next.incomes = (next.incomes ?? []).map((entry) => normaliseEntry({ ...entry }, false));
+        return next;
+    },
+};
+
+export function migrate(raw) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        return { ok: false, reason: 'Data must be an object.' };
+    }
+    if (typeof raw.version !== 'number' || !Number.isInteger(raw.version) || raw.version < 1) {
+        return { ok: false, reason: 'Schema version is missing or invalid.' };
+    }
+    if (raw.version > SCHEMA_VERSION) {
+        return { ok: false, reason: `Unsupported schema version ${raw.version}.`, newer: true };
+    }
+
+    let data = raw;
+    const from = raw.version;
+    while (data.version < SCHEMA_VERSION) {
+        const step = MIGRATIONS[data.version];
+        if (typeof step !== 'function') {
+            return { ok: false, reason: `No update path from version ${data.version}.` };
+        }
+        try {
+            data = step(data);
+        } catch {
+            return { ok: false, reason: `Update from version ${data.version} failed.` };
+        }
+    }
+    return { ok: true, data, from };
 }
 
 export function normalise(raw) {
@@ -141,17 +221,11 @@ export function normalise(raw) {
             return { ok: false, reason: 'Data must be an object.' };
         }
 
-        const data = JSON.parse(JSON.stringify(raw));
-
-        if (typeof data.version !== 'number') {
-            return { ok: false, reason: 'Schema version is missing or invalid.' };
+        const migrated = migrate(raw);
+        if (!migrated.ok) {
+            return { ok: false, reason: migrated.reason };
         }
-        if (data.version !== SCHEMA_VERSION) {
-            return {
-                ok: false,
-                reason: `Unsupported schema version ${data.version}.`,
-            };
-        }
+        const data = JSON.parse(JSON.stringify(migrated.data));
 
         for (const field of [
             'categories',
@@ -175,6 +249,16 @@ export function normalise(raw) {
 
         if (!Object.hasOwn(data, 'monthPlans')) {
             data.monthPlans = {};
+        }
+        for (const field of V2_ARRAYS) {
+            if (!Array.isArray(data[field])) {
+                data[field] = [];
+            }
+        }
+        data.expenses.forEach((entry) => normaliseEntry(entry, true));
+        data.incomes.forEach((entry) => normaliseEntry(entry, false));
+        if (typeof data.settings?.backupSnoozedUntil !== 'string') {
+            data.settings.backupSnoozedUntil = '';
         }
         if (!Object.hasOwn(data.settings, 'lastBackupISO')) {
             data.settings.lastBackupISO = null;
