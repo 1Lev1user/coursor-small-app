@@ -162,6 +162,7 @@ export function normaliseEntry(entry, isExpense) {
     }
     entry.importId = stringOr(entry.importId);
     entry.bankRef = stringOr(entry.bankRef);
+    entry.bankText = stringOr(entry.bankText);
     entry.fingerprint = stringOr(entry.fingerprint);
     if (isExpense) {
         entry.refund = entry.refund === true;

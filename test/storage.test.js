@@ -46,6 +46,7 @@ test('save and load round-trip data through the contractual key', () => {
         refund: false,
         importId: '',
         bankRef: '',
+        bankText: '',
         fingerprint: '',
         goalId: '',
     });

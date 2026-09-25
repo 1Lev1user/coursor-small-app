@@ -226,7 +226,7 @@ test('buildImport and applyImport create v2 entries and counts', () => {
     const importId = result.importId;
     const expense = data.expenses[2];
     assert.deepEqual(Object.keys(expense).sort(), [
-        'amountCents', 'bankRef', 'categoryId', 'currency', 'date', 'fingerprint', 'goalId',
+        'amountCents', 'bankRef', 'bankText', 'categoryId', 'currency', 'date', 'fingerprint', 'goalId',
         'id', 'importId', 'note', 'originalAmountCents', 'refund', 'subcategoryId',
     ]);
     assert.match(expense.id, /^exp_/);
@@ -245,7 +245,7 @@ test('buildImport and applyImport create v2 entries and counts', () => {
 
     const income = data.incomes[0];
     assert.deepEqual(Object.keys(income).sort(), [
-        'amountCents', 'bankRef', 'currency', 'date', 'fingerprint', 'id', 'importId',
+        'amountCents', 'bankRef', 'bankText', 'currency', 'date', 'fingerprint', 'id', 'importId',
         'incomeCategoryId', 'note', 'originalAmountCents',
     ]);
     assert.match(income.id, /^inc_/);
@@ -490,4 +490,71 @@ test('the same built import cannot be applied twice', () => {
     const snapshot = structuredClone(data);
     assert.equal(applyImport(data, built).ok, false);
     assert.deepEqual(data, snapshot);
+});
+
+test('Show as text becomes the note and is remembered on the rule', async () => {
+    const { applyRuleToExisting } = await import('../src/import/core.js');
+    const data = defaultData();
+    const rows = [statementRow({
+        date: '2026-09-10',
+        amountCents: 2340,
+        direction: 'out',
+        description: 'SIA Kārlis veikals 12',
+        counterparty: 'SIA Kārlis',
+    })];
+    const decisions = defaultDecisions(data, rows);
+    decisions[0].categoryId = 'necessary';
+    decisions[0].subcategoryId = 'groceries';
+    decisions[0].showAs = 'Produkti';
+    decisions[0].remember = true;
+    decisions[0].pattern = 'KARLIS';
+
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv' });
+    const applied = applyImport(data, built, {});
+    assert.equal(applied.ok, true);
+    assert.equal(data.expenses[0].note, 'Produkti');
+    assert.equal(data.expenses[0].bankText, 'SIA Kārlis');
+    assert.equal(data.rules[0].note, 'Produkti');
+
+    const next = defaultDecisions(data, [statementRow({ ...rows[0], date: '2026-09-20' })]);
+    assert.equal(next[0].showAs, 'Produkti');
+    assert.equal(next[0].subcategoryId, 'groceries');
+
+    data.expenses.push({
+        ...data.expenses[0],
+        id: 'exp_old',
+        categoryId: 'random',
+        subcategoryId: '',
+        note: 'SIA Kārlis',
+    });
+    data.expenses.push({ ...data.expenses[0], id: 'exp_manual', importId: '', note: 'Kārlis by hand', bankText: '' });
+    assert.equal(applyRuleToExisting(data, data.rules[0].id), 2);
+    const old = data.expenses.find(({ id }) => id === 'exp_old');
+    assert.equal(old.categoryId, 'necessary');
+    assert.equal(old.note, 'Produkti');
+    assert.equal(data.expenses.find(({ id }) => id === 'exp_manual').note, 'Kārlis by hand');
+});
+
+test('transfers and skipped rows are recognised on the next import of the same file', () => {
+    const data = defaultData();
+    const rows = [
+        statementRow({ date: '2026-09-02', amountCents: 50000, direction: 'out', description: 'To my savings', bankRef: 'T-1' }),
+        statementRow({ date: '2026-09-03', amountCents: 120, direction: 'out', description: 'Bank fee' }),
+        statementRow({ date: '2026-09-04', amountCents: 900, direction: 'out', description: 'RIMI' }),
+    ];
+    const decisions = defaultDecisions(data, rows);
+    decisions[0].kind = 'transfer';
+    decisions[1].kind = 'skip';
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv' });
+    assert.equal(applyImport(data, built, {}).ok, true);
+
+    const again = findDuplicates(data, rows);
+    assert.deepEqual(again.map(({ level }) => level), ['exact', 'exact', 'exact']);
+    assert.equal(again[0].matchType, 'ignored');
+    assert.equal(again[0].ignoredKind, 'transfer');
+    assert.equal(again[1].ignoredKind, 'skip');
+    assert.equal(defaultDecisions(data, rows, again).every(({ include }) => include === false), true);
+
+    undoImport(data, data.imports[0].id);
+    assert.deepEqual(findDuplicates(data, rows).map(({ level }) => level), [null, null, null]);
 });

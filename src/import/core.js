@@ -105,11 +105,27 @@ export function findDuplicates(data, rows) {
         results[index] = { level, matchId: item.entry.id, matchType: item.type };
     };
 
+    const ignored = new Map();
+    for (const record of data.imports ?? []) {
+        if (record.undoneAt) continue;
+        for (const mark of record.ignored ?? []) {
+            if (mark.bankRef) ignored.set(`ref|${mark.direction}|${mark.bankRef}`, mark.kind);
+            if (mark.fingerprint) ignored.set(`fp|${mark.fingerprint}`, mark.kind);
+        }
+    }
+
     rows.forEach((row, index) => {
         const item = (row.bankRef && byBankRef.get(`${row.direction}|${row.bankRef}`))
             || byFingerprint.get(fingerprints[index]);
         if (item && !claimed.has(item.entry.id)) {
             claim(index, 'exact', item);
+            return;
+        }
+        const ignoredKind = (row.bankRef && ignored.get(`ref|${row.direction}|${row.bankRef}`))
+            || ignored.get(`fp|${fingerprints[index]}`);
+        if (ignoredKind) {
+            // A transfer or skipped row from an earlier import: nothing was stored for it.
+            results[index] = { level: 'exact', matchId: '', matchType: 'ignored', ignoredKind };
         }
     });
 
@@ -226,6 +242,10 @@ export function applyRules(rules, row) {
     return best;
 }
 
+function cleanNote(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+}
+
 function cleanRule(rule) {
     const kind = RULE_KINDS.includes(rule.kind) ? rule.kind : null;
     const pattern = String(rule.pattern ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
@@ -241,6 +261,7 @@ function cleanRule(rule) {
             subcategoryId: kind === 'expense' ? String(rule.subcategoryId ?? '') : '',
             incomeCategoryId: kind === 'income' ? String(rule.incomeCategoryId ?? '') : '',
             refund: kind === 'expense' && rule.refund === true,
+            note: cleanNote(rule.note),
         },
     };
 }
@@ -326,15 +347,22 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
             incomeCategoryId: rule?.incomeCategoryId || defaultIncomeCategoryId(data),
             remember: false,
             ruleId: rule?.id ?? '',
+            showAs: rule?.note ?? '',
         };
     });
 }
 
+function bankTextOf(row) {
+    return String(row.counterparty || row.description || '').replace(/\s+/g, ' ').trim();
+}
+
+/** Entry note: an explicit note, else the "Show as" text, else the bank's own text. */
 function noteFor(row, decision) {
-    const source = typeof decision.note === 'string'
-        ? decision.note
-        : (row.counterparty || row.description || '');
-    return source.replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+    if (typeof decision.note === 'string') {
+        return cleanNote(decision.note);
+    }
+    const showAs = cleanNote(decision.showAs);
+    return showAs !== '' ? showAs : cleanNote(bankTextOf(row));
 }
 
 function validateDecision(data, row, decision) {
@@ -385,6 +413,7 @@ function ruleFromDecision(row, decision) {
         subcategoryId: decision.subcategoryId ?? '',
         incomeCategoryId: decision.incomeCategoryId ?? '',
         refund,
+        note: cleanNote(decision.showAs),
     };
 }
 
@@ -408,6 +437,7 @@ export function buildImport(data, decisions, meta) {
     const expenses = [];
     const incomes = [];
     const rulesByPattern = new Map();
+    const ignored = [];
     let totalOutCents = 0;
     let totalInCents = 0;
 
@@ -430,12 +460,14 @@ export function buildImport(data, decisions, meta) {
             if (rule) rulesByPattern.set(rule.pattern, rule);
         }
 
-        if (decision.kind === 'transfer') {
-            counts.transfers += 1;
-            return;
-        }
-        if (decision.kind === 'skip') {
-            counts.skipped += 1;
+        if (decision.kind === 'transfer' || decision.kind === 'skip') {
+            counts[decision.kind === 'transfer' ? 'transfers' : 'skipped'] += 1;
+            ignored.push({
+                kind: decision.kind,
+                direction: row.direction,
+                bankRef: row.bankRef ?? '',
+                fingerprint: fingerprints[index],
+            });
             return;
         }
 
@@ -450,6 +482,7 @@ export function buildImport(data, decisions, meta) {
                 : row.originalAmountCents,
             importId,
             bankRef: row.bankRef ?? '',
+            bankText: bankTextOf(row),
             fingerprint: fingerprints[index],
         };
 
@@ -492,6 +525,7 @@ export function buildImport(data, decisions, meta) {
         periodTo: dates[dates.length - 1] ?? '',
         expenseIds: expenses.map(({ id }) => id),
         incomeIds: incomes.map(({ id }) => id),
+        ignored,
         undoneAt: '',
     };
 
@@ -630,4 +664,38 @@ export function summarise(built) {
         periodFrom: built.importRecord.periodFrom,
         periodTo: built.importRecord.periodTo,
     };
+}
+
+/**
+ * Re-applies one rule to entries imported earlier whose bank text matches it:
+ * sets the category (and subcategory) and, when the rule has one, the "Show as" note.
+ * Manual entries are never touched. Returns how many entries changed.
+ */
+export function applyRuleToExisting(data, ruleId) {
+    const rule = (data.rules ?? []).find(({ id }) => id === ruleId);
+    if (!rule) return 0;
+    const pattern = matchText(rule.pattern);
+    if (pattern === '') return 0;
+
+    let changed = 0;
+    const matches = (entry) => entry.importId
+        && matchText(entry.bankText || entry.note || '').includes(pattern);
+
+    if (rule.kind === 'expense') {
+        for (const expense of data.expenses ?? []) {
+            if (!matches(expense) || expense.refund !== (rule.refund === true)) continue;
+            expense.categoryId = rule.categoryId || expense.categoryId;
+            expense.subcategoryId = rule.categoryId ? (rule.subcategoryId ?? '') : expense.subcategoryId;
+            if (rule.note) expense.note = rule.note;
+            changed += 1;
+        }
+    } else if (rule.kind === 'income') {
+        for (const income of data.incomes ?? []) {
+            if (!matches(income)) continue;
+            income.incomeCategoryId = rule.incomeCategoryId || income.incomeCategoryId;
+            if (rule.note) income.note = rule.note;
+            changed += 1;
+        }
+    }
+    return changed;
 }

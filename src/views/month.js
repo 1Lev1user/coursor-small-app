@@ -868,6 +868,10 @@ function renderEntry(ctx, item) {
     if (typeof entry.note === 'string' && entry.note.trim() !== '') {
         description.append(element('p', 'muted', entry.note));
     }
+    const bankText = typeof entry.bankText === 'string' ? entry.bankText.trim() : '';
+    if (bankText !== '' && bankText !== String(entry.note ?? '').trim()) {
+        description.append(element('p', 'muted entry-bank-text', `Bank: ${bankText}`));
+    }
     const tags = entryTags(type, entry);
     if (tags !== null) {
         description.append(tags);

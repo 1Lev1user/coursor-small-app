@@ -9,11 +9,11 @@ function textParts(entry, type, data) {
     if (type === 'expense') {
         const category = data.categories.find(({ id }) => id === entry.categoryId);
         const subcategory = category?.subcategories.find(({ id }) => id === entry.subcategoryId);
-        return [entry.note, category?.name, subcategory?.name];
+        return [entry.note, entry.bankText, category?.name, subcategory?.name];
     }
 
     const incomeCategory = data.incomeCategories.find(({ id }) => id === entry.incomeCategoryId);
-    return [entry.note, incomeCategory?.name];
+    return [entry.note, entry.bankText, incomeCategory?.name];
 }
 
 function matchesEntry(entry, type, data, filters, normalisedText) {

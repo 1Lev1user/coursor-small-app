@@ -102,3 +102,17 @@ test('searchEntries covers the whole history, not just one month', () => {
         ['e3'],
     );
 });
+
+test('searchEntries also finds the original bank text of imported entries', () => {
+    const data = defaultData();
+    data.expenses = [{
+        id: 'e1',
+        categoryId: 'necessary',
+        subcategoryId: 'groceries',
+        amountCents: 2340,
+        note: 'Produkti',
+        bankText: 'SIA Kārlis',
+        date: '2026-09-10',
+    }];
+    assert.deepEqual(searchEntries(data, { text: 'karlis' }).map(({ entry }) => entry.id), ['e1']);
+});
