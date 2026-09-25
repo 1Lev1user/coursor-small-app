@@ -1,8 +1,17 @@
 import { monthTotals, freezeMonthPlan } from '../budget.js';
-import { formatEuro, formatPlain, parseAmount } from '../money.js';
+import { formatEuro, formatPlain } from '../money.js';
 import { addMonths, isInMonth, monthKeyOf, monthLabel } from '../months.js';
 import { SAVINGS_ID, UNCATEGORISED_ID } from '../model.js';
+import { describeForeign } from '../currency.js';
 import { renderMonthNav } from './monthNav.js';
+import {
+    amountErrorText,
+    buildCurrencyFields,
+    currencyDraftFrom,
+    originalErrorText,
+} from './currencyFields.js';
+import { entryAmountText, entryTags } from './entryDisplay.js';
+import { renderSearchPanel } from './searchPanel.js';
 
 const SHORT_MONTH_NAMES = [
     'Jan',
@@ -130,7 +139,7 @@ function renderSummary(root, totals) {
         formatEuro(totals.budgetLeftCents).length,
         formatEuro(totals.cashLeftCents).length,
     );
-    const headlines = element('div', longest > 9 ? 'month-headlines is-long' : 'month-headlines');
+    const headlines = element('div', longest > 8 ? 'month-headlines is-long' : 'month-headlines');
     headlines.append(
         headline('Budget left', totals.budgetLeftCents, 'over budget'),
         headline('Cash left', totals.cashLeftCents, 'more spent than came in'),
@@ -286,6 +295,8 @@ function openEditExpense(ctx, expense) {
         amount: formatPlain(expense.amountCents),
         note: typeof expense.note === 'string' ? expense.note : '',
         date: expense.date,
+        refund: expense.refund === true,
+        ...currencyDraftFrom(expense),
     };
     ctx.render();
 }
@@ -300,6 +311,7 @@ function openEditIncome(ctx, income) {
         amount: formatPlain(income.amountCents),
         note: typeof income.note === 'string' ? income.note : '',
         date: income.date,
+        ...currencyDraftFrom(income),
     };
     ctx.render();
 }
@@ -312,7 +324,7 @@ function openConfirmDelete(ctx, type, id) {
     ctx.render();
 }
 
-function saveExpenseEdit(ctx, expense, fields) {
+function saveExpenseEdit(ctx, expense, fields, currency, refundInput) {
     const draft = entryUi.draft;
     entryUi.saveError = '';
 
@@ -325,8 +337,10 @@ function saveExpenseEdit(ctx, expense, fields) {
     const category = categories.find(({ id }) => id === categoryId);
     const subcategories = category?.subcategories ?? [];
     const subcategoryId = subcategories.length > 0 ? fields.subcategory.control.value : '';
-    const amountCents = parseAmount(fields.amount.control.value);
+    const amounts = currency.read();
+    const { amountCents } = amounts;
     const date = fields.date.control.value;
+    const refund = refundInput.checked;
     let firstInvalid = null;
 
     draft.categoryId = categoryId;
@@ -334,6 +348,7 @@ function saveExpenseEdit(ctx, expense, fields) {
     draft.amount = fields.amount.control.value;
     draft.note = fields.note.control.value;
     draft.date = date;
+    draft.refund = refund;
 
     if (categoryId === '') {
         setError(fields.category, 'Choose a category.');
@@ -343,8 +358,12 @@ function saveExpenseEdit(ctx, expense, fields) {
         setError(fields.subcategory, 'Choose a subcategory.');
         firstInvalid ??= fields.subcategory.control;
     }
+    if (amounts.originalAmountCents === null) {
+        setError(currency.originalField, originalErrorText(amounts.currency));
+        firstInvalid ??= currency.originalField.control;
+    }
     if (amountCents === null) {
-        setError(fields.amount, 'Enter an amount above zero, like 12.50 or 12,50.');
+        setError(fields.amount, amountErrorText(amounts.currency));
         firstInvalid ??= fields.amount.control;
     }
     if (monthKeyOf(date) === null) {
@@ -363,6 +382,9 @@ function saveExpenseEdit(ctx, expense, fields) {
         amountCents: expense.amountCents,
         note: expense.note,
         date: expense.date,
+        currency: expense.currency,
+        originalAmountCents: expense.originalAmountCents,
+        refund: expense.refund,
     };
     const oldMonthKey = monthKeyOf(snapshot.date);
     const newMonthKey = monthKeyOf(date);
@@ -374,6 +396,9 @@ function saveExpenseEdit(ctx, expense, fields) {
     expense.amountCents = amountCents;
     expense.note = fields.note.control.value.trim();
     expense.date = date;
+    expense.currency = amounts.currency;
+    expense.originalAmountCents = amounts.originalAmountCents;
+    expense.refund = refund;
     if (monthChanged) {
         freezeMonthPlan(ctx.data, newMonthKey);
     }
@@ -384,6 +409,9 @@ function saveExpenseEdit(ctx, expense, fields) {
         expense.amountCents = snapshot.amountCents;
         expense.note = snapshot.note;
         expense.date = snapshot.date;
+        expense.currency = snapshot.currency;
+        expense.originalAmountCents = snapshot.originalAmountCents;
+        expense.refund = snapshot.refund;
         if (monthChanged && !planWasAlreadyFrozen) {
             delete ctx.data.monthPlans[newMonthKey];
         }
@@ -399,7 +427,7 @@ function saveExpenseEdit(ctx, expense, fields) {
     ctx.toast('Updated');
 }
 
-function saveIncomeEdit(ctx, income, fields) {
+function saveIncomeEdit(ctx, income, fields, currency) {
     const draft = entryUi.draft;
     entryUi.saveError = '';
 
@@ -408,7 +436,8 @@ function saveIncomeEdit(ctx, income, fields) {
     }
 
     const incomeCategoryId = fields.category.control.value;
-    const amountCents = parseAmount(fields.amount.control.value);
+    const amounts = currency.read();
+    const { amountCents } = amounts;
     const date = fields.date.control.value;
     let firstInvalid = null;
 
@@ -421,8 +450,12 @@ function saveIncomeEdit(ctx, income, fields) {
         setError(fields.category, 'Choose an income category.');
         firstInvalid ??= fields.category.control;
     }
+    if (amounts.originalAmountCents === null) {
+        setError(currency.originalField, originalErrorText(amounts.currency));
+        firstInvalid ??= currency.originalField.control;
+    }
     if (amountCents === null) {
-        setError(fields.amount, 'Enter an amount above zero, like 12.50 or 12,50.');
+        setError(fields.amount, amountErrorText(amounts.currency));
         firstInvalid ??= fields.amount.control;
     }
     if (monthKeyOf(date) === null) {
@@ -440,6 +473,8 @@ function saveIncomeEdit(ctx, income, fields) {
         amountCents: income.amountCents,
         note: income.note,
         date: income.date,
+        currency: income.currency,
+        originalAmountCents: income.originalAmountCents,
     };
     const oldMonthKey = monthKeyOf(snapshot.date);
     const newMonthKey = monthKeyOf(date);
@@ -450,6 +485,8 @@ function saveIncomeEdit(ctx, income, fields) {
     income.amountCents = amountCents;
     income.note = fields.note.control.value.trim();
     income.date = date;
+    income.currency = amounts.currency;
+    income.originalAmountCents = amounts.originalAmountCents;
     if (monthChanged) {
         freezeMonthPlan(ctx.data, newMonthKey);
     }
@@ -459,6 +496,8 @@ function saveIncomeEdit(ctx, income, fields) {
         income.amountCents = snapshot.amountCents;
         income.note = snapshot.note;
         income.date = snapshot.date;
+        income.currency = snapshot.currency;
+        income.originalAmountCents = snapshot.originalAmountCents;
         if (monthChanged && !planWasAlreadyFrozen) {
             delete ctx.data.monthPlans[newMonthKey];
         }
@@ -534,6 +573,23 @@ function renderExpenseEditor(ctx, expense) {
     amountInput.setAttribute('aria-required', 'true');
     amountInput.value = draft.amount;
     const amountField = buildField(`edit-exp-amount-${expense.id}`, 'Amount (\u20ac)', amountInput);
+    const currency = buildCurrencyFields({
+        idPrefix: `edit-exp-${expense.id}`,
+        amountField,
+        draft,
+    });
+
+    const refundInput = document.createElement('input');
+    refundInput.type = 'checkbox';
+    refundInput.id = `edit-exp-refund-${expense.id}`;
+    refundInput.checked = draft.refund === true;
+    refundInput.addEventListener('change', () => {
+        draft.refund = refundInput.checked;
+    });
+    const refundLabel = document.createElement('label');
+    refundLabel.className = 'check-row';
+    refundLabel.htmlFor = refundInput.id;
+    refundLabel.append(refundInput, element('span', '', 'Refund (money back from a shop)'));
 
     const noteInput = document.createElement('input');
     noteInput.type = 'text';
@@ -611,16 +667,20 @@ function renderExpenseEditor(ctx, expense) {
         saveExpenseEdit(ctx, expense, {
             category: categoryField,
             subcategory: subcategoryField,
+            original: currency.originalField,
             amount: amountField,
             note: noteField,
             date: dateField,
-        });
+        }, currency, refundInput);
     });
 
     form.append(
         categoryField.wrapper,
         subcategoryField.wrapper,
+        currency.currencyField.wrapper,
+        currency.originalField.wrapper,
         amountField.wrapper,
+        refundLabel,
         noteField.wrapper,
         dateField.wrapper,
         formError,
@@ -674,6 +734,11 @@ function renderIncomeEditor(ctx, income) {
     amountInput.setAttribute('aria-required', 'true');
     amountInput.value = draft.amount;
     const amountField = buildField(`edit-inc-amount-${income.id}`, 'Amount (\u20ac)', amountInput);
+    const currency = buildCurrencyFields({
+        idPrefix: `edit-inc-${income.id}`,
+        amountField,
+        draft,
+    });
 
     const noteInput = document.createElement('input');
     noteInput.type = 'text';
@@ -722,14 +787,17 @@ function renderIncomeEditor(ctx, income) {
         event.preventDefault();
         saveIncomeEdit(ctx, income, {
             category: categoryField,
+            original: currency.originalField,
             amount: amountField,
             note: noteField,
             date: dateField,
-        });
+        }, currency);
     });
 
     form.append(
         categoryField.wrapper,
+        currency.currencyField.wrapper,
+        currency.originalField.wrapper,
         amountField.wrapper,
         noteField.wrapper,
         dateField.wrapper,
@@ -800,16 +868,22 @@ function renderEntry(ctx, item) {
     if (typeof entry.note === 'string' && entry.note.trim() !== '') {
         description.append(element('p', 'muted', entry.note));
     }
+    const tags = entryTags(type, entry);
+    if (tags !== null) {
+        description.append(tags);
+    }
 
     const values = element('div', 'entry-values');
     const time = element('time', 'muted', shortDate(entry.date));
     time.setAttribute('datetime', entry.date);
     values.append(time);
-    const amountText = type === 'income'
-        ? `+${formatEuro(entry.amountCents)}`
-        : formatEuro(entry.amountCents);
-    const amount = element('p', type === 'income' ? 'entry-amount is-ok' : 'entry-amount', amountText);
+    const { text: amountText, positive } = entryAmountText(type, entry);
+    const amount = element('p', positive ? 'entry-amount is-ok' : 'entry-amount', amountText);
     values.append(amount);
+    const foreign = describeForeign(entry);
+    if (foreign !== '') {
+        values.append(element('p', 'muted entry-foreign', foreign));
+    }
 
     row.append(description, values);
     wrap.append(row);
@@ -883,6 +957,7 @@ export function render(root, ctx) {
         previousMonthKey,
     )));
     renderCategories(layout, totals.categories, totals.budgetCents);
+    layout.append(renderSearchPanel(ctx));
     renderEntries(layout, ctx, entries, label);
     root.append(layout);
 }

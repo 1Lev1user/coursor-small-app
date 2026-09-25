@@ -1534,3 +1534,165 @@ body.is-setup .tabbar {
     background: var(--block-ink);
     color: var(--block);
 }
+
+/* Home extras, add form, Month search (2.0) */
+
+/* UI-ENTRY: home templates, backup reminder, currency fields, entry tags, search panel. */
+
+.home-templates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    min-width: 0;
+}
+
+.home-template-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+
+.home-template-btn {
+    max-width: 100%;
+    min-height: var(--tap);
+    padding: var(--s2) var(--s3);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    overflow-wrap: anywhere;
+    background: var(--surface);
+}
+
+.home-template-btn:hover {
+    background: var(--surface-2);
+}
+
+.home-backup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    padding: var(--s3) var(--s4);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.home-backup-title {
+    font-size: 0.9375rem;
+    color: var(--muted);
+}
+
+.home-backup.is-strong {
+    padding: var(--s4);
+    background: var(--danger-soft);
+    border: 1px solid var(--danger-line);
+}
+
+.home-backup.is-strong .home-backup-title {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.home-backup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+
+.home-backup-actions .btn {
+    flex: 1 1 8rem;
+}
+
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    min-height: var(--tap);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.check-row input[type='checkbox'] {
+    flex: none;
+    width: 1.375rem;
+    height: 1.375rem;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.field-hint {
+    display: block;
+    margin-top: var(--s1);
+    font-weight: 400;
+}
+
+.entry-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1);
+    margin-top: var(--s1);
+}
+
+.entry-tag {
+    padding: 0 var(--s2);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.entry-tag.is-refund {
+    color: var(--ok);
+    background: var(--surface-2);
+}
+
+.entry-foreign {
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.search-toggle {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.search-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    gap: var(--s3);
+}
+
+.search-panel > .btn {
+    align-self: flex-start;
+}
+
+.search-count {
+    font-weight: 600;
+}
+
+.search-results {
+    display: flex;
+    flex-direction: column;
+    list-style: none;
+}
+
+.search-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--s3);
+    padding-block: var(--s3);
+    border-top: 1px solid var(--border);
+}
+
+.search-result:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.search-result-text {
+    min-width: 0;
+}
+
+.search-result-text .entry-name,
+.search-result-text .muted {
+    overflow-wrap: anywhere;
+}
