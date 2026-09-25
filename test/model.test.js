@@ -33,7 +33,7 @@ const expectedCategories = [
         name: 'Subscriptions',
         pinned: false,
         percent: 0,
-        limitMode: 'percent',
+        limitMode: 'none',
         limitCents: 0,
         system: false,
         subcategories: [],
@@ -315,6 +315,7 @@ test('deleteSubcategory refuses missing parent and missing child', () => {
 
 test('defaultData seeds Others as flexible user category and limitMode on all user categories', () => {
     const data = defaultData();
+    assert.equal(data.categories.find(({ id }) => id === 'subscriptions').limitMode, 'none');
     const others = data.categories.find(({ name }) => name.toLowerCase() === 'others');
     assert.ok(others);
     assert.equal(others.system, false);
@@ -324,7 +325,7 @@ test('defaultData seeds Others as flexible user category and limitMode on all us
     const savings = data.categories.find(({ id }) => id === 'savings');
     assert.equal(savings.limitMode, 'euro');
     for (const category of data.categories.filter(({ system }) => !system)) {
-        assert.ok(category.limitMode === 'percent' || category.limitMode === 'euro');
+        assert.ok(['percent', 'euro', 'none'].includes(category.limitMode));
         assert.equal(typeof category.limitCents, 'number');
     }
 });
@@ -411,4 +412,21 @@ test('normalise restores missing Savings as fixed euro', () => {
     assert.equal(savings.pinned, true);
     assert.equal(savings.limitMode, 'euro');
     assert.equal(savings.limitCents, 0);
+});
+
+test('normalise keeps no-limit categories and clears their plan fields', () => {
+    const raw = defaultData();
+    const category = raw.categories.find(({ id }) => id === 'random');
+    category.limitMode = 'none';
+    category.pinned = true;
+    category.percent = 40;
+    category.limitCents = 1234;
+
+    const result = normalise(raw);
+    assert.equal(result.ok, true);
+    const normalised = result.data.categories.find(({ id }) => id === 'random');
+    assert.equal(normalised.limitMode, 'none');
+    assert.equal(normalised.pinned, false);
+    assert.equal(normalised.percent, 0);
+    assert.equal(normalised.limitCents, 0);
 });

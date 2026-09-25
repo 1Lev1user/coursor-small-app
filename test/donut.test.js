@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTE, donutSlices } from '../src/donut.js';
+import { PALETTE, chartColour, donutSlices } from '../src/donut.js';
 
 test('donutSlices calculates fractions and contiguous clockwise angles', () => {
     const slices = donutSlices([
@@ -51,7 +51,7 @@ test('PALETTE uses the theme category colours in fixed order', () => {
     assert.equal(new Set(PALETTE).size, PALETTE.length);
 });
 
-test('donutSlices cycles colours through the palette', () => {
+test('donutSlices uses the palette first, then distinct generated colours', () => {
     const items = Array.from({ length: PALETTE.length + 2 }, (_, index) => ({
         id: String(index),
         label: `Item ${index}`,
@@ -61,6 +61,10 @@ test('donutSlices cycles colours through the palette', () => {
 
     assert.deepEqual(
         slices.map(({ colour }) => colour),
-        items.map((_, index) => PALETTE[index % PALETTE.length]),
+        items.map((_, index) => chartColour(index)),
     );
+    assert.deepEqual(slices.slice(0, PALETTE.length).map(({ colour }) => colour), PALETTE);
+    const extra = slices.slice(PALETTE.length).map(({ colour }) => colour);
+    assert.ok(extra.every((colour) => colour.startsWith('hsl(')));
+    assert.equal(new Set(extra).size, extra.length);
 });

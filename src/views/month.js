@@ -45,6 +45,10 @@ function shortDate(date) {
     return `${day} ${SHORT_MONTH_NAMES[month - 1]}`;
 }
 
+function displayPercent(percent) {
+    return `${Math.round(percent * 10) / 10}%`;
+}
+
 function closeEntryUi() {
     entryUi.mode = null;
     entryUi.type = null;
@@ -158,7 +162,7 @@ function comparisonText(currentTotals, previousTotals, previousMonthKey) {
     return `${formatEuro(Math.abs(difference))} ${direction} than ${previousLabel}`;
 }
 
-function renderCategories(root, categories) {
+function renderCategories(root, categories, budgetCents) {
     const card = element('section', 'card stack');
     card.append(element('h2', 'section-title', 'Categories'));
 
@@ -166,21 +170,30 @@ function renderCategories(root, categories) {
     for (const category of categories) {
         const item = element('div', 'category-item');
         const heading = element('div', 'row category-heading');
+        const noLimit = category.noLimit === true;
+        const ofBudgetPercent = budgetCents > 0
+            ? (category.spentCents * 100) / budgetCents
+            : 0;
+        const amountText = noLimit
+            ? `${formatEuro(category.spentCents)} \u00b7 ${displayPercent(ofBudgetPercent)} of budget`
+            : `${formatEuro(category.spentCents)} of `
+                + (category.limitCents === 0 ? 'no budget' : formatEuro(category.limitCents));
         heading.append(
             element('h3', 'category-name', category.name),
-            element(
-                'p',
-                'category-amount',
-                `${formatEuro(category.spentCents)} of `
-                    + (category.limitCents === 0 ? 'no budget' : formatEuro(category.limitCents)),
-            ),
+            element('p', 'category-amount', amountText),
         );
 
         const track = element('div', 'progress-track');
         const fill = element('div', 'progress-fill');
-        const width = category.limitCents === 0
-            ? 0
-            : Math.min(100, Math.max(0, category.spentCents / category.limitCents * 100));
+        let width = 0;
+        if (noLimit) {
+            width = budgetCents > 0
+                ? Math.min(100, Math.max(0, category.spentCents / budgetCents * 100))
+                : 0;
+            fill.classList.add('is-track-only');
+        } else if (category.limitCents > 0) {
+            width = Math.min(100, Math.max(0, category.spentCents / category.limitCents * 100));
+        }
         fill.style.width = `${width}%`;
         fill.setAttribute('aria-hidden', 'true');
         if (category.over) {
@@ -193,12 +206,22 @@ function renderCategories(root, categories) {
         track.setAttribute('aria-valuemin', '0');
         track.setAttribute('aria-valuemax', '100');
         track.setAttribute('aria-valuenow', String(Math.round(width)));
-        if (category.over) {
+        if (noLimit) {
+            track.setAttribute(
+                'aria-valuetext',
+                `${displayPercent(ofBudgetPercent)} of monthly budget`,
+            );
+        } else if (category.over) {
             track.setAttribute('aria-valuetext', `Over by ${formatEuro(category.overByCents)}`);
         }
         track.append(fill);
 
         item.append(heading, track);
+        if (noLimit) {
+            const details = element('div', 'row category-details');
+            details.append(element('span', 'muted', 'No limit'));
+            item.append(details);
+        }
         if (category.over) {
             const details = element('div', 'row category-details');
             details.append(
@@ -859,7 +882,7 @@ export function render(root, ctx) {
         previousTotals,
         previousMonthKey,
     )));
-    renderCategories(layout, totals.categories);
+    renderCategories(layout, totals.categories, totals.budgetCents);
     renderEntries(layout, ctx, entries, label);
     root.append(layout);
 }

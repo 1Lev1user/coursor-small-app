@@ -377,7 +377,7 @@ def build():
     story.append(side_by_side(
         s, "screen-settings.png", "Settings",
         [
-            "Jump links: Plan · Income · Subscriptions · Categories · Backup.",
+            "Jump links: Plan · Income · Subscriptions · Categories · Backup · Rights.",
             "Plan block for your name, monthly spend budget, and usual income.",
             "Subscriptions: budget share + recurring list (day of month).",
             "Categories editor (Savings is protected) and Backup &amp; export.",

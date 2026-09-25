@@ -101,7 +101,7 @@ export function defaultData() {
                 name: 'Subscriptions',
                 pinned: false,
                 percent: 0,
-                limitMode: 'percent',
+                limitMode: 'none',
                 limitCents: 0,
                 system: false,
                 subcategories: [],
@@ -201,8 +201,17 @@ export function normalise(raw) {
             if (category?.system === true) {
                 continue;
             }
-            if (category.limitMode !== 'percent' && category.limitMode !== 'euro') {
+            if (
+                category.limitMode !== 'percent'
+                && category.limitMode !== 'euro'
+                && category.limitMode !== 'none'
+            ) {
                 category.limitMode = 'percent';
+            }
+            if (category.limitMode === 'none') {
+                category.pinned = false;
+                category.percent = 0;
+                category.limitCents = 0;
             }
             if (typeof category.limitCents !== 'number' || !Number.isFinite(category.limitCents)) {
                 category.limitCents = 0;

@@ -17,6 +17,17 @@ export const PALETTE = [
     'var(--cat-8)',
 ];
 
+/** Distinct chart colour for any index — fixed palette first, then HSL steps. */
+export function chartColour(index) {
+    if (index < PALETTE.length) {
+        return PALETTE[index];
+    }
+    const hue = Math.round((index * 137.508) % 360);
+    const saturation = 55 + (index % 3) * 8;
+    const lightness = 38 + (index % 4) * 5;
+    return `hsl(${hue} ${saturation}% ${lightness}%)`;
+}
+
 function point(radius, angle) {
     const radians = angle * Math.PI / 180;
     return {
@@ -74,7 +85,7 @@ export function donutSlices(items) {
             startAngle,
             endAngle,
             path: annulusPath(startAngle, endAngle),
-            colour: PALETTE[index % PALETTE.length],
+            colour: chartColour(index),
         };
     });
 }

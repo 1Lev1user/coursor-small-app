@@ -33,8 +33,8 @@ Open the link in Safari (iPhone) or Chrome (Android), then **Add to Home Screen*
 - Releasing: raise `version` in `package.json` and `VERSION` in `sw.js` together. A test fails if they differ or if a file in `src/` or `fonts/` is missing from the offline cache list in `sw.js`.
 - Colours, fonts, radii and motion are design tokens at the top of `style.css`, with a dark theme below them.
 
-## License
+## Rights
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+© Ļevs Krilovs. All rights reserved. The code is public to read, but sharing, copying, distributing or republishing it needs his permission.
 
 The fonts in `fonts/` (Onest and Unbounded) are under the SIL Open Font License 1.1; see `fonts/LICENSE-*.txt`.

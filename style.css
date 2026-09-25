@@ -222,6 +222,24 @@ body {
 
 /* Shell */
 
+.rights-mark {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 11;
+    margin: 0;
+    padding: 0.35rem calc(var(--s4) + env(safe-area-inset-right)) calc(0.35rem + env(safe-area-inset-bottom)) calc(var(--s4) + env(safe-area-inset-left));
+    text-align: center;
+    font-size: 0.68rem;
+    line-height: 1.25;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    pointer-events: none;
+}
+
 .app-header {
     position: sticky;
     top: 0;
@@ -240,15 +258,17 @@ body {
 }
 
 #view {
+    position: relative;
+    z-index: 2;
     width: 100%;
     padding: var(--s4);
     padding-left: calc(var(--s4) + env(safe-area-inset-left));
     padding-right: calc(var(--s4) + env(safe-area-inset-right));
-    padding-bottom: calc(var(--tabbar-height) + var(--s5) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--tabbar-height) + 2.5rem + var(--s5) + env(safe-area-inset-bottom));
 }
 
 body.is-setup #view {
-    padding-bottom: calc(var(--s5) + env(safe-area-inset-bottom));
+    padding-bottom: calc(2.5rem + var(--s5) + env(safe-area-inset-bottom));
 }
 
 body.is-setup .tabbar {
@@ -257,7 +277,9 @@ body.is-setup .tabbar {
 
 .tabbar {
     position: fixed;
-    inset: auto 0 0 0;
+    left: 0;
+    right: 0;
+    bottom: calc(1.6rem + env(safe-area-inset-bottom));
     z-index: 10;
     display: flex;
     width: 100%;
@@ -265,7 +287,7 @@ body.is-setup .tabbar {
     gap: var(--s1);
     background: var(--surface);
     padding-inline: calc(var(--s4) + env(safe-area-inset-left)) calc(var(--s4) + env(safe-area-inset-right));
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: 0;
 }
 
 .tab {
@@ -368,19 +390,17 @@ body.is-setup .tabbar {
 /* Month */
 
 .month-navigator {
+    display: flex;
+    flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    width: 100%;
 }
 
-.month-navigator .month-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: center;
-    font-family: var(--font-figure);
-    font-weight: 600;
-}
-
-.month-nav-btn {
-    flex: none;
+.month-navigator .month-nav-arrow {
+    flex: 0 0 auto;
     width: var(--tap);
     min-width: var(--tap);
     padding: 0;
@@ -390,7 +410,58 @@ body.is-setup .tabbar {
     line-height: 1;
 }
 
-.month-title,
+.month-nav-center {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap);
+}
+
+.month-navigator .month-title {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-inline: var(--s3);
+    font-family: var(--font-figure);
+    font-size: clamp(0.95rem, 0.85rem + 0.5vw, 1.2rem);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.month-picker-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.01;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: transparent;
+    background: transparent;
+    font-size: 1rem;
+}
+
+.month-picker-input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    opacity: 0;
+    cursor: pointer;
+}
+
 .section-title {
     font-size: clamp(1.05rem, 1rem + 0.35vw, 1.25rem);
     line-height: 1.3;
@@ -507,8 +578,12 @@ body.is-setup .tabbar {
     background: var(--danger);
 }
 
-.progress-fill.is-savings {
     background: var(--savings);
+}
+
+.progress-fill.is-track-only {
+    background: color-mix(in srgb, var(--accent) 55%, var(--muted));
+    opacity: 0.85;
 }
 
 .category-details {
@@ -1175,6 +1250,22 @@ body.is-setup .tabbar {
 .home-figure.is-over .home-figure-label,
 .home-figure.is-over .home-figure-sub {
     color: var(--text);
+}
+
+.added-box {
+    background: var(--surface);
+}
+
+.added-box .section-title {
+    color: var(--accent);
+}
+
+.added-box .big-number {
+    margin: 0;
+}
+
+.added-box .btn {
+    width: 100%;
 }
 
 .home-actions {
