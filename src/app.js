@@ -15,6 +15,7 @@ import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
 import { render as renderSetup } from './views/setup.js';
+import { render as renderImport } from './views/import.js';
 
 const TOAST_MS = 2000;
 
@@ -23,6 +24,7 @@ const views = {
     month: { title: 'Month', render: renderMonth },
     chart: { title: 'Chart', render: renderChart },
     more: { title: 'Settings', render: renderMore },
+    import: { title: 'Import', render: renderImport, parentTab: 'more' },
 };
 
 const opened = openStorage();
@@ -477,7 +479,7 @@ function render() {
     document.title = `${titleElement.textContent} - My Expenses`;
 
     for (const button of tabButtons) {
-        const isActive = button.dataset.tab === app.tab;
+        const isActive = button.dataset.tab === (view.parentTab ?? app.tab);
         button.classList.toggle('is-active', isActive);
         if (isActive) {
             button.setAttribute('aria-current', 'page');
@@ -506,11 +508,59 @@ tabbarElement.addEventListener('click', (event) => {
 
 requestPersistence();
 
+function showUpdateBar(worker) {
+    if (document.getElementById('update-bar') !== null) {
+        return;
+    }
+    const bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.className = 'update-bar';
+    bar.setAttribute('role', 'status');
+    const text = document.createElement('p');
+    text.textContent = 'A new version is ready.';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-primary';
+    button.textContent = 'Update';
+    button.addEventListener('click', () => {
+        button.disabled = true;
+        worker.postMessage('SKIP_WAITING');
+    });
+    bar.append(text, button);
+    document.body.append(bar);
+}
+
+function watchForUpdates(registration) {
+    const offer = (worker) => {
+        if (worker !== null && navigator.serviceWorker.controller !== null) {
+            showUpdateBar(worker);
+        }
+    };
+    offer(registration.waiting);
+    registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed') {
+                offer(worker);
+            }
+        });
+    });
+}
+
 if (
     (location.protocol === 'http:' || location.protocol === 'https:')
     && 'serviceWorker' in navigator
 ) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    // The first install also changes the controller; only an update should reload.
+    const hadController = navigator.serviceWorker.controller !== null;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !reloading) {
+            reloading = true;
+            location.reload();
+        }
+    });
+    navigator.serviceWorker.register('./sw.js').then(watchForUpdates).catch(() => {});
 }
 
 render();

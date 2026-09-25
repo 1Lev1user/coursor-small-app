@@ -134,6 +134,21 @@ export function clampDay(monthKey, day) {
     return Math.max(1, Math.min(day, maxDay));
 }
 
+/** 'YYYY-MM' -> 'Sep' */
+export function shortMonthName(monthKey) {
+    return MONTH_NAMES[Number(String(monthKey).slice(5, 7)) - 1]?.slice(0, 3) ?? '';
+}
+
+/** 'YYYY-MM-DD' -> '3 Sep' */
+export function shortDate(date) {
+    return `${Number(String(date).slice(8, 10))} ${shortMonthName(date)}`;
+}
+
+/** 'YYYY-MM-DD' -> '3 Sep 2026' */
+export function fullDate(date) {
+    return `${shortDate(date)} ${String(date).slice(0, 4)}`;
+}
+
 export function monthLabel(monthKey) {
     const parsed = parseMonthKey(monthKey);
     return `${MONTH_NAMES[parsed.month - 1]} ${parsed.year}`;

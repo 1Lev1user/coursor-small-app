@@ -83,7 +83,7 @@ const expectedCategories = [
 ];
 
 test('constants and createId use the contractual values', () => {
-    assert.equal(SCHEMA_VERSION, 1);
+    assert.equal(SCHEMA_VERSION, 2);
     assert.equal(UNCATEGORISED_ID, 'uncategorised');
     assert.equal(createId('expense', () => 0), 'expense_00000000');
     assert.match(createId('x', () => 0.999999), /^x_[0-9a-z]{8}$/);
@@ -91,7 +91,7 @@ test('constants and createId use the contractual values', () => {
 
 test('defaultData returns the exact initial data shape and seeds', () => {
     assert.deepEqual(defaultData(), {
-        version: 1,
+        version: 2,
         settings: {
             userName: '',
             monthlyBudgetCents: 0,
@@ -100,6 +100,7 @@ test('defaultData returns the exact initial data shape and seeds', () => {
             lastBackupISO: null,
             othersSeeded: true,
             monthReviewDismissedFor: null,
+            backupSnoozedUntil: '',
         },
         categories: expectedCategories,
         incomeCategories: [
@@ -110,6 +111,11 @@ test('defaultData returns the exact initial data shape and seeds', () => {
         incomes: [],
         subscriptions: [],
         monthPlans: {},
+        rules: [],
+        bankLayouts: [],
+        imports: [],
+        templates: [],
+        goals: [],
     });
 });
 
@@ -134,7 +140,7 @@ test('normalise rejects non-object roots without throwing', () => {
 });
 
 test('normalise rejects missing, non-numeric, and unsupported versions', () => {
-    for (const raw of [{}, { version: '1' }, { version: 2 }]) {
+    for (const raw of [{}, { version: '1' }, { version: 0 }, { version: 3 }]) {
         const result = normalise(raw);
         assert.equal(result.ok, false);
         assert.match(result.reason, /version/i);
@@ -429,4 +435,16 @@ test('normalise keeps no-limit categories and clears their plan fields', () => {
     assert.equal(normalised.pinned, false);
     assert.equal(normalised.percent, 0);
     assert.equal(normalised.limitCents, 0);
+});
+
+test('deleting a category or subcategory updates rules and templates that use it', () => {
+    const data = defaultData();
+    data.rules = [{ id: 'r1', pattern: 'RIMI', kind: 'expense', categoryId: 'random', subcategoryId: 'shopping' }];
+    data.templates = [{ id: 't1', name: 'Coffee', categoryId: 'necessary', subcategoryId: 'groceries', amountCents: 300, note: '' }];
+
+    deleteSubcategory(data, 'necessary', 'groceries');
+    assert.equal(data.templates[0].subcategoryId, '');
+    deleteCategory(data, 'random');
+    assert.equal(data.rules[0].categoryId, UNCATEGORISED_ID);
+    assert.equal(data.rules[0].subcategoryId, '');
 });

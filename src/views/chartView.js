@@ -3,9 +3,21 @@ import { chartColour, renderDonut } from '../donut.js';
 import { formatEuro } from '../money.js';
 import { monthLabel } from '../months.js';
 import { renderMonthNav } from './monthNav.js';
+import { renderTrends } from './trends.js';
+import { renderYear, renderYearNav } from './year.js';
+
+const VIEWS = [
+    { id: 'spending', label: 'Spending' },
+    { id: 'income', label: 'Income' },
+    { id: 'trends', label: 'Trends' },
+    { id: 'year', label: 'Year' },
+];
 
 let selectedCategoryId = null;
 let renderedMonthKey = null;
+let activeView = 'spending';
+let selectedYear = null;
+let focusViewId = null;
 
 function element(tagName, className, text) {
     const node = document.createElement(tagName);
@@ -193,28 +205,77 @@ function renderIncomeOverview(layout, ctx, income) {
     layout.append(section);
 }
 
+function renderViewSwitcher(layout, ctx) {
+    const group = element('div', 'chart-switcher');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Chart view');
+
+    for (const view of VIEWS) {
+        const button = element('button', 'chart-switcher-button', view.label);
+        button.type = 'button';
+        button.id = `chart-view-${view.id}`;
+        button.setAttribute('aria-pressed', String(view.id === activeView));
+        button.addEventListener('click', () => {
+            if (activeView === view.id) {
+                return;
+            }
+            activeView = view.id;
+            focusViewId = button.id;
+            ctx.render();
+        });
+        group.append(button);
+    }
+
+    layout.append(group);
+}
+
+function yearOf(monthKey) {
+    return Number(monthKey.slice(0, 4));
+}
+
 export function render(root, ctx) {
     if (renderedMonthKey !== ctx.monthKey) {
         selectedCategoryId = null;
         renderedMonthKey = ctx.monthKey;
+        selectedYear = yearOf(ctx.monthKey);
     }
-
-    const totals = monthTotals(ctx.data, ctx.monthKey);
-    const income = incomeBreakdown(ctx.data, ctx.monthKey);
-    const selectedCategory = totals.categories.find(({ id }) => id === selectedCategoryId);
-    if (selectedCategory === undefined || selectedCategory.spentCents <= 0) {
-        selectedCategoryId = null;
+    if (selectedYear === null) {
+        selectedYear = yearOf(ctx.monthKey);
     }
 
     const layout = element('div', 'stack');
-    renderMonthNav(layout, ctx);
+    renderViewSwitcher(layout, ctx);
 
-    if (selectedCategoryId === null) {
-        renderSpendingOverview(layout, ctx, totals);
+    if (activeView === 'year') {
+        renderYearNav(layout, selectedYear, (year) => {
+            selectedYear = year;
+            ctx.render();
+        });
+        renderYear(layout, ctx, selectedYear);
     } else {
-        renderSpendingDrillDown(layout, ctx, selectedCategory);
+        renderMonthNav(layout, ctx);
+        if (activeView === 'trends') {
+            renderTrends(layout, ctx);
+        } else if (activeView === 'income') {
+            renderIncomeOverview(layout, ctx, incomeBreakdown(ctx.data, ctx.monthKey));
+        } else {
+            const totals = monthTotals(ctx.data, ctx.monthKey);
+            const selectedCategory = totals.categories.find(({ id }) => id === selectedCategoryId);
+            if (selectedCategory === undefined || selectedCategory.spentCents <= 0) {
+                selectedCategoryId = null;
+            }
+            if (selectedCategoryId === null) {
+                renderSpendingOverview(layout, ctx, totals);
+            } else {
+                renderSpendingDrillDown(layout, ctx, selectedCategory);
+            }
+        }
     }
-    renderIncomeOverview(layout, ctx, income);
 
     root.append(layout);
+
+    if (focusViewId !== null) {
+        document.getElementById(focusViewId)?.focus();
+        focusViewId = null;
+    }
 }

@@ -2,6 +2,7 @@ import { SCHEMA_VERSION, defaultData, normalise } from './model.js';
 
 export const STORAGE_KEY = 'my-expenses-v1';
 export const RESCUE_KEY = 'my-expenses-rescue';
+export const PRE_UPDATE_KEY = `my-expenses-before-v${SCHEMA_VERSION}`;
 
 function parseStored(raw) {
     try {
@@ -30,6 +31,67 @@ function keepRescueCopy(raw, storage) {
 }
 
 /*
+ * Keeps the untouched old data under PRE_UPDATE_KEY, then writes the
+ * migrated data so the update happens once. If the copy cannot be kept,
+ * the old data is left in place and the app runs on the migrated copy in
+ * memory until the next successful save.
+ */
+function finishMigration(raw, from, data, storage) {
+    try {
+        if (storage.getItem(PRE_UPDATE_KEY) === null) {
+            storage.setItem(PRE_UPDATE_KEY, raw);
+        }
+        storage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {
+        return { status: 'ok', data, migratedFrom: from, migrationSaved: false };
+    }
+    return { status: 'ok', data, migratedFrom: from, migrationSaved: true };
+}
+
+export function readPreUpdateCopy(storage = globalThis.localStorage) {
+    try {
+        return storage?.getItem(PRE_UPDATE_KEY) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** Removes the pre-update copy from this device only; current data is untouched. */
+export function deletePreUpdateCopy(storage = globalThis.localStorage) {
+    if (storage === undefined || storage === null) {
+        return false;
+    }
+    try {
+        storage.removeItem(PRE_UPDATE_KEY);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** The rescue copy saved when a load could not be read, or null. */
+export function readRescueCopy(storage = globalThis.localStorage) {
+    try {
+        return storage?.getItem(RESCUE_KEY) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** Removes the rescue copy from this device only; current data is untouched. */
+export function deleteRescueCopy(storage = globalThis.localStorage) {
+    if (storage === undefined || storage === null) {
+        return false;
+    }
+    try {
+        storage.removeItem(RESCUE_KEY);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/*
  * Reads saved data and says whether it can be used.
  * status 'ok': data is usable (or nothing was saved yet).
  * status 'newer': saved by a newer app version; this copy must not write.
@@ -54,6 +116,10 @@ export function open(storage = globalThis.localStorage) {
     if (parsed !== undefined) {
         const result = normalise(parsed);
         if (result.ok) {
+            const from = versionOf(parsed);
+            if (from !== null && from < SCHEMA_VERSION) {
+                return finishMigration(raw, from, result.data, storage);
+            }
             return { status: 'ok', data: result.data };
         }
     }
@@ -79,7 +145,10 @@ export function storedIsNewer(storage = globalThis.localStorage) {
         if (raw === null) {
             return false;
         }
-        const version = versionOf(parseStored(raw));
+        // The app always writes version first, so most saves avoid parsing
+        // the whole history just to read it.
+        const leading = /^\{"version":(\d+),/.exec(raw);
+        const version = leading ? Number(leading[1]) : versionOf(parseStored(raw));
         return version !== null && version > SCHEMA_VERSION;
     } catch {
         return false;

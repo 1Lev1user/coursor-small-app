@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultData } from '../src/model.js';
+import { SCHEMA_VERSION, defaultData } from '../src/model.js';
 import {
     STORAGE_KEY,
     RESCUE_KEY,
+    PRE_UPDATE_KEY,
     open,
     load,
     save,
     storedIsNewer,
+    readPreUpdateCopy,
     requestPersistence,
 } from '../src/storage.js';
 
@@ -39,6 +41,14 @@ test('save and load round-trip data through the contractual key', () => {
         amountCents: 1234,
         note: '',
         date: '2026-09-05',
+        currency: 'EUR',
+        originalAmountCents: 1234,
+        refund: false,
+        importId: '',
+        bankRef: '',
+        bankText: '',
+        fingerprint: '',
+        goalId: '',
     });
 
     assert.equal(STORAGE_KEY, 'my-expenses-v1');
@@ -49,7 +59,7 @@ test('save and load round-trip data through the contractual key', () => {
 test('load falls back to fresh defaults for corrupt or rejected data', () => {
     const corrupt = fakeStorage({ [STORAGE_KEY]: '{bad json' });
     const wrongVersion = fakeStorage({
-        [STORAGE_KEY]: JSON.stringify({ ...defaultData(), version: 2 }),
+        [STORAGE_KEY]: JSON.stringify({ ...defaultData(), version: SCHEMA_VERSION + 1 }),
     });
     assert.deepEqual(load(corrupt), defaultData());
     assert.deepEqual(load(wrongVersion), defaultData());
@@ -92,12 +102,12 @@ test('open reports ok for usable data and for an empty device', () => {
 });
 
 test('open reports newer data and keeps a rescue copy', () => {
-    const raw = JSON.stringify({ ...defaultData(), version: 2 });
+    const raw = JSON.stringify({ ...defaultData(), version: SCHEMA_VERSION + 1 });
     const storage = fakeStorage({ [STORAGE_KEY]: raw });
 
     const result = open(storage);
     assert.equal(result.status, 'newer');
-    assert.equal(result.version, 2);
+    assert.equal(result.version, SCHEMA_VERSION + 1);
     assert.equal(result.raw, raw);
     assert.deepEqual(result.data, defaultData());
     assert.equal(storage.getItem(RESCUE_KEY), raw);
@@ -117,7 +127,7 @@ test('open reports unreadable data and keeps the first rescue copy', () => {
 });
 
 test('save refuses to overwrite data saved by a newer version', () => {
-    const raw = JSON.stringify({ ...defaultData(), version: 2 });
+    const raw = JSON.stringify({ ...defaultData(), version: SCHEMA_VERSION + 1 });
     const storage = fakeStorage({ [STORAGE_KEY]: raw });
 
     assert.equal(storedIsNewer(storage), true);
@@ -218,4 +228,70 @@ test('requestPersistence never throws when persistence calls reject', async () =
     await assert.doesNotReject(() => requestPersistence(persistedRejects));
     assert.equal(await requestPersistence(persistedRejects), false);
     assert.equal(await requestPersistence(persistRejects), false);
+});
+
+test('open migrates version 1 data once and keeps the untouched copy', () => {
+    const v1 = { ...defaultData(), version: 1 };
+    for (const field of ['rules', 'bankLayouts', 'imports', 'templates', 'goals']) {
+        delete v1[field];
+    }
+    delete v1.settings.backupSnoozedUntil;
+    v1.expenses = [{
+        id: 'e1',
+        categoryId: 'random',
+        subcategoryId: '',
+        amountCents: 250,
+        note: 'Coffee',
+        date: '2026-09-01',
+    }];
+    const raw = JSON.stringify(v1);
+    const storage = fakeStorage({ [STORAGE_KEY]: raw });
+
+    const result = open(storage);
+    assert.equal(result.status, 'ok');
+    assert.equal(result.migratedFrom, 1);
+    assert.equal(result.migrationSaved, true);
+    assert.equal(result.data.version, SCHEMA_VERSION);
+    assert.equal(result.data.expenses[0].note, 'Coffee');
+    assert.equal(result.data.expenses[0].currency, 'EUR');
+    assert.deepEqual(result.data.rules, []);
+    assert.equal(storage.getItem(PRE_UPDATE_KEY), raw);
+    assert.equal(readPreUpdateCopy(storage), raw);
+    assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).version, SCHEMA_VERSION);
+
+    const again = open(storage);
+    assert.equal(again.migratedFrom, undefined);
+    assert.deepEqual(again.data, result.data);
+    assert.equal(storage.getItem(PRE_UPDATE_KEY), raw);
+});
+
+test('open still works when the migrated data cannot be written', () => {
+    const raw = JSON.stringify({ ...defaultData(), version: 1 });
+    const storage = {
+        getItem: (key) => (key === STORAGE_KEY ? raw : null),
+        setItem() {
+            throw new Error('quota');
+        },
+    };
+    const result = open(storage);
+    assert.equal(result.status, 'ok');
+    assert.equal(result.migrationSaved, false);
+    assert.equal(result.data.version, SCHEMA_VERSION);
+});
+
+test('pre-update and rescue copies can be read and deleted without touching data', async () => {
+    const { deletePreUpdateCopy, readRescueCopy, deleteRescueCopy } = await import('../src/storage.js');
+    const values = { [STORAGE_KEY]: 'current', [PRE_UPDATE_KEY]: 'old', [RESCUE_KEY]: 'broken' };
+    const storage = {
+        getItem: (key) => (Object.hasOwn(values, key) ? values[key] : null),
+        setItem: (key, value) => { values[key] = value; },
+        removeItem: (key) => { delete values[key]; },
+    };
+    assert.equal(readRescueCopy(storage), 'broken');
+    assert.equal(deletePreUpdateCopy(storage), true);
+    assert.equal(deleteRescueCopy(storage), true);
+    assert.equal(readPreUpdateCopy(storage), null);
+    assert.equal(readRescueCopy(storage), null);
+    assert.equal(values[STORAGE_KEY], 'current');
+    assert.equal(deletePreUpdateCopy(null), false);
 });

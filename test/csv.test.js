@@ -76,11 +76,11 @@ test('standard CSV starts with BOM, uses commas, and formats amounts with a dot'
     assert.equal(csv[0], BOM);
     assert.equal(csv.includes('sep='), false);
     assert.equal(csv, [
-        `${BOM}Date,Type,Category,Subcategory,Note,Amount`,
-        '2026-09-01,Expense,Subscriptions,,"quoted ""plan""",9.99',
-        '2026-09-01,Income,Salary,,payday,2500.00',
-        '2026-09-02,Expense,Necessary expenses,Groceries,"milk, bread",12.34',
-        '2026-09-03,Expense,missing-cat,missing-sub,"line1\nline2",5.00',
+        `${BOM}Date,Type,Category,Subcategory,Note,Amount,Currency,Original amount`,
+        '2026-09-01,Expense,Subscriptions,,"quoted ""plan""",9.99,EUR,9.99',
+        '2026-09-01,Income,Salary,,payday,2500.00,EUR,2500.00',
+        '2026-09-02,Expense,Necessary expenses,Groceries,"milk, bread",12.34,EUR,12.34',
+        '2026-09-03,Expense,missing-cat,missing-sub,"line1\nline2",5.00,EUR,5.00',
         '',
     ].join('\n'));
 });
@@ -91,18 +91,18 @@ test('europe CSV starts with BOM, uses semicolons, and formats amounts with a co
     assert.equal(csv[0], BOM);
     assert.equal(csv.includes('sep='), false);
     assert.equal(csv, [
-        `${BOM}Date;Type;Category;Subcategory;Note;Amount`,
-        '2026-09-01;Expense;Subscriptions;;"quoted ""plan""";9,99',
-        '2026-09-01;Income;Salary;;payday;2500,00',
-        '2026-09-02;Expense;Necessary expenses;Groceries;milk, bread;12,34',
-        '2026-09-03;Expense;missing-cat;missing-sub;"line1\nline2";5,00',
+        `${BOM}Date;Type;Category;Subcategory;Note;Amount;Currency;Original amount`,
+        '2026-09-01;Expense;Subscriptions;;"quoted ""plan""";9,99;EUR;9,99',
+        '2026-09-01;Income;Salary;;payday;2500,00;EUR;2500,00',
+        '2026-09-02;Expense;Necessary expenses;Groceries;milk, bread;12,34;EUR;12,34',
+        '2026-09-03;Expense;missing-cat;missing-sub;"line1\nline2";5,00;EUR;5,00',
         '',
     ].join('\n'));
 });
 
 test('empty month is BOM plus the header only', () => {
     const csv = buildMonthCsv(defaultData(), '2026-09', 'standard');
-    assert.equal(csv, `${BOM}Date,Type,Category,Subcategory,Note,Amount\n`);
+    assert.equal(csv, `${BOM}Date,Type,Category,Subcategory,Note,Amount,Currency,Original amount\n`);
 });
 
 test('empty subcategoryId stays an empty field, not Unspecified', () => {
@@ -118,7 +118,7 @@ test('empty subcategoryId stays an empty field, not Unspecified', () => {
 
     const csv = buildMonthCsv(data, '2026-09', 'standard');
     assert.equal(csv.includes('Unspecified'), false);
-    assert.equal(linesOf(csv)[1], '2026-09-05,Expense,Subscriptions,,,1.00');
+    assert.equal(linesOf(csv)[1], '2026-09-05,Expense,Subscriptions,,,1.00,EUR,1.00');
 });
 
 test('rows sort by date, then expense before income, then id', () => {
@@ -157,4 +157,49 @@ test('rows sort by date, then expense before income, then id', () => {
     ]);
     assert.ok(rows[0].includes('1.00'));
     assert.ok(rows[1].includes('2.00'));
+});
+
+test('refunds are negative and foreign amounts keep their currency', () => {
+    const data = defaultData();
+    data.expenses = [
+        {
+            id: 'exp_usd',
+            categoryId: 'random',
+            subcategoryId: '',
+            amountCents: 4630,
+            note: 'Hotel',
+            date: '2026-09-05',
+            currency: 'USD',
+            originalAmountCents: 5000,
+        },
+        {
+            id: 'exp_ref',
+            categoryId: 'random',
+            subcategoryId: '',
+            amountCents: 1200,
+            note: 'Return',
+            date: '2026-09-06',
+            refund: true,
+        },
+    ];
+
+    const lines = linesOf(buildMonthCsv(data, '2026-09', 'standard'));
+    assert.equal(lines[1], '2026-09-05,Expense,Random small purchases,,Hotel,46.30,USD,50.00');
+    assert.equal(lines[2], '2026-09-06,Refund,Random small purchases,,Return,-12.00,EUR,-12.00');
+});
+
+test('text that a spreadsheet would run as a formula is neutralised, amounts are not', () => {
+    const data = defaultData();
+    data.expenses = [{
+        id: 'x',
+        categoryId: 'random',
+        subcategoryId: '',
+        amountCents: 100,
+        note: '=HYPERLINK("http://example.com")',
+        date: '2026-09-05',
+        refund: true,
+    }];
+    const line = linesOf(buildMonthCsv(data, '2026-09', 'standard'))[1];
+    assert.ok(line.includes(`"'=HYPERLINK(""http://example.com"")"`));
+    assert.ok(line.includes(',-1.00,'));
 });

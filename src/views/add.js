@@ -1,6 +1,14 @@
 import { parseAmount, formatEuro } from '../money.js';
-import { currentMonthKey, monthKeyOf, monthLabel, todayISO } from '../months.js';
+import {
+    currentMonthKey,
+    monthKeyOf,
+    monthLabel,
+    shortDate,
+    todayISO,
+} from '../months.js';
 import { UNCATEGORISED_ID, createId } from '../model.js';
+import { addTemplate, templateToExpense } from '../templates.js';
+import { describeForeign } from '../currency.js';
 import {
     freezeMonthPlan,
     syncCategoryPlanFields,
@@ -20,6 +28,14 @@ import {
     canAddSubcategory,
 } from '../limits.js';
 import { openSettingsSection } from './more.js';
+import { doExportBackup } from './settings/backup.js';
+import { renderGoalCard } from './goalCard.js';
+import { entryAmountText } from './entryDisplay.js';
+import {
+    amountErrorText,
+    buildCurrencyFields,
+    originalErrorText,
+} from './currencyFields.js';
 
 /** @type {'home' | 'expense' | 'income' | 'added'} */
 let panel = 'home';
@@ -31,7 +47,16 @@ const draft = {
     amount: '',
     note: '',
     date: '',
+    currency: 'EUR',
+    originalAmount: '',
+    saveTemplate: false,
+    templateName: '',
 };
+
+const TEMPLATE_NAME_MAX = 40;
+const SOFT_BACKUP_DAYS = 14;
+const STRONG_BACKUP_DAYS = 30;
+const SNOOZE_DAYS = 7;
 
 const incomeDraft = {
     incomeCategoryId: '',
@@ -56,7 +81,7 @@ let addingIncomeCategory = false;
 let addIncomeCategoryName = '';
 let addIncomeCategoryError = '';
 
-/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string }} */
+/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[] }} */
 let lastAdded = null;
 
 export function openAddPanel(next = 'home') {
@@ -249,8 +274,11 @@ function renderAddedConfirm(root, ctx) {
         ),
         element('p', 'big-number', formatEuro(lastAdded.amountCents)),
         element('p', 'muted', lastAdded.label),
-        ok,
     );
+    for (const line of lastAdded.details ?? []) {
+        card.append(element('p', 'muted', line));
+    }
+    card.append(ok);
     layout.append(card);
     root.append(layout);
     queueMicrotask(() => ok.focus());
@@ -377,13 +405,6 @@ function renderMonthReviewCard(ctx, suggestion) {
     return card;
 }
 
-const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function shortDate(date) {
-    const [, month, day] = date.split('-').map(Number);
-    return `${day} ${SHORT_MONTHS[month - 1]}`;
-}
-
 function recentTexts(data, { type, entry }) {
     const note = typeof entry.note === 'string' ? entry.note.trim() : '';
     if (type === 'income') {
@@ -395,7 +416,9 @@ function recentTexts(data, { type, entry }) {
     }
 
     const category = data.categories.find(({ id }) => id === entry.categoryId);
-    const categoryName = category?.name ?? 'Expense';
+    const categoryName = entry.refund === true
+        ? `Refund \u00b7 ${category?.name ?? 'Expense'}`
+        : category?.name ?? 'Expense';
     const subcategory = category?.subcategories?.find(({ id }) => id === entry.subcategoryId);
     if (note !== '') {
         return { title: note, detail: categoryName };
@@ -428,10 +451,12 @@ function renderRecent(ctx) {
         }
 
         const values = element('div', 'home-recent-values');
-        const amount = item.type === 'income'
-            ? `+${formatEuro(item.entry.amountCents)}`
-            : formatEuro(item.entry.amountCents);
-        values.append(element('p', item.type === 'income' ? 'home-recent-amount is-ok' : 'home-recent-amount', amount));
+        const amount = entryAmountText(item.type, item.entry);
+        values.append(element(
+            'p',
+            amount.positive ? 'home-recent-amount is-ok' : 'home-recent-amount',
+            amount.text,
+        ));
         const time = element('time', 'muted', shortDate(item.entry.date));
         time.setAttribute('datetime', item.entry.date);
         values.append(time);
@@ -448,6 +473,140 @@ function renderRecent(ctx) {
     });
 
     section.append(title, list, allButton);
+    return section;
+}
+
+function isoDay(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    return match === null ? null : Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function addDaysISO(dateISO, days) {
+    const [year, month, day] = dateISO.split('-').map(Number);
+    return todayISO(new Date(year, month - 1, day + days));
+}
+
+/**
+ * Home backup reminder state. Hidden while snoozed or with no entries.
+ * @returns {null | { level: 'soft' | 'strong', days: number | null }}
+ */
+export function backupReminder(data, now = new Date()) {
+    if (data.expenses.length + data.incomes.length === 0) {
+        return null;
+    }
+    const today = todayISO(now);
+    const snoozedUntil = data.settings.backupSnoozedUntil;
+    if (typeof snoozedUntil === 'string' && snoozedUntil !== '' && today < snoozedUntil) {
+        return null;
+    }
+
+    const last = isoDay(data.settings.lastBackupISO);
+    if (last === null) {
+        return { level: 'strong', days: null };
+    }
+    const days = Math.round((isoDay(today) - last) / 86_400_000);
+    if (days >= STRONG_BACKUP_DAYS) {
+        return { level: 'strong', days };
+    }
+    if (days >= SOFT_BACKUP_DAYS) {
+        return { level: 'soft', days };
+    }
+    return null;
+}
+
+function renderBackupReminder(ctx, reminder) {
+    const strong = reminder.level === 'strong';
+    const card = element('section', strong ? 'home-backup is-strong' : 'home-backup');
+    card.setAttribute('aria-labelledby', 'home-backup-title');
+
+    let message;
+    if (!strong) {
+        message = `Last backup ${reminder.days} days ago`;
+    } else if (reminder.days === null) {
+        message = 'No backup yet. If this phone is lost, your data is gone.';
+    } else {
+        message = `No backup for ${reminder.days} days. If this phone is lost, your data is gone.`;
+    }
+    const title = element('p', 'home-backup-title', message);
+    title.id = 'home-backup-title';
+
+    const exportBtn = element('button', strong ? 'btn btn-primary' : 'btn', 'Export backup');
+    exportBtn.type = 'button';
+    exportBtn.addEventListener('click', () => doExportBackup(ctx));
+
+    const laterBtn = element('button', 'btn btn-ghost', 'Later');
+    laterBtn.type = 'button';
+    laterBtn.addEventListener('click', () => {
+        const previous = ctx.data.settings.backupSnoozedUntil;
+        ctx.data.settings.backupSnoozedUntil = addDaysISO(todayISO(), SNOOZE_DAYS);
+        if (ctx.save() === false) {
+            ctx.data.settings.backupSnoozedUntil = previous;
+            ctx.render();
+            return;
+        }
+        ctx.toast('Reminder snoozed for 7 days');
+    });
+
+    const actions = element('div', 'home-backup-actions');
+    actions.append(exportBtn, laterBtn);
+    card.append(title, actions);
+    return card;
+}
+
+function templateButtonText(template) {
+    return `${template.name} · ${formatEuro(template.amountCents)}`;
+}
+
+function addFromTemplate(ctx, template) {
+    const date = todayISO();
+    const monthKey = monthKeyOf(date);
+    const expense = { id: createId('exp'), ...templateToExpense(template, date) };
+    const category = findCategory(ctx.data, expense.categoryId);
+    if (category === undefined) {
+        expense.categoryId = UNCATEGORISED_ID;
+        expense.subcategoryId = '';
+    } else if (!category.subcategories.some(({ id }) => id === expense.subcategoryId)) {
+        expense.subcategoryId = '';
+    }
+
+    const planWasAlreadyFrozen = Object.hasOwn(ctx.data.monthPlans, monthKey);
+    ctx.data.expenses.push(expense);
+    freezeMonthPlan(ctx.data, monthKey);
+
+    if (ctx.save() === false) {
+        ctx.data.expenses.splice(ctx.data.expenses.indexOf(expense), 1);
+        if (!planWasAlreadyFrozen) {
+            delete ctx.data.monthPlans[monthKey];
+        }
+        ctx.render();
+        return;
+    }
+    ctx.toast(`Added ${template.name}`);
+}
+
+function renderTemplates(ctx) {
+    const templates = Array.isArray(ctx.data.templates) ? ctx.data.templates : [];
+    if (templates.length === 0) {
+        return null;
+    }
+
+    const section = element('section', 'home-templates');
+    section.setAttribute('aria-labelledby', 'home-templates-title');
+    const title = element('h2', 'home-recent-title', 'Quick add');
+    title.id = 'home-templates-title';
+
+    const list = element('div', 'home-template-list');
+    for (const template of templates) {
+        const button = element('button', 'btn home-template-btn', templateButtonText(template));
+        button.type = 'button';
+        button.addEventListener('click', () => addFromTemplate(ctx, template));
+        list.append(button);
+    }
+
+    section.append(title, list);
     return section;
 }
 
@@ -496,12 +655,30 @@ function renderHome(root, ctx) {
         element('h2', 'home-title', heading),
         figure,
         actions,
+    );
+
+    const templates = renderTemplates(ctx);
+    if (templates !== null) {
+        layout.append(templates);
+    }
+
+    layout.append(
         element(
             'p',
             'muted home-auto-note',
             'Salary and subscriptions are added for you. Everything stays on this device.',
         ),
     );
+
+    const reminder = backupReminder(ctx.data);
+    if (reminder !== null) {
+        layout.append(renderBackupReminder(ctx, reminder));
+    }
+
+    const goal = renderGoalCard(ctx);
+    if (goal !== null) {
+        layout.append(goal);
+    }
 
     const review = getMonthReviewSuggestion(ctx.data);
     if (review !== null) {
@@ -556,6 +733,7 @@ function renderIncomeForm(root, ctx) {
     categoryRow.append(categorySelect, categoryPlus);
 
     const categoryField = buildField('home-income-category', 'Income category', categoryRow);
+    categoryRow.removeAttribute('id');
     categorySelect.id = 'home-income-category';
     categoryField.control = categorySelect;
     categorySelect.addEventListener('change', () => {
@@ -855,6 +1033,7 @@ function renderExpenseForm(root, ctx) {
     categoryRow.append(categorySelect, categoryPlus);
 
     const categoryField = buildField('add-category', 'Category', categoryRow);
+    categoryRow.removeAttribute('id');
     categorySelect.id = 'add-category';
     categoryField.control = categorySelect;
 
@@ -870,12 +1049,30 @@ function renderExpenseForm(root, ctx) {
     amountInput.setAttribute('aria-required', 'true');
     amountInput.value = draft.amount;
     const amountField = buildField('add-amount', 'Amount (\u20ac)', amountInput);
+    const currency = buildCurrencyFields({ idPrefix: 'add', amountField, draft });
 
     const noteInput = document.createElement('input');
     noteInput.type = 'text';
     noteInput.autocomplete = 'off';
     noteInput.placeholder = 'Optional';
     noteInput.value = draft.note;
+
+    const templateCheck = document.createElement('input');
+    templateCheck.type = 'checkbox';
+    templateCheck.id = 'add-save-template';
+    templateCheck.checked = draft.saveTemplate;
+    const templateCheckLabel = document.createElement('label');
+    templateCheckLabel.className = 'check-row';
+    templateCheckLabel.htmlFor = 'add-save-template';
+    templateCheckLabel.append(templateCheck, element('span', '', 'Save as template'));
+
+    const templateNameInput = document.createElement('input');
+    templateNameInput.type = 'text';
+    templateNameInput.autocomplete = 'off';
+    templateNameInput.maxLength = TEMPLATE_NAME_MAX;
+    templateNameInput.value = draft.templateName;
+    const templateNameField = buildField('add-template-name', 'Template name', templateNameInput);
+    templateNameField.wrapper.hidden = !draft.saveTemplate;
 
     const notePlus = document.createElement('button');
     notePlus.type = 'button';
@@ -889,6 +1086,7 @@ function renderExpenseForm(root, ctx) {
     noteRow.append(noteInput, notePlus);
 
     const noteField = buildField('add-note', 'Note (what was it?)', noteRow);
+    noteRow.removeAttribute('id');
     noteInput.id = 'add-note';
     noteField.control = noteInput;
 
@@ -980,6 +1178,30 @@ function renderExpenseForm(root, ctx) {
     dateInput.addEventListener('change', () => {
         draft.date = dateInput.value;
         clearError(dateField);
+    });
+
+    function defaultTemplateName() {
+        const note = noteInput.value.trim();
+        const name = note !== ''
+            ? note
+            : expenseEntryLabel(ctx.data, categorySelect.value, subcategorySelect.value)
+                .split(' \u00b7 ')
+                .pop();
+        return categorySelect.value === '' && note === '' ? '' : name.slice(0, TEMPLATE_NAME_MAX);
+    }
+
+    templateCheck.addEventListener('change', () => {
+        draft.saveTemplate = templateCheck.checked;
+        templateNameField.wrapper.hidden = !templateCheck.checked;
+        clearError(templateNameField);
+        if (templateCheck.checked && templateNameInput.value.trim() === '') {
+            templateNameInput.value = defaultTemplateName();
+            draft.templateName = templateNameInput.value;
+        }
+    });
+    templateNameInput.addEventListener('input', () => {
+        draft.templateName = templateNameInput.value;
+        clearError(templateNameField);
     });
 
     const categoryPanelHost = document.createElement('div');
@@ -1176,11 +1398,23 @@ function renderExpenseForm(root, ctx) {
         const categoryId = categorySelect.value;
         const subcategories = subcategoriesOf(categoryId);
         const subcategoryId = subcategories.length > 0 ? subcategorySelect.value : '';
-        const amountCents = parseAmount(amountInput.value);
+        const amounts = currency.read();
+        const { amountCents } = amounts;
         const date = dateInput.value;
+        const wantsTemplate = templateCheck.checked;
+        const templateName = wantsTemplate
+            ? (templateNameInput.value.trim() || defaultTemplateName())
+            : '';
         let firstInvalid = null;
 
-        for (const field of [categoryField, subcategoryField, amountField, dateField]) {
+        for (const field of [
+            categoryField,
+            subcategoryField,
+            currency.originalField,
+            amountField,
+            dateField,
+            templateNameField,
+        ]) {
             clearError(field);
         }
 
@@ -1192,13 +1426,27 @@ function renderExpenseForm(root, ctx) {
             setError(subcategoryField, 'Choose a subcategory.');
             firstInvalid ??= subcategorySelect;
         }
+        if (amounts.originalAmountCents === null) {
+            setError(currency.originalField, originalErrorText(amounts.currency));
+            firstInvalid ??= currency.originalField.control;
+        }
         if (amountCents === null) {
-            setError(amountField, 'Enter an amount above zero, like 12.50 or 12,50.');
+            setError(amountField, amountErrorText(amounts.currency));
             firstInvalid ??= amountInput;
         }
         if (monthKeyOf(date) === null) {
             setError(dateField, 'Choose a date.');
             firstInvalid ??= dateInput;
+        }
+        if (wantsTemplate && templateName === '') {
+            setError(templateNameField, 'Enter a template name.');
+            firstInvalid ??= templateNameInput;
+        } else if (templateName.length > TEMPLATE_NAME_MAX) {
+            setError(
+                templateNameField,
+                `Template name must be ${TEMPLATE_NAME_MAX} characters or fewer.`,
+            );
+            firstInvalid ??= templateNameInput;
         }
 
         if (firstInvalid !== null) {
@@ -1215,15 +1463,39 @@ function renderExpenseForm(root, ctx) {
             amountCents,
             note: noteInput.value.trim(),
             date,
+            currency: amounts.currency,
+            originalAmountCents: amounts.originalAmountCents,
+            refund: false,
+            importId: '',
+            bankRef: '',
+            fingerprint: '',
+            goalId: '',
         };
 
         ctx.data.expenses.push(expense);
         freezeMonthPlan(ctx.data, monthKey);
 
+        let template = null;
+        if (wantsTemplate) {
+            const added = addTemplate(ctx.data, {
+                name: templateName,
+                categoryId,
+                subcategoryId,
+                amountCents,
+                note: expense.note,
+            });
+            template = added.ok ? added.template : null;
+        }
+
+        const details = [describeForeign(expense)];
+        if (template !== null) {
+            details.push(`Saved as template \u201c${template.name}\u201d`);
+        }
         lastAdded = {
             kind: 'expense',
             amountCents,
             label: expenseEntryLabel(ctx.data, categoryId, subcategoryId),
+            details: details.filter((line) => line !== ''),
         };
         closeQuickPanels();
         openAddPanel('added');
@@ -1232,6 +1504,9 @@ function renderExpenseForm(root, ctx) {
             ctx.data.expenses.splice(ctx.data.expenses.indexOf(expense), 1);
             if (!planWasAlreadyFrozen) {
                 delete ctx.data.monthPlans[monthKey];
+            }
+            if (template !== null) {
+                ctx.data.templates.splice(ctx.data.templates.indexOf(template), 1);
             }
 
             lastAdded = null;
@@ -1248,16 +1523,24 @@ function renderExpenseForm(root, ctx) {
         draft.amount = '';
         draft.note = '';
         draft.date = date;
+        draft.currency = 'EUR';
+        draft.originalAmount = '';
+        draft.saveTemplate = false;
+        draft.templateName = '';
     });
 
     form.append(
         categoryField.wrapper,
         categoryPanelHost,
         subcategoryField.wrapper,
+        currency.currencyField.wrapper,
+        currency.originalField.wrapper,
         amountField.wrapper,
         noteField.wrapper,
         notePanelHost,
         dateField.wrapper,
+        templateCheckLabel,
+        templateNameField.wrapper,
         formError,
         submitButton,
         backToHomeButton(ctx),

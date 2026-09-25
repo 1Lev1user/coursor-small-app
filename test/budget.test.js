@@ -15,6 +15,7 @@ import {
     euroCentsFromPercent,
     syncCategoryPlanFields,
     recentEntries,
+    spendCents,
 } from '../src/budget.js';
 
 function expense(id, categoryId, amountCents, date, subcategoryId = '') {
@@ -712,4 +713,39 @@ test('syncCategoryPlanFields clears plan fields on no-limit categories', () => {
     assert.equal(categories[0].pinned, false);
     assert.equal(categories[0].percent, 0);
     assert.equal(categories[0].limitCents, 0);
+});
+
+test('refunds lower month, category and subcategory spending', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    data.expenses = [
+        expense('e1', 'random', 5000, '2026-09-01', 'shopping'),
+        { ...expense('r1', 'random', 1200, '2026-09-03', 'shopping'), refund: true },
+    ];
+
+    const totals = monthTotals(data, '2026-09');
+    assert.equal(spendCents(data.expenses[1]), -1200);
+    assert.equal(totals.spentCents, 3800);
+    assert.equal(totals.categories.find(({ id }) => id === 'random').spentCents, 3800);
+    assert.deepEqual(subcategoryTotals(data, '2026-09', 'random'), [
+        { id: 'shopping', name: 'Shopping', spentCents: 3800 },
+    ]);
+});
+
+test('an imported salary replaces the usual income of that month only', () => {
+    const data = defaultData();
+    data.settings.usualMonthlyIncomeCents = 200000;
+    data.incomes = [
+        { id: 'sal', incomeCategoryId: 'salary', amountCents: 201500, note: 'Employer', date: '2026-09-05', importId: 'imp_1' },
+        { id: 'bonus', incomeCategoryId: 'salary', amountCents: 10000, note: 'Bonus', date: '2026-08-20' },
+    ];
+
+    const september = monthTotals(data, '2026-09');
+    assert.equal(september.usualIncomeCents, 0);
+    assert.equal(september.incomeCents, 201500);
+    assert.equal(incomeBreakdown(data, '2026-09').entries.some(({ fromPlan }) => fromPlan), false);
+
+    const august = monthTotals(data, '2026-08');
+    assert.equal(august.usualIncomeCents, 200000);
+    assert.equal(august.incomeCents, 210000);
 });

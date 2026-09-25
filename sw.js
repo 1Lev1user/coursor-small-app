@@ -3,7 +3,7 @@
  * VERSION must match package.json; a test checks it. Changing it renames
  * the cache, which makes installed apps fetch the new files.
  */
-const VERSION = '1.3.0';
+const VERSION = '2.0.0';
 const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
@@ -37,19 +37,62 @@ const CORE_ASSETS = [
     './src/donut.js',
     './src/monthReview.js',
     './src/limits.js',
+    './src/currency.js',
+    './src/templates.js',
+    './src/search.js',
+    './src/goals.js',
+    './src/analytics.js',
+    './src/import/types.js',
+    './src/import/text.js',
+    './src/import/detect.js',
+    './src/import/core.js',
+    './src/import/xlsx.js',
+    './src/import/xml.js',
     './src/views/add.js',
     './src/views/month.js',
     './src/views/monthNav.js',
     './src/views/chartView.js',
+    './src/views/currencyFields.js',
+    './src/views/entryDisplay.js',
+    './src/views/searchPanel.js',
+    './src/views/trends.js',
+    './src/views/year.js',
+    './src/views/goalCard.js',
+    './src/views/settings/goals.js',
+    './src/views/import.js',
+    './src/views/settings/importSettings.js',
     './src/views/more.js',
+    './src/views/settings/shared.js',
+    './src/views/settings/plan.js',
+    './src/views/settings/income.js',
+    './src/views/settings/income-categories.js',
+    './src/views/settings/subscriptions.js',
+    './src/views/settings/categories.js',
+    './src/views/settings/backup.js',
+    './src/views/settings/rights.js',
     './src/views/setup.js',
 ];
 
+// Versions before 2.0 cannot show the "Update" bar, so replace them at once.
+const LEGACY_CACHE = /^my-expenses-(v1-|1\.)/;
+
 self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)),
-    );
-    self.skipWaiting();
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.addAll(CORE_ASSETS.map((url) => new Request(url, { cache: 'reload' })));
+        const keys = await caches.keys();
+        if (keys.some((key) => LEGACY_CACHE.test(key))) {
+            await self.skipWaiting();
+        }
+    })());
+});
+
+// A newer version waits until the page asks for it, so one page never
+// mixes files from two versions.
+self.addEventListener('message', (event) => {
+    if (event.data === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('activate', (event) => {
