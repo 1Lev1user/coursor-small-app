@@ -10,6 +10,7 @@ import {
     parseAmountWith,
     rowsToStatement,
     parsePasted,
+    isDirectionValue,
 } from '../src/import/text.js';
 
 function utf16Bytes(str, littleEndian) {
@@ -530,4 +531,110 @@ test('rowsToStatement reads a bank reference column', () => {
 
     const result = rowsToStatement(rows, 0, layout);
     assert.equal(result.rows[0].bankRef, 'TXN-99881');
+});
+
+// --- direction columns, foreign currency and summary rows ---
+
+test('guessColumns treats a Debets/Kredīts column of D/K letters as the direction', () => {
+    const header = ['Klienta konts', 'Ieraksta tips', 'Datums', 'Informācija saņēmējam', 'Summa', 'Valūta', 'Debets/Kredīts'];
+    const sampleRows = [
+        ['LV12', '20', '03.08.2026', 'RIMI MINI 17 RĪGA', '23,45', 'EUR', 'D'],
+        ['LV12', '20', '15.08.2026', 'Alga par jūliju', '1850,00', 'EUR', 'K'],
+    ];
+    const result = guessColumns(header, sampleRows);
+    assert.equal(result.columns.direction, 6);
+    assert.equal(result.columns.debit, -1);
+    assert.equal(result.columns.credit, -1);
+    assert.equal(result.columns.amount, 4);
+});
+
+test('guessColumns treats a combined Debit/Credit column of C/D letters as the direction', () => {
+    const header = ['Date', 'Details', 'Amount', 'Debit/Credit'];
+    const sampleRows = [['03.08.2026', 'Shop', '10.00', 'D'], ['04.08.2026', 'Salary', '900.00', 'C']];
+    const result = guessColumns(header, sampleRows);
+    assert.equal(result.columns.direction, 3);
+    assert.equal(result.columns.debit, -1);
+});
+
+test('guessColumns does not take a Revolut Type column as the direction', () => {
+    const header = ['Type', 'Product', 'Started Date', 'Description', 'Amount', 'Currency'];
+    const sampleRows = [
+        ['CARD_PAYMENT', 'Current', '2026-09-02 08:14:22', 'Lidl', '-18.27', 'EUR'],
+        ['TOPUP', 'Current', '2026-09-01 12:00:00', 'Top-up', '500.00', 'EUR'],
+        ['EXCHANGE', 'Current', '2026-09-03 12:00:00', 'Exchanged to USD', '-20.00', 'EUR'],
+        ['TRANSFER', 'Current', '2026-09-04 12:00:00', 'To Savings', '-100.00', 'EUR'],
+    ];
+    const result = guessColumns(header, sampleRows);
+    assert.equal(result.columns.direction, -1);
+    assert.equal(result.columns.amount, 4);
+});
+
+test('guessColumns finds an unnamed direction column by its D/K values', () => {
+    const sampleRows = [['03.08.2026', 'Shop', '10,00', 'D'], ['04.08.2026', 'Salary', '900,00', 'K']];
+    const result = guessColumns([], sampleRows);
+    assert.equal(result.columns.direction, 3);
+});
+
+test('isDirectionValue accepts D/C/K letters and debit/credit words only', () => {
+    for (const value of ['D', 'k', ' C ', 'Debets', 'Kredīts', 'CRDT', 'Дебет']) {
+        assert.equal(isDirectionValue(value), true, value);
+    }
+    for (const value of ['CARD_PAYMENT', 'TOPUP', 'TRANSFER', 'EXCHANGE', '20', '']) {
+        assert.equal(isDirectionValue(value), false, value);
+    }
+});
+
+const FOREIGN_LAYOUT = {
+    decimalSeparator: '.',
+    dateFormat: 'YMD',
+    columns: { date: 0, amount: 2, description: 1, currency: 3, direction: -1, debit: -1, credit: -1, bankRef: -1 },
+};
+
+test('rowsToStatement leaves the EUR amount empty for a foreign-currency row', () => {
+    const rows = [
+        ['Date', 'Description', 'Amount', 'Currency'],
+        ['2026-09-10', 'Amazon.com', '-50.00', 'USD'],
+        ['2026-09-11', 'Lidl', '-12.00', 'EUR'],
+    ];
+    const result = rowsToStatement(rows, 0, FOREIGN_LAYOUT);
+    assert.equal(result.rows[0].currency, 'USD');
+    assert.equal(result.rows[0].amountCents, null);
+    assert.equal(result.rows[0].originalAmountCents, 5000);
+    assert.equal(result.rows[0].direction, 'out');
+    assert.equal(result.rows[1].amountCents, 1200);
+    assert.equal(result.rows[1].originalAmountCents, 1200);
+});
+
+test('rowsToStatement takes the EUR amount from a mapped EUR column for foreign rows', () => {
+    const rows = [
+        ['Date', 'Description', 'Amount', 'Currency', 'Amount EUR'],
+        ['2026-09-10', 'Amazon.com', '-50.00', 'USD', '-46.20'],
+        ['2026-09-12', 'Hotel', '-80.00', 'GBP', ''],
+    ];
+    const layout = { ...FOREIGN_LAYOUT, columns: { ...FOREIGN_LAYOUT.columns, eurAmount: 4 } };
+    const result = rowsToStatement(rows, 0, layout);
+    assert.equal(result.rows[0].amountCents, 4620);
+    assert.equal(result.rows[0].originalAmountCents, 5000);
+    assert.equal(result.rows[1].amountCents, null);
+});
+
+test('rowsToStatement keeps merchants whose name contains a summary word', () => {
+    const rows = [
+        ['Datums', 'Apraksts', 'Summa'],
+        ['13.04.2026', 'TotalEnergies Riga', '-40,00'],
+        ['14.04.2026', 'Saldo Bakery', '-3,20'],
+        ['30.04.2026', 'Sākuma saldo', '500,00'],
+        ['30.04.2026', 'Apgrozījums kopā', '100,00'],
+        ['', 'Total', '100,00'],
+        ['', 'Kopā par periodu 1234', '100,00'],
+    ];
+    const layout = {
+        decimalSeparator: ',',
+        dateFormat: 'DMY',
+        columns: { date: 0, amount: 2, description: 1, currency: -1, direction: -1, debit: -1, credit: -1, bankRef: -1 },
+    };
+    const result = rowsToStatement(rows, 0, layout);
+    assert.deepEqual(result.rows.map((row) => row.description), ['TotalEnergies Riga', 'Saldo Bakery']);
+    assert.equal(result.skipped.length, 4);
+    assert.ok(result.skipped.every((entry) => entry.reason === 'summary row'));
 });

@@ -273,6 +273,21 @@ function isDateLikeValue(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(value);
 }
 
+const DIRECTION_VALUES = new Set([
+    'D', 'C', 'K', 'DR', 'CR', 'DB', 'DBIT', 'CRDT', 'DEBIT', 'CREDIT', 'DEBET', 'KREDIT',
+    'DEBETS', 'KREDITS', 'DEEBET', 'KREEDIT', 'ДЕБЕТ', 'КРЕДИТ',
+]);
+
+/**
+ * A direction cell holds a D/C/K letter or a debit/credit word, never a
+ * transaction type such as CARD_PAYMENT or TOPUP.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function isDirectionValue(value) {
+    return DIRECTION_VALUES.has(stripDiacritics(String(value ?? '')).trim().toUpperCase());
+}
+
 function isAmountLikeValue(value) {
     return parseAmountWith(value, '.') !== null || parseAmountWith(value, ',') !== null;
 }
@@ -332,6 +347,20 @@ export function guessColumns(header, sampleRows) {
         }
     }
 
+    for (const key of ['debit', 'credit']) {
+        const samples = columnSamples(sampleRows, columns[key]);
+        if (columns[key] >= 0 && samples.length > 0 && samples.every(isDirectionValue)) {
+            columns.direction = columns[key];
+            columns[key] = -1;
+        }
+    }
+    if (columns.direction >= 0) {
+        const samples = columnSamples(sampleRows, columns.direction);
+        if (samples.length > 0 && !samples.every(isDirectionValue)) {
+            columns.direction = -1;
+        }
+    }
+
     if (columns.date === -1) {
         const used = usedIndexes(columns);
         for (let i = 0; i < (sampleRows[0] || []).length; i += 1) {
@@ -386,6 +415,18 @@ export function guessColumns(header, sampleRows) {
         if (bestIndex >= 0) {
             columns.description = bestIndex;
             descriptionVia = 'content';
+        }
+    }
+
+    if (columns.direction === -1 && columns.debit === -1 && columns.credit === -1) {
+        const used = usedIndexes(columns);
+        const width = sampleRows[0] ? sampleRows[0].length : 0;
+        for (let i = 0; i < width; i += 1) {
+            const samples = columnSamples(sampleRows, i);
+            if (!used.has(i) && samples.length > 0 && samples.every(isDirectionValue)) {
+                columns.direction = i;
+                break;
+            }
         }
     }
 
@@ -622,11 +663,51 @@ export function parseAmountWith(value, decimalSeparator = '.') {
 
 const SUMMARY_KEYWORDS = ['total', 'kopa', 'итого', 'saldo', 'opening balance', 'beginning balance', 'closing balance'];
 
-function isSummaryRow(row) {
+const SUMMARY_CORE_WORDS = [
+    'total', 'totals', 'kopa', 'kopsumma', 'kokku', 'viso', 'итого', 'всего',
+    'saldo', 'balance', 'atlikums', 'likutis', 'jaak', 'algsaldo', 'loppsaldo', 'сальдо', 'остаток',
+    'apgrozijums', 'apgrozijumi', 'turnover', 'käive', 'apyvarta', 'оборот', 'обороты',
+].map(normalizeText);
+
+const SUMMARY_QUALIFIERS = [
+    'opening', 'closing', 'beginning', 'starting', 'ending', 'final', 'initial', 'account', 'period',
+    'available', 'booked', 'of', 'the', 'for', 'and', 'on', 'un', 'ja', 'ir',
+    'sakuma', 'beigu', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
+    'debit', 'credit', 'algus', 'lopp', 'pradinis', 'galutinis', 'laikotarpio',
+    'начальное', 'конечное', 'входящий', 'исходящий', 'за', 'период', 'на', 'по', 'счету',
+].map(normalizeText);
+
+const SUMMARY_WORDS = new Set([...SUMMARY_CORE_WORDS, ...SUMMARY_QUALIFIERS]);
+
+function summaryWords(value) {
+    return normalizeText(value).split(/[^\p{L}]+/u).filter((word) => word !== '');
+}
+
+/** The whole cell is a summary label such as 'Kopā', 'Closing balance' or 'Sākuma saldo'. */
+function isSummaryCell(value) {
+    const words = summaryWords(value);
+    return words.length > 0
+        && words.every((word) => SUMMARY_WORDS.has(word))
+        && words.some((word) => SUMMARY_CORE_WORDS.includes(word));
+}
+
+function hasSummaryKeyword(row) {
     return row.some((cell) => {
         const normalized = normalizeText(cell);
         return normalized !== '' && SUMMARY_KEYWORDS.some((keyword) => normalized.includes(keyword));
     });
+}
+
+/**
+ * A summary row has a description that is only a summary label, or mentions a
+ * summary word and has no valid date. 'TotalEnergies' with a date stays a transaction.
+ */
+function isSummaryRow(row, descriptionIndex, hasDate) {
+    const labelCells = descriptionIndex >= 0 ? [cellAt(row, descriptionIndex)] : row;
+    if (labelCells.some(isSummaryCell)) {
+        return true;
+    }
+    return !hasDate && hasSummaryKeyword(row);
 }
 
 function cellAt(row, index) {
@@ -638,6 +719,8 @@ function cellAt(row, index) {
  * or guessed column layout. Direction comes from the amount's sign, a D/C
  * column, or separate debit/credit columns. Rows whose date or amount does
  * not parse are skipped and reported, as are obvious summary rows.
+ * A row in another currency gets amountCents null (the UI asks for the EUR
+ * charged) unless layout.columns.eurAmount points at a EUR amount column.
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
@@ -660,13 +743,14 @@ export function rowsToStatement(rows, headerRow, layout) {
             continue;
         }
 
-        if (isSummaryRow(row)) {
+        const dateValue = cellAt(row, columns.date);
+        const date = dateFormat ? parseDateWith(dateValue, dateFormat) : null;
+
+        if (isSummaryRow(row, columns.description ?? -1, date !== null)) {
             skipped.push({ line, reason: 'summary row' });
             continue;
         }
 
-        const dateValue = cellAt(row, columns.date);
-        const date = dateFormat ? parseDateWith(dateValue, dateFormat) : null;
         if (!date) {
             skipped.push({ line, reason: 'unparsable date' });
             continue;
@@ -724,12 +808,20 @@ export function rowsToStatement(rows, headerRow, layout) {
             }
         }
 
+        let euroCents = amountCents;
+        if (currency !== 'EUR') {
+            const eurIndex = columns.eurAmount ?? -1;
+            const eurValue = cellAt(row, eurIndex);
+            const eur = eurIndex >= 0 && eurValue.trim() !== '' ? parseAmountWith(eurValue, decimalSeparator) : null;
+            euroCents = eur !== null && eur !== 0 ? Math.abs(eur) : null;
+        }
+
         const description = cellAt(row, columns.description);
         const bankRef = cellAt(row, columns.bankRef);
 
         statementRows.push(statementRow({
             date,
-            amountCents,
+            amountCents: euroCents,
             direction,
             currency,
             originalAmountCents: amountCents,
