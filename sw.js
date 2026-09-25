@@ -79,7 +79,7 @@ const LEGACY_CACHE = /^my-expenses-(v1-|1\.)/;
 self.addEventListener('install', (event) => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE_NAME);
-        await cache.addAll(CORE_ASSETS);
+        await cache.addAll(CORE_ASSETS.map((url) => new Request(url, { cache: 'reload' })));
         const keys = await caches.keys();
         if (keys.some((key) => LEGACY_CACHE.test(key))) {
             await self.skipWaiting();

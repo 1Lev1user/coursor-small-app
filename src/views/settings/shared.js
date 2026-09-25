@@ -36,6 +36,9 @@ export const state = {
     pendingImportText: null,
     pendingImportCounts: null,
     importError: '',
+
+    confirmDeletePreUpdate: false,
+    confirmDeleteRescue: false,
 };
 
 export function closeTransientUi() {
@@ -58,6 +61,8 @@ export function closeTransientUi() {
     state.pendingImportText = null;
     state.pendingImportCounts = null;
     state.importError = '';
+    state.confirmDeletePreUpdate = false;
+    state.confirmDeleteRescue = false;
     state.renameDrafts.clear();
     state.editPlanCategoryId = null;
     state.categoryPlanDrafts.clear();

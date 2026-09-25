@@ -93,11 +93,24 @@ function renderAmountForm(ctx, goal) {
             ctx.render();
             return;
         }
+        const typedAmount = state.amount;
         Object.assign(state, { open: false, amount: '', error: '' });
         setFocus('home-goal-add');
-        if (ctx.save() !== false) {
-            ctx.toast(`Added ${formatEuro(cents)} to ${goal.name}`);
+        if (ctx.save() === false) {
+            ctx.data.expenses.splice(ctx.data.expenses.indexOf(result.expense), 1);
+            if (!result.planWasAlreadyFrozen) {
+                delete ctx.data.monthPlans[result.monthKey];
+            }
+            Object.assign(state, {
+                open: true,
+                amount: typedAmount,
+                error: 'Could not save to this device. Nothing was added.',
+            });
+            setFocus(input.id);
+            ctx.render();
+            return;
         }
+        ctx.toast(`Added ${formatEuro(cents)} to ${goal.name}`);
     });
 
     form.append(field, submit, cancel);

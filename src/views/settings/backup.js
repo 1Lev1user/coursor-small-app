@@ -7,11 +7,17 @@ import {
 } from '../../backup.js';
 import { buildMonthCsv, csvFilename } from '../../csv.js';
 import { downloadText } from '../../files.js';
-import { readPreUpdateCopy } from '../../storage.js';
+import {
+    readPreUpdateCopy,
+    deletePreUpdateCopy,
+    readRescueCopy,
+    deleteRescueCopy,
+} from '../../storage.js';
 import {
     element,
     persist,
     actionButton,
+    renderConfirm,
     state,
 } from './shared.js';
 
@@ -246,10 +252,74 @@ export function renderBackupSection(ctx) {
                 'This device kept a copy of your data as it was before the 2.0 update.'
                     + ' If something looks wrong, download it and restore it with Import backup.',
             ),
-            actionButton('btn', 'Download pre-update copy', () => {
-                downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
-            }),
         );
+        if (state.confirmDeletePreUpdate) {
+            section.append(renderConfirm(
+                'The copy is removed from this device. Your current data is not affected.',
+                () => {
+                    deletePreUpdateCopy();
+                    state.confirmDeletePreUpdate = false;
+                    ctx.toast('Pre-update copy deleted');
+                    ctx.render();
+                },
+                () => {
+                    state.confirmDeletePreUpdate = false;
+                    ctx.render();
+                },
+            ));
+        } else {
+            const preUpdateActions = element('div', 'backup-actions');
+            preUpdateActions.append(
+                actionButton('btn', 'Download pre-update copy', () => {
+                    downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
+                }),
+                actionButton('btn btn-ghost-danger', 'Delete this copy', () => {
+                    state.confirmDeletePreUpdate = true;
+                    ctx.render();
+                }),
+            );
+            section.append(preUpdateActions);
+        }
+    }
+
+    const rescue = readRescueCopy();
+    if (rescue !== null) {
+        section.append(
+            element('h3', 'category-name', 'Saved data from a failed start'),
+            element(
+                'p',
+                'muted',
+                'This device kept a copy of data it could not read when the app last started.'
+                    + ' If something looks wrong, download it and restore it with Import backup.',
+            ),
+        );
+        if (state.confirmDeleteRescue) {
+            section.append(renderConfirm(
+                'The copy is removed from this device. Your current data is not affected.',
+                () => {
+                    deleteRescueCopy();
+                    state.confirmDeleteRescue = false;
+                    ctx.toast('Rescue copy deleted');
+                    ctx.render();
+                },
+                () => {
+                    state.confirmDeleteRescue = false;
+                    ctx.render();
+                },
+            ));
+        } else {
+            const rescueActions = element('div', 'backup-actions');
+            rescueActions.append(
+                actionButton('btn', 'Download rescue copy', () => {
+                    downloadText(`my-expenses-rescue-${todayISO()}.json`, rescue, 'application/json');
+                }),
+                actionButton('btn btn-ghost-danger', 'Delete this copy', () => {
+                    state.confirmDeleteRescue = true;
+                    ctx.render();
+                }),
+            );
+            section.append(rescueActions);
+        }
     }
     return section;
 }

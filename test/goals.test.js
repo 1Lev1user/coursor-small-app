@@ -157,3 +157,23 @@ test('goalProgress reports monthsLeft/perMonthCents as null without a future dea
 
     assert.equal(goalProgress(data, 'missing', now), null);
 });
+
+test('contribute freezes the month plan and reports whether it was new', async () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    const { goal } = addGoal(data, { name: 'Car', targetCents: 500000 });
+    const result = contribute(data, goal.id, 2500, '2026-03-10');
+    assert.equal(result.ok, true);
+    assert.equal(result.monthKey, '2026-03');
+    assert.equal(result.planWasAlreadyFrozen, false);
+    assert.equal(Object.hasOwn(data.monthPlans, '2026-03'), true);
+    assert.equal(contribute(data, goal.id, 100, '2026-03-11').planWasAlreadyFrozen, true);
+});
+
+test('goal progress counts refunded contributions as money back', () => {
+    const data = defaultData();
+    const { goal } = addGoal(data, { name: 'Bike', targetCents: 10000 });
+    contribute(data, goal.id, 3000, '2026-09-01');
+    data.expenses.push({ ...data.expenses[0], id: 'back', amountCents: 1000, refund: true });
+    assert.equal(goalProgress(data, goal.id).savedCents, 2000);
+});

@@ -56,6 +56,41 @@ export function readPreUpdateCopy(storage = globalThis.localStorage) {
     }
 }
 
+/** Removes the pre-update copy from this device only; current data is untouched. */
+export function deletePreUpdateCopy(storage = globalThis.localStorage) {
+    if (storage === undefined || storage === null) {
+        return false;
+    }
+    try {
+        storage.removeItem(PRE_UPDATE_KEY);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** The rescue copy saved when a load could not be read, or null. */
+export function readRescueCopy(storage = globalThis.localStorage) {
+    try {
+        return storage?.getItem(RESCUE_KEY) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** Removes the rescue copy from this device only; current data is untouched. */
+export function deleteRescueCopy(storage = globalThis.localStorage) {
+    if (storage === undefined || storage === null) {
+        return false;
+    }
+    try {
+        storage.removeItem(RESCUE_KEY);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /*
  * Reads saved data and says whether it can be used.
  * status 'ok': data is usable (or nothing was saved yet).

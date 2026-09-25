@@ -1,5 +1,6 @@
 import { createId, SAVINGS_ID } from './model.js';
-import { todayISO } from './months.js';
+import { todayISO, monthKeyOf } from './months.js';
+import { freezeMonthPlan, spendCents } from './budget.js';
 
 function monthsBetweenInclusive(fromMonthKey, toMonthKey) {
     const [fromYear, fromMonth] = fromMonthKey.split('-').map(Number);
@@ -142,7 +143,7 @@ export function goalProgress(data, goalId, now = new Date()) {
 
     const savedCents = data.expenses
         .filter((expense) => expense.goalId === goalId)
-        .reduce((total, expense) => total + expense.amountCents, 0);
+        .reduce((total, expense) => total + spendCents(expense), 0);
 
     const targetCents = goal.targetCents;
     const remainingCents = Math.max(0, targetCents - savedCents);
@@ -173,12 +174,15 @@ export function goalProgress(data, goalId, now = new Date()) {
 }
 
 /**
- * Adds an expense in the Savings category, tagged with this goal.
+ * Adds an expense in the Savings category, tagged with this goal, and
+ * freezes the month plan for its month, exactly like a normal add.
+ * On save failure the caller must remove `expense` from `data.expenses`
+ * and, when `planWasAlreadyFrozen` is false, delete `data.monthPlans[monthKey]`.
  * @param {object} data
  * @param {string} goalId
  * @param {number} amountCents
  * @param {string} date
- * @returns {{ ok: true, expense: object } | { ok: false, reason: string }}
+ * @returns {{ ok: true, expense: object, monthKey: string, planWasAlreadyFrozen: boolean } | { ok: false, reason: string }}
  */
 export function contribute(data, goalId, amountCents, date) {
     const goal = (data.goals ?? []).find((entry) => entry.id === goalId);
@@ -188,7 +192,8 @@ export function contribute(data, goalId, amountCents, date) {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
         return { ok: false, reason: 'Amount must be a positive number.' };
     }
-    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const monthKey = monthKeyOf(date);
+    if (monthKey === null) {
         return { ok: false, reason: 'Date is required.' };
     }
 
@@ -207,7 +212,9 @@ export function contribute(data, goalId, amountCents, date) {
         fingerprint: '',
         goalId,
     };
+    const planWasAlreadyFrozen = Object.hasOwn(data.monthPlans, monthKey);
     data.expenses.push(expense);
+    freezeMonthPlan(data, monthKey);
 
-    return { ok: true, expense };
+    return { ok: true, expense, monthKey, planWasAlreadyFrozen };
 }

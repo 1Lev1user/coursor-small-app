@@ -185,7 +185,25 @@ function renderAddMoneyForm(ctx, goal) {
             ctx.render();
             return;
         }
-        finish(ctx, `Added ${formatEuro(cents)} to ${goal.name}`, `goal-action-add-${goal.id}`);
+        state.goalId = null;
+        state.mode = null;
+        state.draft = null;
+        state.focusId = `goal-action-add-${goal.id}`;
+        if (ctx.save() === false) {
+            ctx.data.expenses.splice(ctx.data.expenses.indexOf(result.expense), 1);
+            if (!result.planWasAlreadyFrozen) {
+                delete ctx.data.monthPlans[result.monthKey];
+            }
+            state.goalId = goal.id;
+            state.mode = 'add';
+            state.draft = draft;
+            draft.errorField = 'date';
+            draft.error = 'Could not save to this device. Nothing was added.';
+            state.focusId = date.control.id;
+            ctx.render();
+            return;
+        }
+        ctx.toast(`Added ${formatEuro(cents)} to ${goal.name}`);
     });
 
     form.append(

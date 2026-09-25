@@ -278,3 +278,20 @@ test('open still works when the migrated data cannot be written', () => {
     assert.equal(result.migrationSaved, false);
     assert.equal(result.data.version, SCHEMA_VERSION);
 });
+
+test('pre-update and rescue copies can be read and deleted without touching data', async () => {
+    const { deletePreUpdateCopy, readRescueCopy, deleteRescueCopy } = await import('../src/storage.js');
+    const values = { [STORAGE_KEY]: 'current', [PRE_UPDATE_KEY]: 'old', [RESCUE_KEY]: 'broken' };
+    const storage = {
+        getItem: (key) => (Object.hasOwn(values, key) ? values[key] : null),
+        setItem: (key, value) => { values[key] = value; },
+        removeItem: (key) => { delete values[key]; },
+    };
+    assert.equal(readRescueCopy(storage), 'broken');
+    assert.equal(deletePreUpdateCopy(storage), true);
+    assert.equal(deleteRescueCopy(storage), true);
+    assert.equal(readPreUpdateCopy(storage), null);
+    assert.equal(readRescueCopy(storage), null);
+    assert.equal(values[STORAGE_KEY], 'current');
+    assert.equal(deletePreUpdateCopy(null), false);
+});
