@@ -15,10 +15,22 @@ export function euroCentsFromPercent(percent, monthlyBudgetCents) {
     return splitShares(monthlyBudgetCents, [percent])[0];
 }
 
+export function isNoLimitCategory(category) {
+    return category?.system !== true
+        && category?.pinned !== true
+        && category?.limitMode === 'none';
+}
+
 /** Mutates user categories in place: sync percent ↔ limitCents from limitMode. */
 export function syncCategoryPlanFields(categories, monthlyBudgetCents) {
     for (const category of categories) {
         if (category.system === true) continue;
+        if (category.limitMode === 'none') {
+            category.pinned = false;
+            category.percent = 0;
+            category.limitCents = 0;
+            continue;
+        }
         if (category.pinned !== true) {
             if (category.limitMode !== 'percent' && category.limitMode !== 'euro') {
                 category.limitMode = 'percent';
@@ -41,23 +53,32 @@ export function resolvePlan(categories, monthlyBudgetCents) {
         .filter(({ pinned }) => pinned === true)
         .reduce((total, { percent }) => total + percent, 0);
     const leftoverPercent = Math.max(0, 100 - pinnedTotalPercent);
-    const flexibleCount = included.filter(({ pinned }) => pinned !== true).length;
+    const flexibleCount = included.filter(
+        (category) => category.pinned !== true && category.limitMode !== 'none',
+    ).length;
     const flexiblePercentEach = flexibleCount === 0
         ? 0
         : leftoverPercent / flexibleCount;
+    const noLimitCount = included.filter(isNoLimitCategory).length;
 
-    const entries = included.map(({ id, name, pinned, percent }) => ({
-        id,
-        name,
-        pinned,
-        percent: pinned === true ? percent : flexiblePercentEach,
-    }));
+    const entries = included.map(({ id, name, pinned, percent, limitMode }) => {
+        const noLimit = pinned !== true && limitMode === 'none';
+        return {
+            id,
+            name,
+            pinned: pinned === true,
+            noLimit,
+            percent: pinned === true
+                ? percent
+                : (noLimit ? 0 : flexiblePercentEach),
+        };
+    });
     const limits = splitShares(
         monthlyBudgetCents,
         entries.map(({ percent }) => percent),
     );
     entries.forEach((entry, index) => {
-        entry.limitCents = limits[index];
+        entry.limitCents = entry.noLimit === true ? 0 : limits[index];
     });
 
     const unallocatedPercent = flexibleCount === 0 ? leftoverPercent : 0;
@@ -71,6 +92,7 @@ export function resolvePlan(categories, monthlyBudgetCents) {
         leftoverPercent,
         flexibleCount,
         flexiblePercentEach,
+        noLimitCount,
         unallocatedPercent,
         unallocatedCents,
         warnings: {
@@ -210,15 +232,19 @@ export function monthTotals(data, monthKey) {
 }
 
 function categoryTotal(entry, spentCents) {
+    const noLimit = entry.noLimit === true;
+    const limitCents = noLimit ? 0 : entry.limitCents;
+    const over = noLimit ? false : spentCents > limitCents;
     return {
         id: entry.id,
         name: entry.name,
         percent: entry.percent,
-        limitCents: entry.limitCents,
+        limitCents,
+        noLimit,
         spentCents,
-        remainingCents: entry.limitCents - spentCents,
-        over: spentCents > entry.limitCents,
-        overByCents: Math.max(0, spentCents - entry.limitCents),
+        remainingCents: noLimit ? 0 : limitCents - spentCents,
+        over,
+        overByCents: noLimit ? 0 : Math.max(0, spentCents - limitCents),
     };
 }
 

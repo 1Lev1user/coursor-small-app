@@ -33,6 +33,7 @@ function income(id, amountCents, date) {
 
 test('resolvePlan splits leftover equally in original order and rounds only through splitShares', () => {
     const data = defaultData();
+    data.categories.find(({ id }) => id === 'subscriptions').limitMode = 'percent';
     data.settings.monthlyBudgetCents = 100000;
     const savings = data.categories.find(({ id }) => id === 'savings');
     savings.limitMode = 'percent';
@@ -45,6 +46,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'necessary',
             name: 'Necessary expenses',
             pinned: false,
+            noLimit: false,
             percent: 22.5,
             limitCents: 22500,
         },
@@ -52,6 +54,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'subscriptions',
             name: 'Subscriptions',
             pinned: false,
+            noLimit: false,
             percent: 22.5,
             limitCents: 22500,
         },
@@ -59,6 +62,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'random',
             name: 'Random small purchases',
             pinned: false,
+            noLimit: false,
             percent: 22.5,
             limitCents: 22500,
         },
@@ -66,6 +70,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'savings',
             name: 'Savings',
             pinned: true,
+            noLimit: false,
             percent: 10,
             limitCents: 10000,
         },
@@ -73,6 +78,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
             id: 'others',
             name: 'Others',
             pinned: false,
+            noLimit: false,
             percent: 22.5,
             limitCents: 22500,
         },
@@ -91,6 +97,7 @@ test('resolvePlan splits leftover equally in original order and rounds only thro
 
 test('resolvePlan gives flexible categories zero when pinned total is 100', () => {
     const data = defaultData();
+    data.categories.find(({ id }) => id === 'subscriptions').limitMode = 'percent';
     data.settings.monthlyBudgetCents = 99999;
     const savings = data.categories.find(({ id }) => id === 'savings');
     savings.limitMode = 'percent';
@@ -109,6 +116,7 @@ test('resolvePlan gives flexible categories zero when pinned total is 100', () =
             id: 'necessary',
             name: 'Necessary expenses',
             pinned: false,
+            noLimit: false,
             percent: 0,
             limitCents: 0,
         },
@@ -116,6 +124,7 @@ test('resolvePlan gives flexible categories zero when pinned total is 100', () =
             id: 'subscriptions',
             name: 'Subscriptions',
             pinned: false,
+            noLimit: false,
             percent: 0,
             limitCents: 0,
         },
@@ -123,6 +132,7 @@ test('resolvePlan gives flexible categories zero when pinned total is 100', () =
             id: 'savings',
             name: 'Savings',
             pinned: true,
+            noLimit: false,
             percent: 100,
             limitCents: 99999,
         },
@@ -176,6 +186,7 @@ test('resolvePlan reports pinned overflow and never gives negative leftover shar
 
 test('resolvePlan handles a zero budget and excludes the system category from every calculation', () => {
     const data = defaultData();
+    data.categories.find(({ id }) => id === 'subscriptions').limitMode = 'percent';
     const system = data.categories.find(({ id }) => id === UNCATEGORISED_ID);
     system.pinned = true;
     system.percent = 100;
@@ -299,6 +310,7 @@ test('syncCategoryPlanFields updates fixed-euro percent when budget changes', ()
 
 test('buildPlanSnapshot has the frozen shape and does not store anything', () => {
     const data = defaultData();
+    data.categories.find(({ id }) => id === 'subscriptions').limitMode = 'percent';
     data.settings.monthlyBudgetCents = 12345;
     data.settings.usualMonthlyIncomeCents = 54321;
     const savings = data.categories.find(({ id }) => id === 'savings');
@@ -393,6 +405,7 @@ test('refreshCurrentMonthPlan only refreshes an already-frozen current month', (
 
 test('monthTotals calculates budget, cash, incomes, and strict over-limit category totals', () => {
     const data = defaultData();
+    data.categories.find(({ id }) => id === 'subscriptions').limitMode = 'percent';
     data.settings.monthlyBudgetCents = 100000;
     data.settings.usualMonthlyIncomeCents = 150000;
     const savings = data.categories.find(({ id }) => id === 'savings');
@@ -425,6 +438,7 @@ test('monthTotals calculates budget, cash, incomes, and strict over-limit catego
         name: 'Necessary expenses',
         percent: 22.5,
         limitCents: 22500,
+        noLimit: false,
         spentCents: 30001,
         remainingCents: -7501,
         over: true,
@@ -491,6 +505,7 @@ test('monthTotals uses frozen entries and appends categories with later spending
             name: 'Added later',
             percent: 0,
             limitCents: 0,
+            noLimit: false,
             spentCents: 500,
             remainingCents: -500,
             over: true,
@@ -501,6 +516,7 @@ test('monthTotals uses frozen entries and appends categories with later spending
             name: 'Uncategorised',
             percent: 0,
             limitCents: 0,
+            noLimit: false,
             spentCents: 700,
             remainingCents: -700,
             over: true,
@@ -511,6 +527,7 @@ test('monthTotals uses frozen entries and appends categories with later spending
             name: 'deleted-id',
             percent: 0,
             limitCents: 0,
+            noLimit: false,
             spentCents: 900,
             remainingCents: -900,
             over: true,
@@ -641,4 +658,58 @@ test('recentEntries returns the newest expenses and incomes first', () => {
     );
     assert.equal(recentEntries(data, 10).length, 5);
     assert.deepEqual(recentEntries({ expenses: [], incomes: [] }), []);
+});
+
+test('resolvePlan gives no-limit categories no share and splits the leftover among the rest', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    const savings = data.categories.find(({ id }) => id === 'savings');
+    savings.limitMode = 'percent';
+    savings.percent = 10;
+
+    const plan = resolvePlan(data.categories, data.settings.monthlyBudgetCents);
+    const subscriptions = plan.entries.find(({ id }) => id === 'subscriptions');
+
+    assert.equal(subscriptions.noLimit, true);
+    assert.equal(subscriptions.percent, 0);
+    assert.equal(subscriptions.limitCents, 0);
+    assert.equal(plan.noLimitCount, 1);
+    assert.equal(plan.flexibleCount, 3);
+    assert.deepEqual(
+        plan.entries.filter(({ noLimit, pinned }) => !noLimit && !pinned).map(({ limitCents }) => limitCents),
+        [30000, 30000, 30000],
+    );
+});
+
+test('monthTotals never marks a no-limit category as over', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    freezeMonthPlan(data, '2026-09');
+    data.expenses = [expense('e1', 'subscriptions', 99999, '2026-09-02')];
+
+    const subscriptions = monthTotals(data, '2026-09').categories
+        .find(({ id }) => id === 'subscriptions');
+
+    assert.equal(subscriptions.noLimit, true);
+    assert.equal(subscriptions.spentCents, 99999);
+    assert.equal(subscriptions.over, false);
+    assert.equal(subscriptions.overByCents, 0);
+    assert.equal(subscriptions.remainingCents, 0);
+});
+
+test('syncCategoryPlanFields clears plan fields on no-limit categories', () => {
+    const categories = [{
+        id: 'x',
+        name: 'X',
+        system: false,
+        pinned: true,
+        limitMode: 'none',
+        limitCents: 5000,
+        percent: 20,
+        subcategories: [],
+    }];
+    syncCategoryPlanFields(categories, 100000);
+    assert.equal(categories[0].pinned, false);
+    assert.equal(categories[0].percent, 0);
+    assert.equal(categories[0].limitCents, 0);
 });
