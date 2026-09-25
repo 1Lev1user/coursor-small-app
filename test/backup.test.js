@@ -113,3 +113,17 @@ test('settings-only import keeps local entries and the categories they use', asy
     assert.equal(countSettings(merged).templates, 1);
     assert.equal(current.categories.some(({ id }) => id === 'pets'), true);
 });
+
+test('settings-only import updates the current month plan', async () => {
+    const { mergeSettingsOnly } = await import('../src/backup.js');
+    const { freezeMonthPlan, monthTotals } = await import('../src/budget.js');
+    const { currentMonthKey } = await import('../src/months.js');
+    const current = defaultData();
+    current.settings.monthlyBudgetCents = 100000;
+    freezeMonthPlan(current, currentMonthKey());
+    const backup = defaultData();
+    backup.settings.monthlyBudgetCents = 250000;
+
+    const merged = mergeSettingsOnly(current, backup);
+    assert.equal(monthTotals(merged, currentMonthKey()).budgetCents, 250000);
+});

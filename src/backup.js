@@ -1,4 +1,5 @@
 import { normalise } from './model.js';
+import { refreshCurrentMonthPlan } from './budget.js';
 import { todayISO } from './months.js';
 
 export function countRecords(data) {
@@ -106,6 +107,8 @@ export function mergeSettingsOnly(current, backup) {
     next.rules = incoming.rules ?? [];
     next.templates = incoming.templates ?? [];
     next.bankLayouts = incoming.bankLayouts ?? [];
+    // The current month follows the new plan; earlier months keep theirs.
+    refreshCurrentMonthPlan(next);
     return next;
 }
 

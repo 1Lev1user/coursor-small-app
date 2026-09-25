@@ -436,3 +436,15 @@ test('normalise keeps no-limit categories and clears their plan fields', () => {
     assert.equal(normalised.percent, 0);
     assert.equal(normalised.limitCents, 0);
 });
+
+test('deleting a category or subcategory updates rules and templates that use it', () => {
+    const data = defaultData();
+    data.rules = [{ id: 'r1', pattern: 'RIMI', kind: 'expense', categoryId: 'random', subcategoryId: 'shopping' }];
+    data.templates = [{ id: 't1', name: 'Coffee', categoryId: 'necessary', subcategoryId: 'groceries', amountCents: 300, note: '' }];
+
+    deleteSubcategory(data, 'necessary', 'groceries');
+    assert.equal(data.templates[0].subcategoryId, '');
+    deleteCategory(data, 'random');
+    assert.equal(data.rules[0].categoryId, UNCATEGORISED_ID);
+    assert.equal(data.rules[0].subcategoryId, '');
+});

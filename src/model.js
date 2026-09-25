@@ -383,6 +383,12 @@ export function deleteCategory(data, categoryId) {
         }
     }
     data.categories.splice(categoryIndex, 1);
+    for (const item of [...(data.rules ?? []), ...(data.templates ?? [])]) {
+        if (item.categoryId === categoryId) {
+            item.categoryId = UNCATEGORISED_ID;
+            item.subcategoryId = '';
+        }
+    }
 
     return { ok: true, movedCount };
 }
@@ -411,6 +417,11 @@ export function deleteSubcategory(data, categoryId, subcategoryId) {
         }
     }
     category.subcategories.splice(subcategoryIndex, 1);
+    for (const item of [...(data.rules ?? []), ...(data.templates ?? [])]) {
+        if (item.categoryId === categoryId && item.subcategoryId === subcategoryId) {
+            item.subcategoryId = '';
+        }
+    }
 
     return { ok: true, movedCount };
 }

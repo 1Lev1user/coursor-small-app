@@ -513,7 +513,7 @@ test('Show as text becomes the note and is remembered on the rule', async () => 
     const applied = applyImport(data, built, {});
     assert.equal(applied.ok, true);
     assert.equal(data.expenses[0].note, 'Produkti');
-    assert.equal(data.expenses[0].bankText, 'SIA Kārlis');
+    assert.equal(data.expenses[0].bankText, 'SIA Kārlis · SIA Kārlis veikals 12');
     assert.equal(data.rules[0].note, 'Produkti');
 
     const next = defaultDecisions(data, [statementRow({ ...rows[0], date: '2026-09-20' })]);
@@ -557,4 +557,55 @@ test('transfers and skipped rows are recognised on the next import of the same f
 
     undoImport(data, data.imports[0].id);
     assert.deepEqual(findDuplicates(data, rows).map(({ level }) => level), [null, null, null]);
+});
+
+test('a reused bank reference is not a duplicate when the amount or date differs', () => {
+    const data = defaultData();
+    data.expenses = [{
+        id: 'rent_aug', categoryId: 'necessary', subcategoryId: '', amountCents: 50000, note: 'Rent',
+        date: '2026-08-01', bankRef: 'RENT', importId: 'imp_a', fingerprint: 'fp-aug',
+    }];
+    const september = statementRow({ date: '2026-09-01', amountCents: 50000, direction: 'out', description: 'Rent', bankRef: 'RENT' });
+    const sameAgain = statementRow({ date: '2026-08-02', amountCents: 50000, direction: 'out', description: 'Rent', bankRef: 'RENT' });
+    const [first] = findDuplicates(data, [september]);
+    assert.notEqual(first.level, 'exact');
+    assert.equal(findDuplicates(data, [sameAgain])[0].level, 'exact');
+});
+
+test('probable duplicates of manual entries start excluded, weak ones included', () => {
+    const data = defaultData();
+    data.expenses = [
+        { id: 'm1', categoryId: 'random', subcategoryId: '', amountCents: 320, note: 'Coffee', date: '2026-09-10' },
+        { id: 'm2', categoryId: 'random', subcategoryId: '', amountCents: 999, note: 'Book', date: '2026-09-10' },
+    ];
+    const rows = [
+        statementRow({ date: '2026-09-10', amountCents: 320, direction: 'out', description: 'KAFIJA' }),
+        statementRow({ date: '2026-09-12', amountCents: 999, direction: 'out', description: 'BOOKS' }),
+    ];
+    const duplicates = findDuplicates(data, rows);
+    assert.deepEqual(duplicates.map(({ level }) => level), ['probable', 'weak']);
+    assert.deepEqual(defaultDecisions(data, rows, duplicates).map(({ include }) => include), [false, true]);
+});
+
+test('undo removes month plans the import created when the month is empty again', () => {
+    const data = defaultData();
+    data.settings.monthlyBudgetCents = 100000;
+    const rows = [statementRow({ date: '2025-03-05', amountCents: 1000, direction: 'out', description: 'OLD SHOP' })];
+    const decisions = defaultDecisions(data, rows);
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'old.csv' });
+    const applied = applyImport(data, built, { '2025-03': 'actualOnly' });
+    assert.equal(applied.ok, true);
+    assert.equal(data.monthPlans['2025-03'].actualOnly, true);
+
+    undoImport(data, applied.importId);
+    assert.equal(Object.hasOwn(data.monthPlans, '2025-03'), false);
+});
+
+test('applyRuleToExisting does nothing when the rule points to a deleted category', async () => {
+    const { applyRuleToExisting } = await import('../src/import/core.js');
+    const data = defaultData();
+    data.rules = [{ id: 'r1', pattern: 'SHOP', kind: 'expense', categoryId: 'gone', subcategoryId: '', incomeCategoryId: '', refund: false, note: '' }];
+    data.expenses = [{ id: 'e1', categoryId: 'random', subcategoryId: '', amountCents: 100, note: 'SHOP', bankText: 'SHOP', importId: 'imp', date: '2026-09-01' }];
+    assert.equal(applyRuleToExisting(data, 'r1'), 0);
+    assert.equal(data.expenses[0].categoryId, 'random');
 });

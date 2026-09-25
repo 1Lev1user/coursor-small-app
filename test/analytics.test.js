@@ -80,7 +80,7 @@ test('yearTotals sums 12 months exactly and buckets spending by category', () =>
     ];
     data.incomes = [income('i1', 300, '2026-03-01')];
 
-    const totals = yearTotals(data, 2026);
+    const totals = yearTotals(data, 2026, new Date(2027, 0, 15));
 
     assert.equal(totals.months.length, 12);
     const expectedSpent = totals.months.reduce((sum, month) => sum + month.spentCents, 0);
@@ -88,7 +88,8 @@ test('yearTotals sums 12 months exactly and buckets spending by category', () =>
     assert.equal(totals.spentCents, expectedSpent);
     assert.equal(totals.incomeCents, expectedIncome);
     assert.equal(totals.spentCents, 3500);
-    assert.equal(totals.incomeCents, 24300);
+    // Usual income counts in the four months with entries: Jan, Mar, Jun, Dec.
+    assert.equal(totals.incomeCents, 8300);
 
     const necessary = totals.byCategory.find(({ id }) => id === 'necessary');
     const random = totals.byCategory.find(({ id }) => id === 'random');
@@ -176,4 +177,20 @@ test('categoryChanges excludes prior months with no expense data from the averag
     const necessary = changes.find(({ id }) => id === 'necessary');
 
     assert.equal(necessary.averageCents, 4000); // only August has data among the prior 6 months
+});
+
+test('planned income counts only for months that happened and were in use', () => {
+    const data = defaultData();
+    data.settings.usualMonthlyIncomeCents = 200000;
+    data.expenses = [{ id: 'e1', categoryId: 'random', subcategoryId: '', amountCents: 1000, note: '', date: '2026-09-03' }];
+    const now = new Date(2026, 8, 25);
+
+    const year = yearTotals(data, 2026, now);
+    assert.equal(year.incomeCents, 200000);
+    assert.equal(year.months[8].incomeCents, 200000);
+    assert.equal(year.months[9].incomeCents, 0);
+    assert.equal(year.months[0].incomeCents, 0);
+
+    const series = monthSeries(data, '2026-10', 3, now);
+    assert.deepEqual(series.map(({ incomeCents }) => incomeCents), [0, 200000, 0]);
 });

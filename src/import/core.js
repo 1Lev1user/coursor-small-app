@@ -94,9 +94,23 @@ export function findDuplicates(data, rows) {
     const byBankRef = new Map();
     const byFingerprint = new Map();
     for (const item of stored) {
-        if (item.entry.bankRef) byBankRef.set(`${item.direction}|${item.entry.bankRef}`, item);
+        if (item.entry.bankRef) {
+            const key = `${item.direction}|${item.entry.bankRef}`;
+            byBankRef.set(key, [...(byBankRef.get(key) ?? []), item]);
+        }
         if (item.entry.fingerprint) byFingerprint.set(item.entry.fingerprint, item);
     }
+    // A bank reference only proves a duplicate together with the same amount
+    // and a date within a few days: some banks reuse references.
+    const byReference = (row) => {
+        if (!row.bankRef) return undefined;
+        const day = dayNumber(row.date);
+        return (byBankRef.get(`${row.direction}|${row.bankRef}`) ?? []).find(({ entry }) => {
+            const entryDay = dayNumber(entry.date);
+            return (entry.amountCents === row.amountCents || entry.originalAmountCents === row.originalAmountCents)
+                && day !== null && entryDay !== null && Math.abs(day - entryDay) <= 5;
+        });
+    };
 
     const results = rows.map(() => ({ level: null, matchId: '', matchType: '' }));
     const claimed = new Set();
@@ -115,8 +129,7 @@ export function findDuplicates(data, rows) {
     }
 
     rows.forEach((row, index) => {
-        const item = (row.bankRef && byBankRef.get(`${row.direction}|${row.bankRef}`))
-            || byFingerprint.get(fingerprints[index]);
+        const item = byReference(row) || byFingerprint.get(fingerprints[index]);
         if (item && !claimed.has(item.entry.id)) {
             claim(index, 'exact', item);
             return;
@@ -340,7 +353,7 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
         const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
         return {
-            include: duplicates[index]?.level !== 'exact',
+            include: duplicates[index]?.level !== 'exact' && duplicates[index]?.level !== 'probable',
             kind,
             categoryId: rule?.categoryId || UNCATEGORISED_ID,
             subcategoryId: rule?.subcategoryId ?? '',
@@ -352,8 +365,13 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
     });
 }
 
+/** The bank's own words for a row: counterparty and description, without repeats. */
 function bankTextOf(row) {
-    return String(row.counterparty || row.description || '').replace(/\s+/g, ' ').trim();
+    const parts = [row.counterparty, row.description]
+        .map((part) => String(part ?? '').replace(/\s+/g, ' ').trim())
+        .filter((part) => part !== '');
+    const unique = parts.filter((part, index) => index === 0 || !parts[0].includes(part));
+    return unique.join(' \u00b7 ');
 }
 
 /** Entry note: an explicit note, else the "Show as" text, else the bank's own text. */
@@ -362,7 +380,7 @@ function noteFor(row, decision) {
         return cleanNote(decision.note);
     }
     const showAs = cleanNote(decision.showAs);
-    return showAs !== '' ? showAs : cleanNote(bankTextOf(row));
+    return showAs !== '' ? showAs : cleanNote(row.counterparty || row.description || '');
 }
 
 function validateDecision(data, row, decision) {
@@ -627,6 +645,7 @@ export function applyImport(data, built, planChoices = {}) {
         counts: { ...built.importRecord.counts },
         expenseIds: [...built.importRecord.expenseIds],
         incomeIds: [...built.importRecord.incomeIds],
+        createdPlans: planWrites.map(([monthKey]) => monthKey),
     };
     data.imports.push(record);
 
@@ -651,6 +670,14 @@ export function undoImport(data, importId, now = new Date()) {
 
     const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds))
         + removeByIds(data.incomes ?? [], new Set(record.incomeIds));
+    // Plans this import created go too, unless the month has other entries now.
+    for (const monthKey of record.createdPlans ?? []) {
+        const used = [...(data.expenses ?? []), ...(data.incomes ?? [])]
+            .some(({ date }) => monthKeyOf(date) === monthKey);
+        if (!used && data.monthPlans) {
+            delete data.monthPlans[monthKey];
+        }
+    }
     record.undoneAt = now.toISOString();
     return removed;
 }
@@ -674,6 +701,12 @@ export function summarise(built) {
 export function applyRuleToExisting(data, ruleId) {
     const rule = (data.rules ?? []).find(({ id }) => id === ruleId);
     if (!rule) return 0;
+    if (rule.kind === 'expense' && !(data.categories ?? []).some(({ id }) => id === rule.categoryId)) {
+        return 0;
+    }
+    if (rule.kind === 'income' && !(data.incomeCategories ?? []).some(({ id }) => id === rule.incomeCategoryId)) {
+        return 0;
+    }
     const pattern = matchText(rule.pattern);
     if (pattern === '') return 0;
 

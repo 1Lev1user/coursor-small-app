@@ -1,6 +1,34 @@
 import { monthTotals } from './budget.js';
 import { formatPlain } from './money.js';
-import { addMonths, isInMonth, monthLabel } from './months.js';
+import {
+    addMonths,
+    compareMonthKeys,
+    currentMonthKey,
+    isInMonth,
+    monthLabel,
+} from './months.js';
+
+/*
+ * monthTotals counts the plan's usual income for any month. For history
+ * and year views, only months that have happened and were in use count it:
+ * not future months and not months before the app was used.
+ */
+function actualTotals(data, monthKey, now) {
+    const totals = monthTotals(data, monthKey);
+    const inUse = Object.hasOwn(data.monthPlans ?? {}, monthKey)
+        || data.expenses.some(({ date }) => isInMonth(date, monthKey))
+        || data.incomes.some(({ date }) => isInMonth(date, monthKey));
+    const happened = compareMonthKeys(monthKey, currentMonthKey(now)) <= 0;
+    if (inUse && happened) {
+        return totals;
+    }
+    return {
+        ...totals,
+        usualIncomeCents: 0,
+        incomeCents: totals.incomeCents - totals.usualIncomeCents,
+        cashLeftCents: totals.cashLeftCents - totals.usualIncomeCents,
+    };
+}
 
 /**
  * @param {object} data
@@ -8,13 +36,13 @@ import { addMonths, isInMonth, monthLabel } from './months.js';
  * @param {number} [count]
  * @returns {{ monthKey: string, spentCents: number, incomeCents: number, budgetCents: number }[]}
  */
-export function monthSeries(data, endMonthKey, count = 12) {
+export function monthSeries(data, endMonthKey, count = 12, now = new Date()) {
     const startMonthKey = addMonths(endMonthKey, -(count - 1));
     const series = [];
     let monthKey = startMonthKey;
 
     for (let index = 0; index < count; index += 1) {
-        const totals = monthTotals(data, monthKey);
+        const totals = actualTotals(data, monthKey, now);
         series.push({
             monthKey,
             spentCents: totals.spentCents,
@@ -96,11 +124,11 @@ export function categoryChanges(data, monthKey) {
  * @param {number} year
  * @returns {{ months: object[], spentCents: number, incomeCents: number, byCategory: { id: string, name: string, spentCents: number }[] }}
  */
-export function yearTotals(data, year) {
+export function yearTotals(data, year, now = new Date()) {
     const months = [];
     for (let month = 1; month <= 12; month += 1) {
         const monthKey = `${year}-${String(month).padStart(2, '0')}`;
-        months.push(monthTotals(data, monthKey));
+        months.push(actualTotals(data, monthKey, now));
     }
 
     const spentCents = months.reduce((total, month) => total + month.spentCents, 0);
@@ -148,10 +176,10 @@ function escapeField(value, delimiter) {
  * @param {'europe'|'standard'} flavour
  * @returns {{ filename: string, text: string }}
  */
-export function buildYearCsv(data, year, flavour) {
+export function buildYearCsv(data, year, flavour, now = new Date()) {
     const delimiter = flavour === 'europe' ? ';' : ',';
     const decimalSeparator = flavour === 'europe' ? ',' : '.';
-    const totals = yearTotals(data, year);
+    const totals = yearTotals(data, year, now);
     const categoryIds = totals.byCategory.map((category) => category.id);
 
     const header = [
