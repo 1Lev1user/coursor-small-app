@@ -638,3 +638,53 @@ test('rowsToStatement keeps merchants whose name contains a summary word', () =>
     assert.equal(result.skipped.length, 4);
     assert.ok(result.skipped.every((entry) => entry.reason === 'summary row'));
 });
+
+test('amount signs survive currency marks, real minus signs and DR/CR marks', () => {
+    assert.equal(parseAmountWith('€ -12.50', '.'), -1250);
+    assert.equal(parseAmountWith('EUR -12.50', '.'), -1250);
+    assert.equal(parseAmountWith('−12.50', '.'), -1250);
+    assert.equal(parseAmountWith('–12,50', ','), -1250);
+    assert.equal(parseAmountWith('12.50 DR', '.'), -1250);
+    assert.equal(parseAmountWith('12,50 D', ','), -1250);
+    assert.equal(parseAmountWith('12.50 CR', '.'), 1250);
+    assert.equal(parseAmountWith('12.40 EUR', '.'), 1240);
+});
+
+test('a payer reference column is not taken as the bank transaction id', () => {
+    const { columns } = guessColumns(
+        ['Date', 'Payee', 'Reference', 'Amount'],
+        [['01.09.2026', 'Landlord', 'RENT', '-500.00']],
+    );
+    assert.equal(columns.bankRef, -1);
+    const withId = guessColumns(
+        ['Datums', 'Apraksts', 'Summa', 'Arhīva kods'],
+        [['01.09.2026', 'Rimi', '-5,00', 'A123']],
+    );
+    assert.equal(withId.columns.bankRef, 3);
+});
+
+test('a value date column is never the amount', () => {
+    const { columns } = guessColumns(
+        ['Booking date', 'Value date', 'Amount', 'Details'],
+        [['01.09.2026', '02.09.2026', '-12.50', 'Coffee']],
+    );
+    assert.equal(columns.amount, 2);
+});
+
+test('Cyrillic direction values set the direction and zero amounts are skipped', () => {
+    const rows = [
+        ['Дата', 'Описание', 'Сумма', 'Тип'],
+        ['01.09.2026', 'RIMI', '12,00', 'Д'],
+        ['02.09.2026', 'SALARY', '900,00', 'КРЕДИТ'],
+        ['03.09.2026', 'HOLD', '0,00', 'Д'],
+    ];
+    const layout = {
+        delimiter: ';',
+        decimalSeparator: ',',
+        dateFormat: 'DMY',
+        columns: { date: 0, description: 1, amount: 2, direction: 3, currency: -1, debit: -1, credit: -1, bankRef: -1 },
+    };
+    const result = rowsToStatement(rows, 0, layout);
+    assert.deepEqual(result.rows.map(({ description, direction }) => `${description}:${direction}`), ['RIMI:out', 'SALARY:in']);
+    assert.equal(result.skipped[0].reason, 'zero amount');
+});

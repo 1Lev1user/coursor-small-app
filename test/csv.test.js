@@ -187,3 +187,19 @@ test('refunds are negative and foreign amounts keep their currency', () => {
     assert.equal(lines[1], '2026-09-05,Expense,Random small purchases,,Hotel,46.30,USD,50.00');
     assert.equal(lines[2], '2026-09-06,Refund,Random small purchases,,Return,-12.00,EUR,-12.00');
 });
+
+test('text that a spreadsheet would run as a formula is neutralised, amounts are not', () => {
+    const data = defaultData();
+    data.expenses = [{
+        id: 'x',
+        categoryId: 'random',
+        subcategoryId: '',
+        amountCents: 100,
+        note: '=HYPERLINK("http://example.com")',
+        date: '2026-09-05',
+        refund: true,
+    }];
+    const line = linesOf(buildMonthCsv(data, '2026-09', 'standard'))[1];
+    assert.ok(line.includes(`"'=HYPERLINK(""http://example.com"")"`));
+    assert.ok(line.includes(',-1.00,'));
+});

@@ -249,7 +249,11 @@ const KEYWORDS = {
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
     direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'тип', 'type'],
     currency: ['currency', 'valuta', 'валюта', 'valuuta', 'valiuta'],
-    bankRef: ['reference', 'ref', 'arhiva kods', 'dokumenta nr', 'transaction id'],
+    // Only the bank's own unique id: a payer 'reference' repeats every month (rent).
+    bankRef: [
+        'transaction id', 'transaction reference', 'bank reference', 'arhiva kods', 'arhiva numurs',
+        'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
+    ],
     description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
 };
 
@@ -273,10 +277,17 @@ function isDateLikeValue(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(value);
 }
 
-const DIRECTION_VALUES = new Set([
-    'D', 'C', 'K', 'DR', 'CR', 'DB', 'DBIT', 'CRDT', 'DEBIT', 'CREDIT', 'DEBET', 'KREDIT',
-    'DEBETS', 'KREDITS', 'DEEBET', 'KREEDIT', 'ДЕБЕТ', 'КРЕДИТ',
+const OUT_VALUES = ['D', 'DR', 'DB', 'DBIT', 'DEBIT', 'DEBET', 'DEBETS', 'DEEBET', 'Д', 'ДЕБЕТ'];
+const IN_VALUES = ['C', 'K', 'CR', 'CRDT', 'CREDIT', 'KREDIT', 'KREDITS', 'KREEDIT', 'К', 'КРЕДИТ'];
+const DIRECTION_BY_VALUE = new Map([
+    ...OUT_VALUES.map((value) => [value, 'out']),
+    ...IN_VALUES.map((value) => [value, 'in']),
 ]);
+
+/** 'out', 'in' or null for a direction cell; detection and use share this table. */
+function directionOfValue(value) {
+    return DIRECTION_BY_VALUE.get(stripDiacritics(String(value ?? '')).trim().toUpperCase()) ?? null;
+}
 
 /**
  * A direction cell holds a D/C/K letter or a debit/credit word, never a
@@ -285,7 +296,7 @@ const DIRECTION_VALUES = new Set([
  * @returns {boolean}
  */
 export function isDirectionValue(value) {
-    return DIRECTION_VALUES.has(stripDiacritics(String(value ?? '')).trim().toUpperCase());
+    return directionOfValue(value) !== null;
 }
 
 function isAmountLikeValue(value) {
@@ -329,6 +340,17 @@ export function guessColumns(header, sampleRows) {
         const used = usedIndexes(columns);
         for (let i = 0; i < normalizedHeader.length; i += 1) {
             if (used.has(i)) {
+                continue;
+            }
+            const isDateHeader = KEYWORDS.date.some((keyword) => normalizedHeader[i].includes(keyword));
+            if (category !== 'date' && isDateHeader) {
+                // 'Value date' is a date, never the amount.
+                continue;
+            }
+            if (
+                category === 'amount'
+                && !columnSamples(sampleRows, i).every(isAmountLikeValue)
+            ) {
                 continue;
             }
             if (keywords.some((keyword) => normalizedHeader[i].includes(keyword))) {
@@ -601,6 +623,16 @@ export function parseAmountWith(value, decimalSeparator = '.') {
 
     let negative = false;
 
+    // Web pages and banks use real minus signs and dashes; currency marks
+    // and codes may sit before the sign ('€ -12.50', 'EUR -12.50').
+    text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
+    const trailingMark = text.match(/\s+(DR|CR|D|C|K)$/i);
+    if (trailingMark) {
+        negative = /^D/i.test(trailingMark[1]);
+        text = text.slice(0, trailingMark.index).trim();
+    }
+    text = text.replace(/^(?:[A-Z]{3}|[€$£¥₽])\s*/i, '').replace(/\s*(?:[A-Z]{3}|[€$£¥₽])$/i, '').trim();
+
     if (/^\(.*\)$/.test(text)) {
         negative = true;
         text = text.slice(1, -1).trim();
@@ -780,13 +812,7 @@ export function rowsToStatement(rows, headerRow, layout) {
                 amountCents = Math.abs(parsed);
 
                 if (columns.direction >= 0) {
-                    const directionCell = stripDiacritics(cellAt(row, columns.direction)).trim().toUpperCase();
-                    const firstLetter = directionCell.charAt(0);
-                    if (firstLetter === 'D') {
-                        direction = 'out';
-                    } else if (firstLetter === 'C' || firstLetter === 'K') {
-                        direction = 'in';
-                    }
+                    direction = directionOfValue(cellAt(row, columns.direction));
                 }
 
                 if (!direction) {
@@ -795,6 +821,10 @@ export function rowsToStatement(rows, headerRow, layout) {
             }
         }
 
+        if (amountCents === 0) {
+            skipped.push({ line, reason: 'zero amount' });
+            continue;
+        }
         if (amountCents === null || !direction) {
             skipped.push({ line, reason: 'unparsable amount' });
             continue;

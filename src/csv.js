@@ -17,7 +17,17 @@ export function csvFilename(monthKey, flavour) {
     return `expenses-${monthKey}-${flavour}.csv`;
 }
 
-function escapeField(value, delimiter) {
+/*
+ * Text that a spreadsheet would run as a formula (bank text can start with
+ * '=' or '+') gets a leading apostrophe. Only for text columns: amounts
+ * like -12.00 must stay numbers.
+ */
+export function escapeText(value, delimiter) {
+    const text = String(value ?? '');
+    return escapeField(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text, delimiter);
+}
+
+export function escapeField(value, delimiter) {
     const text = String(value ?? '');
     if (
         text.includes(delimiter)
@@ -113,15 +123,15 @@ export function buildMonthCsv(data, monthKey, flavour) {
     const decimalSeparator = flavour === 'europe' ? ',' : '.';
     const header = HEADER_FIELDS.join(delimiter);
     const rows = monthRows(data, monthKey).map((row) => [
-        row.date,
-        row.type,
-        row.category,
-        row.subcategory,
-        row.note,
-        formatPlain(row.amountCents, decimalSeparator),
-        row.currency,
-        formatPlain(row.originalAmountCents, decimalSeparator),
-    ].map((field) => escapeField(field, delimiter)).join(delimiter));
+        escapeField(row.date, delimiter),
+        escapeField(row.type, delimiter),
+        escapeText(row.category, delimiter),
+        escapeText(row.subcategory, delimiter),
+        escapeText(row.note, delimiter),
+        escapeField(formatPlain(row.amountCents, decimalSeparator), delimiter),
+        escapeField(row.currency, delimiter),
+        escapeField(formatPlain(row.originalAmountCents, decimalSeparator), delimiter),
+    ].join(delimiter));
 
     return `${BOM}${[header, ...rows].join('\n')}\n`;
 }

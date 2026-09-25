@@ -250,3 +250,18 @@ test('isDateFormatCode tells dates from times and numbers', () => {
     assert.equal(isDateFormatCode('#,##0.00 "EUR"'), false);
     assert.equal(isDateFormatCode('0.00'), false);
 });
+
+test('readXlsx refuses huge column references instead of padding rows', async () => {
+    const bytes = await buildZip([
+        { name: 'xl/worksheets/sheet1.xml', text: '<worksheet><sheetData><row r="1"><c r="ZZZZZZZ1" t="str"><v>x</v></c></row></sheetData></worksheet>' },
+    ]);
+    assert.deepEqual(await readXlsx(bytes), { ok: false, reason: 'The Excel file is damaged and could not be read.' });
+});
+
+test('readXlsx stops reading an entry that inflates past the size limit', async () => {
+    const filler = 'A'.repeat(1024 * 1024);
+    const text = `<worksheet><sheetData>${`<!--${filler}-->`.repeat(52)}</sheetData></worksheet>`;
+    const bytes = await buildZip([{ name: 'xl/worksheets/sheet1.xml', text }]);
+    assert.ok(bytes.length < 2 * 1024 * 1024);
+    assert.deepEqual(await readXlsx(bytes), { ok: false, reason: 'This Excel file is too large to read.' });
+});

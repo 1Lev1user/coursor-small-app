@@ -2,6 +2,7 @@ import { parseXml, child, children } from './xml.js';
 
 const OLD_XLS = 'This is an old Excel file (.xls). Save it as .xlsx or CSV and try again.';
 const NOT_EXCEL = 'This file is not an Excel workbook.';
+const TOO_LARGE = 'This Excel file is too large to read.';
 const DAMAGED = 'The Excel file is damaged and could not be read.';
 const PROTECTED = 'This workbook is password protected. Remove the password and try again.';
 
@@ -62,9 +63,37 @@ export function readZipDirectory(bytes) {
     return entries;
 }
 
+// A statement is small; these limits stop a crafted file from filling memory.
+const MAX_ENTRY_BYTES = 50 * 1024 * 1024;
+const MAX_COLUMNS = 16384;
+
+class TooLargeError extends Error {}
+
 async function inflateRaw(data) {
-    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    const reader = new Blob([data]).stream()
+        .pipeThrough(new DecompressionStream('deflate-raw'))
+        .getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+        total += value.length;
+        if (total > MAX_ENTRY_BYTES) {
+            await reader.cancel();
+            throw new TooLargeError();
+        }
+        chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
 }
 
 async function readZipEntry(bytes, entry) {
@@ -239,6 +268,9 @@ function columnIndex(ref) {
     let index = 0;
     for (const letter of letters.toUpperCase()) {
         index = index * 26 + (letter.charCodeAt(0) - 64);
+        if (index > MAX_COLUMNS) {
+            throw new Error('Column out of range');
+        }
     }
     return index - 1;
 }
@@ -384,7 +416,7 @@ export async function readXlsx(input) {
             date1904: workbook ? isDate1904(workbook) : false,
         };
         return { ok: true, rows: readRows(sheet, context) };
-    } catch {
-        return { ok: false, reason: DAMAGED };
+    } catch (error) {
+        return { ok: false, reason: error instanceof TooLargeError ? TOO_LARGE : DAMAGED };
     }
 }

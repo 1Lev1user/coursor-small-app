@@ -1,5 +1,6 @@
 import { monthTotals } from './budget.js';
 import { formatPlain } from './money.js';
+import { escapeField, escapeText } from './csv.js';
 import {
     addMonths,
     compareMonthKeys,
@@ -157,19 +158,6 @@ export function yearTotals(data, year, now = new Date()) {
 
 const BOM = '﻿';
 
-function escapeField(value, delimiter) {
-    const text = String(value ?? '');
-    if (
-        text.includes(delimiter)
-        || text.includes('"')
-        || text.includes('\n')
-        || text.includes('\r')
-    ) {
-        return `"${text.replaceAll('"', '""')}"`;
-    }
-    return text;
-}
-
 /**
  * @param {object} data
  * @param {number} year
@@ -188,7 +176,7 @@ export function buildYearCsv(data, year, flavour, now = new Date()) {
         'Income',
         'Budget',
         ...totals.byCategory.map((category) => category.name),
-    ].map((field) => escapeField(field, delimiter)).join(delimiter);
+    ].map((field) => escapeText(field, delimiter)).join(delimiter);
 
     const rows = totals.months.map((month) => {
         const categoriesById = new Map(month.categories.map((category) => [category.id, category]));
