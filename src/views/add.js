@@ -24,6 +24,7 @@ import {
     canAddSubcategory,
 } from '../limits.js';
 import { openSettingsSection } from './more.js';
+import { renderGoalCard } from './goalCard.js';
 import {
     amountErrorText,
     buildCurrencyFields,
@@ -676,6 +677,11 @@ function renderHome(root, ctx) {
     const reminder = backupReminder(ctx.data);
     if (reminder !== null) {
         layout.append(renderBackupReminder(ctx, reminder));
+    }
+
+    const goal = renderGoalCard(ctx);
+    if (goal !== null) {
+        layout.append(goal);
     }
 
     const review = getMonthReviewSuggestion(ctx.data);
