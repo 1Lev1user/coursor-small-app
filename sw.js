@@ -53,6 +53,14 @@ const CORE_ASSETS = [
     './src/views/monthNav.js',
     './src/views/chartView.js',
     './src/views/more.js',
+    './src/views/settings/shared.js',
+    './src/views/settings/plan.js',
+    './src/views/settings/income.js',
+    './src/views/settings/income-categories.js',
+    './src/views/settings/subscriptions.js',
+    './src/views/settings/categories.js',
+    './src/views/settings/backup.js',
+    './src/views/settings/rights.js',
     './src/views/setup.js',
 ];
 
