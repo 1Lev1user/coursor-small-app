@@ -1073,6 +1073,10 @@ body.is-setup .tabbar {
     background: var(--danger-soft);
 }
 
+.confirm-box > p {
+    flex: 1 1 100%;
+}
+
 .confirm-copy {
     flex: 1 1 100%;
     font-weight: 600;

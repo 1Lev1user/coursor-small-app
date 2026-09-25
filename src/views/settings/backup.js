@@ -1,5 +1,10 @@
 import { todayISO } from '../../months.js';
-import { exportBackup, importBackup, countRecords } from '../../backup.js';
+import {
+    exportBackup,
+    importBackup,
+    countRecords,
+    mergeSettingsOnly,
+} from '../../backup.js';
 import { buildMonthCsv, csvFilename } from '../../csv.js';
 import { downloadText } from '../../files.js';
 import { readPreUpdateCopy } from '../../storage.js';
@@ -93,7 +98,7 @@ function beginImportBackup(ctx, file) {
     reader.readAsText(file);
 }
 
-function confirmImportBackup(ctx) {
+function confirmImportBackup(ctx, mode = 'all') {
     if (state.pendingImportText === null) {
         return;
     }
@@ -107,12 +112,13 @@ function confirmImportBackup(ctx) {
         return;
     }
 
-    replaceAppData(ctx, result.data);
+    const next = mode === 'settings' ? mergeSettingsOnly(ctx.data, result.data) : result.data;
+    replaceAppData(ctx, next);
     state.pendingImportText = null;
     state.pendingImportCounts = null;
     state.importError = '';
     if (persist(ctx)) {
-        ctx.toast('Backup imported');
+        ctx.toast(mode === 'settings' ? 'Settings imported' : 'Backup imported');
     }
 }
 
@@ -174,21 +180,34 @@ export function renderBackupSection(ctx) {
 
     if (state.pendingImportText !== null && state.pendingImportCounts !== null) {
         const counts = state.pendingImportCounts;
-        const message = `Replace all data? This will destroy ${counts.expenses} expenses,`
-            + ` ${counts.incomes} incomes, and ${counts.subscriptions} subscriptions.`
-            + ' This cannot be undone.';
         const box = element('div', 'confirm-box');
         box.setAttribute('role', 'group');
         box.append(
-            element('p', 'confirm-copy', message),
+            element('p', 'confirm-copy', 'What should come from this backup?'),
+            element(
+                'p',
+                '',
+                `Settings only: plan, categories, subscriptions, rules, templates and goals.`
+                    + ` Your ${counts.expenses} expenses and ${counts.incomes} incomes stay.`,
+            ),
+            actionButton('btn btn-primary', 'Settings only', () => {
+                confirmImportBackup(ctx, 'settings');
+            }),
+            element(
+                'p',
+                '',
+                `Everything: replaces all data. Your ${counts.expenses} expenses,`
+                    + ` ${counts.incomes} incomes and ${counts.subscriptions} subscriptions`
+                    + ' on this device are deleted. This cannot be undone.',
+            ),
+            actionButton('btn btn-danger', 'Replace everything', () => {
+                confirmImportBackup(ctx, 'all');
+            }),
             actionButton('btn', 'Cancel', () => {
                 state.pendingImportText = null;
                 state.pendingImportCounts = null;
                 state.importError = '';
                 ctx.render();
-            }),
-            actionButton('btn btn-danger', 'Replace everything', () => {
-                confirmImportBackup(ctx);
             }),
         );
         section.append(box);

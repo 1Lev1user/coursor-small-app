@@ -549,9 +549,11 @@ if (
     (location.protocol === 'http:' || location.protocol === 'https:')
     && 'serviceWorker' in navigator
 ) {
+    // The first install also changes the controller; only an update should reload.
+    const hadController = navigator.serviceWorker.controller !== null;
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!reloading) {
+        if (hadController && !reloading) {
             reloading = true;
             location.reload();
         }
