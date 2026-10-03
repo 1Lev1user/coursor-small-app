@@ -23,7 +23,6 @@ Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits
 
 ## In progress
 - C-002 (P1, S, haiku) Regression test: past month without plan choice is refused.
-- C-003 (P1, S, haiku) Direct tests for escapeField edge cases.
 
 ## Verify
 (none)
@@ -32,6 +31,7 @@ Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits
 (none)
 
 ## Done
+- C-003 (P1, S, haiku) Direct tests for escapeField edge cases.
 - C-001 (P0, S, haiku) Make 3 import tests date-independent.
 
 ## Blocked

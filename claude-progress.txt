@@ -7,3 +7,4 @@ DATE | slice | cards moved | what works now | what is broken | next card
 2026-10-03 | 1 | C-002 backlog -> ready (planner) | slice-1 branch created from main after PR #4 | 3 date-dependent import tests | C-001
 2026-10-03 | 1 | C-001, C-003 ready -> in_progress (planner executes in cloud with kit agents, owner decision) | - | - | C-001, C-003
 2026-10-03 | 1 | C-001 done (haiku, 1 attempt, reviewer PASS); C-002 in_progress | npm test 367/367 on slice-1 | - | C-002, C-003 review
+2026-10-03 | 1 | C-003 done (haiku, 1 attempt, reviewer PASS). Process change: worker-light maxTurns 15 -> 25 (2 of 2 haiku workers hit the limit before reporting) | npm test 372/372 | - | C-002

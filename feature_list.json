@@ -86,7 +86,13 @@
       "priority": "P1",
       "risk": "low",
       "start_tier": "haiku",
-      "attempts": [],
+      "attempts": [
+        {
+          "tier": "haiku",
+          "result": "pass",
+          "note": "Correct commit d77b7dd; worker hit maxTurns 15 before writing its report"
+        }
+      ],
       "acceptance": [
         "node --test test/csvQuoting.test.js exits 0",
         "node --test test/csvQuoting.test.js 2>&1 | grep -E '^# pass ([4-9]|[1-9][0-9])' exits 0"
@@ -99,8 +105,17 @@
         "existing test files"
       ],
       "depends_on": [],
-      "status": "in_progress",
-      "evidence": null,
+      "status": "done",
+      "evidence": {
+        "commit": "d77b7dd",
+        "level1": [
+          "node --test test/csvQuoting.test.js: 5/5 pass",
+          "grep # pass 5: match"
+        ],
+        "level2": "only new file test/csvQuoting.test.js (+23)",
+        "level3": "reviewer sonnet PASS; mutation checks: each case fails when its escapeField branch is broken",
+        "level4": "planner: S3.5 satisfied"
+      },
       "mirror_id": null,
       "notes": "Existing test/csv.test.js lines 73-100 already cover doubled quotes, embedded newline and the delimiter for both flavours through buildMonthCsv, and line 191 covers formula escaping, so those are out of scope. Cover only escapeField(value, delimiter) called directly (src/csv.js, verified: quotes when the text contains the delimiter, a double quote, \\n or \\r; doubles quotes; no special handling of leading/trailing spaces): (1) a value containing \\r is quoted; (2) a value containing the delimiter is quoted, for ',' and for ';' (two tests or one test with both); (3) a value with no special characters is returned unchanged; (4) a value with leading/trailing spaces and no special characters is returned unchanged (spaces are not special). At least 4 passing tests. Allowed path is the new test file only."
     }

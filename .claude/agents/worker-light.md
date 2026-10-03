@@ -4,7 +4,7 @@ description: "Implements one small, low-risk card with an automatic check (size 
 model: haiku
 tools: Read, Grep, Glob, Edit, Write, Bash
 permissionMode: acceptEdits
-maxTurns: 15
+maxTurns: 25
 skills:
   - minimal-code
 ---
