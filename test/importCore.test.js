@@ -509,7 +509,7 @@ test('Show as text becomes the note and is remembered on the rule', async () => 
     decisions[0].remember = true;
     decisions[0].pattern = 'KARLIS';
 
-    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv' });
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv', now: NOW });
     const applied = applyImport(data, built, {});
     assert.equal(applied.ok, true);
     assert.equal(data.expenses[0].note, 'Produkti');
@@ -545,7 +545,7 @@ test('transfers and skipped rows are recognised on the next import of the same f
     const decisions = defaultDecisions(data, rows);
     decisions[0].kind = 'transfer';
     decisions[1].kind = 'skip';
-    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv' });
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'a.csv', now: NOW });
     assert.equal(applyImport(data, built, {}).ok, true);
 
     const again = findDuplicates(data, rows);
@@ -614,7 +614,7 @@ test('undoImportAndSave puts everything back when saving fails', async () => {
     const { undoImportAndSave } = await import('../src/import/core.js');
     const data = defaultData();
     const rows = [statementRow({ date: '2026-09-05', amountCents: 700, direction: 'out', description: 'SHOP' })];
-    const built = buildImport(data, defaultDecisions(data, rows), { rows, format: 'csv', fileName: 'a.csv' });
+    const built = buildImport(data, defaultDecisions(data, rows), { rows, format: 'csv', fileName: 'a.csv', now: NOW });
     const applied = applyImport(data, built, {});
     const snapshot = JSON.stringify(data);
 

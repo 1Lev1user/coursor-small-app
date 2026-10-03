@@ -152,6 +152,31 @@ test('Status missing an option is an error and plans nothing', () => {
   assert.match(r.errors[0], /In progress, In review/);
 });
 
+test('Status with "Approved" instead of "Ready": ready card maps to Approved', () => {
+  const approved = STATUS_OPTIONS.map((o) => (o === 'Ready' ? 'Approved' : o));
+  const fields = fullFields().map((f) => (f.name === 'Status' ? { ...f, options: opts(approved) } : f));
+  const files = base();
+  const r = planSync({ newFiles: files, boardItems: [], fields, mode: 'all' });
+  assert.deepEqual(r.errors, []);
+  assert.equal(val(r.actions.find((a) => a.key === 'C-001'), 'Status'), 'Approved');
+  assert.equal(val(r.actions.find((a) => a.key === 'C-002'), 'Status'), 'Backlog');
+  assert.ok(!r.warnings.some((w) => /lacks option/.test(w)));
+
+  const oldFiles = base();
+  const newFiles = base();
+  card(newFiles, 'C-002').status = 'ready';
+  const d = planSync({ oldFiles, newFiles, boardItems: boardFrom(newFiles), fields, mode: 'diff' });
+  assert.deepEqual(d.actions.map((a) => a.key), ['C-002']);
+  assert.deepEqual(d.actions[0].values, [{ field: 'Status', value: 'Approved' }]);
+});
+
+test('Status with neither Approved nor Ready is an error', () => {
+  const fields = fullFields().map((f) => (f.name === 'Status' ? { ...f, options: opts(['Backlog', 'In progress', 'In review', 'Done']) } : f));
+  const r = planSync({ newFiles: base(), boardItems: [], fields, mode: 'all' });
+  assert.equal(r.actions.length, 0);
+  assert.match(r.errors[0], /Approved \(or Ready\)/);
+});
+
 test('items whose title prefix is not ours are never touched', () => {
   const files = base();
   const board = [...boardFrom(files), { id: 'X', title: 'Buy milk', isDraft: true }, { id: 'Y', title: 'C-999 Someone else', isDraft: true }];

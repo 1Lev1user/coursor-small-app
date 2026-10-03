@@ -15,6 +15,9 @@ const API = 'https://api.github.com/graphql';
 
 export const FILES = ['feature_list.json', 'PROJECT_MAP.json', 'RELEASE_PLAN.json'];
 export const STATUS_OPTIONS = ['Backlog', 'Ready', 'In progress', 'In review', 'Done'];
+// The owner may rename the Status option "Ready" to "Approved" at any time. Internal status "ready" and the
+// name "Ready" stay in the files; planSync maps them to "Approved" when the board has that option.
+export const READY_ALIASES = ['Approved', 'Ready'];
 export const STATUS_MAP = { backlog: 'Backlog', ready: 'Ready', in_progress: 'In progress', verify: 'In progress', review: 'In review', done: 'Done' };
 export const ACTIVITIES = ['Sets up', 'Records entries', 'Reviews money', 'Imports bank statement', 'Plans and saves', 'Backs up and updates'];
 const TIERS = ['haiku', 'sonnet', 'opus'];
@@ -83,10 +86,11 @@ export function buildItems(files, warnings = []) {
     });
   }
   for (const i of files?.['RELEASE_PLAN.json']?.items ?? []) {
-    if (!STATUS_OPTIONS.includes(i.board_status)) warnings.push(`${i.id}: unknown board_status "${i.board_status}", Status not set`);
+    const known = STATUS_OPTIONS.includes(i.board_status) || i.board_status === 'Approved';
+    if (!known) warnings.push(`${i.id}: unknown board_status "${i.board_status}", Status not set`);
     const parts = [['Evidence', i.evidence], ['Missing', i.missing], ['Note', i.note], ['Follow-up of', i.follow_up_of]].filter(([, v]) => v);
     out.set(i.id, {
-      key: i.id, kind: 'Plan', title: `${i.id} ${i.title}`, status: STATUS_OPTIONS.includes(i.board_status) ? i.board_status : null,
+      key: i.id, kind: 'Plan', title: `${i.id} ${i.title}`, status: known ? (i.board_status === 'Approved' ? 'Ready' : i.board_status) : null,
       body: parts.map(([k, v]) => `**${k}**\n${v}`).join('\n\n')
         + `\n\nRelease: ${i.release}. Mirrored from RELEASE_PLAN.json; edit the file, not this card.`,
       values: {
@@ -109,12 +113,16 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
   const old = mode === 'diff' ? buildItems(oldFiles) : new Map();
   const byName = fields ? new Map(fields.map((f) => [f.name, f])) : null;
   const badType = new Set();
+  const readyName = byName?.get('Status')?.options?.some((o) => o.name === 'Approved') ? 'Approved' : 'Ready';
+  const statusName = (v) => (v === 'Ready' ? readyName : v);
 
   if (byName) {
     const st = byName.get('Status');
     if (!st || st.dataType !== SS) errors.push('Field "Status" (single select) not found in the project. It must be the built-in Status column.');
     else {
-      const miss = STATUS_OPTIONS.filter((o) => !st.options?.some((x) => x.name === o));
+      const has = (o) => st.options?.some((x) => x.name === o);
+      const miss = STATUS_OPTIONS.filter((o) => (o === 'Ready' ? !READY_ALIASES.some(has) : !has(o)))
+        .map((o) => (o === 'Ready' ? 'Approved (or Ready)' : o));
       if (miss.length) errors.push(`Status is missing option(s): ${miss.join(', ')}. Add them in Project settings > Status; nothing was changed.`);
     }
     for (const s of FIELD_SPECS) {
@@ -164,7 +172,7 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
 
     const vals = how === 'diff' ? [] : [{ field: 'Kind', value: it.kind }];
     if (how === 'create') {
-      vals.push({ field: 'Status', value: it.status ?? 'Backlog' });
+      vals.push({ field: 'Status', value: statusName(it.status ?? 'Backlog') });
       for (const [field, value] of Object.entries(it.values)) if (value != null) vals.push({ field, value });
       actions.push({ type: 'createItem', key, title: it.title, body: it.body, values: keep(vals, key) });
       summary.created++;
@@ -174,7 +182,7 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
     const prev = how === 'diff' ? old.get(key) : null;
     if (!prev || prev.title !== it.title) act.title = it.title;
     if (!prev || prev.body !== it.body) act.body = it.body;
-    if (it.status != null && (!prev || prev.status !== it.status)) vals.push({ field: 'Status', value: it.status });
+    if (it.status != null && (!prev || prev.status !== it.status)) vals.push({ field: 'Status', value: statusName(it.status) });
     for (const [field, value] of Object.entries(it.values)) if (!prev || prev.values[field] !== value) vals.push({ field, value });
     act.values = keep(vals, key);
     if ((act.title || act.body) && b && b.isDraft === false) {

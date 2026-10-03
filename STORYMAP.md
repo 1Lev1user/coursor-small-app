@@ -26,11 +26,11 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S3.2 | Owner | Reviews money | Lists and searches entries in Month | Finds any entry | P2 | exists |
 | S3.3 | Owner | Reviews money | Views Chart: Spending, Income, Trends, Year (with yearly CSV) | Sees patterns | P2 | exists |
 | S3.4 | Owner | Reviews money | Exports Month CSV in Europe (;) or Standard (,) format | Data in a spreadsheet | P1 | exists |
-| S3.5 | Owner | Reviews money | escapeField edge cases (carriage return, delimiter) are guarded by direct tests | Export opens correctly | P1 | slice 1 |
+| S3.5 | Owner | Reviews money | escapeField edge cases (carriage return, delimiter) are guarded by direct tests | Export opens correctly | P1 | exists (slice 1) |
 | S4.1 | Owner | Imports bank statement | Imports CSV, pasted text, .xlsx, camt XML or FiDAViSTA XML | Entries without typing | P1 | exists |
 | S4.2 | Owner | Imports bank statement | Reviews duplicates and row kinds, remembers rules | No double entries | P1 | exists |
 | S4.3 | Owner | Imports bank statement | Chooses a plan once for a past month without a plan | Past months stay correct | P1 | exists |
-| S4.4 | Owner | Imports bank statement | Past-month plan rule is guarded by date-independent tests | Import stays trustworthy | P0 | slice 1 |
+| S4.4 | Owner | Imports bank statement | Past-month plan rule is guarded by date-independent tests | Import stays trustworthy | P0 | exists (slice 1) |
 | S4.5 | Owner | Imports bank statement | Undoes an import from Settings > Import | Mistakes are reversible | P1 | exists |
 | S5.1 | Owner | Plans and saves | Sets savings goals with target and optional deadline | Saving has a target | P2 | exists |
 | S5.2 | Owner | Plans and saves | Adds money to a goal (recorded as Savings expense) | Progress visible | P2 | exists |

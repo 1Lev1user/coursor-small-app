@@ -8,12 +8,13 @@ description: "Operate the kanban board: move cards, enforce WIP limits, keep fea
 Source of truth: feature_list.json. BOARD.md is the readable view. The GitHub Project is a one-way mirror.
 
 ## Who moves which column
-- Planner: creates cards in Backlog, sets priority, size, risk and start_tier, moves Backlog to Ready, moves Review to Done after Level 4.
-- Lead: Ready to In progress, In progress to Verify, Verify to Review after Levels 1 to 3, any of these to Blocked. Writes attempts and evidence. Never creates cards, never sets Done.
+Columns: Backlog, Approved, In progress, In review, Done. Internal status `ready` = Approved (the GitHub option may still be named Ready; board-sync accepts either).
+- Owner: Backlog -> Approved (the go signal). Manual board moves are reported to the planner, who writes them into the files.
+- Planner (cloud, also the lead role) or local lead: everything else - creates cards, In progress, Verify, Review, Done (Level 4), Blocked. The optional local lead never creates cards and never sets Done.
 - One side writes the state files at a time. Run `git pull` before starting, push when done.
 
 ## Moving a card
-1. Check preconditions for the target column (Ready needs a complete card; Verify needs DONE from a worker; Review needs Levels 1 to 3; Done needs Level 4 by the planner).
+1. Check preconditions for the target column (Approved needs a complete card and the owner's move; Verify needs DONE from a worker; Review needs Levels 1 to 3; Done needs Level 4 by the planner).
 2. Check WIP: 3 in In progress, 2 in Review. Do not start new work above the limit; finish work first.
 3. Check conflicts: cards with overlapping allowed_paths do not run in parallel. Parallel cards run in isolation: worktree.
 4. Update feature_list.json, then regenerate the card lists in BOARD.md, then append to claude-progress.txt.
@@ -34,7 +35,7 @@ Primary: the Board sync Action (.github/workflows/board-sync.yml, scripts/board-
 - Manual run (Actions > Board sync): `all` creates missing items and leaves existing ones; `all-force` resets existing items to the files; `diff` syncs the last commit.
 - Fallback without the Action: scripts/gh-board-attach.sh (fields) and scripts/gh-board-map.sh (map cards) with the gh CLI and the project scope.
 
-Column field: the built-in Status (Backlog, Ready, In progress, In review, Done). Mapping from feature_list.json status: backlog to Backlog, ready to Ready, in_progress and verify to In progress, review to In review, done to Done. blocked keeps the current Status and sets Blocked=yes; Blocked is cleared when unblocked. A project made with gh-board-setup.sh uses a Stage field instead and is not synced by the Action.
+Column field: the built-in Status (Backlog, Approved or Ready, In progress, In review, Done). Mapping from feature_list.json status: backlog to Backlog, ready to Approved (Ready if the board has no Approved option), in_progress and verify to In progress, review to In review, done to Done. blocked keeps the current Status and sets Blocked=yes; Blocked is cleared when unblocked. A project made with gh-board-setup.sh uses a Stage field instead and is not synced by the Action.
 
 Items (matched by the title prefix, e.g. "C-001"; draft issues; never deleted or archived; items with other prefixes are never touched):
 - Work cards from feature_list.json: Kind=Work, Card ID, Story step, Priority, Size, Risk, Start tier, Current tier, Attempts, Depends on, Slice.
