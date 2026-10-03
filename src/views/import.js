@@ -709,7 +709,7 @@ function renderLoad(ctx) {
     input.type = 'file';
     input.id = 'imp-file';
     input.className = 'imp-file-input';
-    input.accept = '.csv,.txt,.xlsx,.xls,.xml';
+    input.accept = '.csv,.txt,.xlsx,.xls,.xml,.sta,.mt940,.ofx,.qfx';
     input.disabled = state.loading;
     input.addEventListener('change', () => {
         const file = input.files?.[0];
