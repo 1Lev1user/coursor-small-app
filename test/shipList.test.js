@@ -70,6 +70,20 @@ function overlaps(pathA, pathB) {
     return pathALower === pathBLower;
 }
 
+function validateEntry(entry) {
+    const problems = [];
+    if (!entry) problems.push('empty entry');
+    if (entry.startsWith('/')) problems.push("starts with '/'");
+    if (entry.includes('..')) problems.push("contains '..'");
+    if (entry.startsWith('./')) problems.push("starts with './'");
+    if (entry.includes('\\')) problems.push('contains backslash');
+    return problems;
+}
+
+function findDuplicates(entries) {
+    return entries.filter((entry, index) => entries.indexOf(entry) !== index);
+}
+
 test('ship list file exists', () => {
     const stat = statSync(shipListPath);
     assert.ok(stat.isFile(), 'ship-files.txt is not a file');
@@ -81,6 +95,7 @@ test('ship list file exists', () => {
 test('every CORE_ASSETS entry is covered by ship list', () => {
     const entries = shipEntries();
     const assets = coreAssets();
+    assert.ok(assets.length > 0, 'CORE_ASSETS is empty');
 
     for (const asset of assets) {
         assert.ok(
@@ -90,56 +105,73 @@ test('every CORE_ASSETS entry is covered by ship list', () => {
     }
 });
 
+// True when the entry exists on disk as what its spelling says: dir if it ends with '/', file otherwise.
+function existsAsDeclared(entry) {
+    try {
+        const stat = statSync(join(root, entry));
+        return entry.endsWith('/') ? stat.isDirectory() : stat.isFile();
+    } catch {
+        return false;
+    }
+}
+
+const FORBIDDEN = [
+    'test/',
+    'scripts/',
+    '.claude/',
+    '.github/',
+    'cards/',
+    'process/',
+    'package.json',
+    'CLAUDE.md',
+    'AGENTS.md',
+    'anchor.md',
+    'SPEC.md',
+    'STORYMAP.md',
+    'claude-progress.txt',
+    'DESIGN.md',
+    'PROJECT_MAP.json',
+    'RELEASE_PLAN.json',
+];
+
+function forbiddenHits(entries) {
+    return entries.flatMap((entry) =>
+        FORBIDDEN.filter((forbid) => overlaps(entry, forbid)).map((forbid) => `${entry} ~ ${forbid}`)
+    );
+}
+
 test('every ship list entry exists', () => {
     const entries = shipEntries();
+    assert.ok(entries.length > 0, 'ship list is empty');
 
     for (const entry of entries) {
-        const fullPath = join(root, entry);
-        const stat = statSync(fullPath);
-
-        if (entry.endsWith('/')) {
-            assert.ok(
-                stat.isDirectory(),
-                `entry "${entry}" ends with '/' but is not a directory`
-            );
-        } else {
-            assert.ok(
-                stat.isFile(),
-                `entry "${entry}" does not end with '/' but is not a file`
-            );
-        }
+        assert.ok(existsAsDeclared(entry), `entry "${entry}" does not exist as a ${entry.endsWith('/') ? 'directory' : 'file'}`);
     }
 });
 
-test('ship list does not overlap forbidden paths', () => {
-    const entries = shipEntries();
-    const forbidden = [
-        'test/',
-        'scripts/',
-        '.claude/',
-        '.github/',
-        'cards/',
-        'process/',
-        'package.json',
-        'CLAUDE.md',
-        'AGENTS.md',
-        'anchor.md',
-        'SPEC.md',
-        'STORYMAP.md',
-        'claude-progress.txt',
-        'DESIGN.md',
-        'PROJECT_MAP.json',
-        'RELEASE_PLAN.json',
-    ];
+test('existsAsDeclared rejects missing paths and wrong kinds', () => {
+    assert.ok(existsAsDeclared('src/'));
+    assert.ok(existsAsDeclared('index.html'));
+    assert.ok(!existsAsDeclared('no-such-dir-xyz/'));
+    assert.ok(!existsAsDeclared('no-such-file-xyz.txt'));
+    assert.ok(!existsAsDeclared('index.html/'), 'a file spelled as a directory');
+    assert.ok(!existsAsDeclared('src'), 'a directory spelled as a file');
+});
 
-    for (const entry of entries) {
-        for (const forbid of forbidden) {
-            assert.ok(
-                !overlaps(entry, forbid),
-                `ship list entry "${entry}" overlaps forbidden path "${forbid}"`
-            );
-        }
+test('ship list does not overlap forbidden paths', () => {
+    assert.deepEqual(forbiddenHits(shipEntries()), []);
+});
+
+test('every forbidden path from the card is flagged when listed', () => {
+    const fromCard = [
+        'test/', 'scripts/', '.claude/', '.github/', 'cards/', 'process/', 'package.json',
+        'CLAUDE.md', 'AGENTS.md', 'anchor.md', 'SPEC.md', 'STORYMAP.md', 'claude-progress.txt',
+        'DESIGN.md', 'PROJECT_MAP.json', 'RELEASE_PLAN.json',
+    ];
+    for (const path of fromCard) {
+        assert.ok(forbiddenHits([path]).length > 0, `"${path}" should be flagged`);
     }
+    assert.deepEqual(forbiddenHits(['src/', 'index.html']), []);
 });
 
 test('ship list entries are valid', () => {
@@ -147,30 +179,46 @@ test('ship list entries are valid', () => {
 
     assert.ok(entries.length > 0, 'ship list is empty');
 
-    const seen = new Set();
     for (const entry of entries) {
-        assert.ok(entry, 'empty entry in ship list');
-        assert.ok(!entry.startsWith('/'), `entry "${entry}" starts with '/'`);
-        assert.ok(!entry.includes('..'), `entry "${entry}" contains '..'`);
-        assert.ok(!entry.startsWith('./'), `entry "${entry}" starts with './'`);
-        assert.ok(!entry.includes('\\'), `entry "${entry}" contains backslash`);
-        assert.ok(!seen.has(entry), `duplicate entry "${entry}"`);
-        seen.add(entry);
+        assert.deepEqual(validateEntry(entry), [], `entry "${entry}" is invalid`);
     }
+    assert.deepEqual(findDuplicates(entries), [], 'duplicate entries in ship list');
 });
 
-test('rejects path entries containing ..', () => {
-    // Test that entries with .. anywhere are rejected
-    const badEntry = 'src/../test/';
-    assert.ok(badEntry.includes('..'), 'test setup: badEntry should contain ..');
-    // This would be caught by the validation check
+test('validateEntry rejects bad entries and accepts a good one', () => {
+    const bad = ['src/../test/', 'docs/..', 'a/../b', '/abs', './x', 'a\\b', ''];
+    for (const entry of bad) {
+        assert.ok(validateEntry(entry).length > 0, `"${entry}" should be rejected`);
+    }
+    assert.deepEqual(validateEntry('src/'), []);
+});
+
+test('findDuplicates detects a repeated entry', () => {
+    assert.deepEqual(findDuplicates(['a', 'src/', 'a']), ['a']);
+    assert.deepEqual(findDuplicates(['a', 'src/']), []);
+});
+
+test('covered matches files, directories and the ./ root only', () => {
+    assert.ok(covered('./', ['index.html']), "'./' maps to index.html");
+    assert.ok(!covered('./', ['style.css']), 'index.html not listed');
+    assert.ok(covered('./src/a.js', ['src/']), 'file inside listed directory');
+    assert.ok(!covered('./srcx/a.js', ['src/']), 'sibling prefix is not covered');
+    assert.ok(!covered('./foo.js', ['index.html']), 'unlisted file');
 });
 
 test('forbidden path check is case-insensitive', () => {
-    // Test that Claude.md is caught when CLAUDE.md is forbidden
-    const entryLower = 'claude.md';
-    const forbidden = 'CLAUDE.md';
-    assert.ok(overlaps(entryLower, forbidden), 'claude.md should overlap with CLAUDE.md (case-insensitive)');
+    assert.ok(overlaps('Claude.MD', 'CLAUDE.md'), 'different case, entry first');
+    assert.ok(overlaps('CLAUDE.md', 'Claude.MD'), 'different case, forbidden first');
+    assert.ok(overlaps('Scripts/x.js', 'scripts/'), 'directory prefix in different case');
+});
+
+test('overlaps handles every file and directory combination', () => {
+    assert.ok(overlaps('scripts/x.js', 'scripts/'), 'file inside forbidden dir');
+    assert.ok(overlaps('scripts/', 'scripts/x.js'), 'dir containing forbidden file');
+    assert.ok(overlaps('scripts/sub/', 'scripts/'), 'dir inside forbidden dir');
+    assert.ok(overlaps('scripts/', 'scripts/sub/'), 'dir containing forbidden dir');
+    assert.ok(!overlaps('scriptsx/', 'scripts/'), 'sibling prefix is not an overlap');
+    assert.ok(!overlaps('a.md', 'b.md'), 'different files');
 });
 
 test('rejects entries overlapping with forbidden directories', () => {
