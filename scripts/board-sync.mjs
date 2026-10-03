@@ -31,6 +31,8 @@ export const FIELD_SPECS = [
   { name: 'Activity', type: SS, options: ACTIVITIES },
   { name: 'Release', type: SS, options: ['2.0', '2.1', '2.2', 'next'] },
   ...['Card ID', 'Story step', 'Depends on', 'Files', 'Progress'].map((name) => ({ name, type: 'TEXT' })),
+  // Board-only: set by the orchestrator (process/orchestration.md), never written by this sync.
+  { name: 'Agent', type: 'TEXT' },
   { name: 'Slice', type: 'NUMBER' },
 ];
 const SPEC = Object.fromEntries(FIELD_SPECS.map((s) => [s.name, s]));

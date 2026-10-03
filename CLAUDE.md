@@ -19,9 +19,9 @@ Columns: Backlog, In progress, In review, Done. Blocked is a board field (Blocke
 - Cards and planning files (cards/, STORYMAP.md, SPEC.md, anchor.md, process/) go straight to `main`. CI checks them with `npm run check:kit`. Never put app code in such a commit.
 - Never change a card that is In progress or In review without telling the owner; a Done card is never reopened (changes become a new card).
 - Review only what the owner moved to In review. Merge a pull request only after process/review.md passes. Move the card to Done after the merge (`gh project item-edit`), or back to In progress with the findings as a PR comment.
-- Never implement cards yourself unless the owner asks for that card explicitly.
+- Never implement cards in the main session. When the owner asks Claude to implement cards: process/orchestration.md (planner, worker and reviewer are three separate agents).
 - Board moves need the gh `project` scope (`gh auth refresh -s project`). Without it, say so and ask the owner to move the card.
-- Reviewer subagent: `.claude/agents/reviewer.md` (Sonnet; Opus for risk high).
+- Agents (all Claude only): card-planner, worker-light/standard/heavy, reviewer in `.claude/agents/`.
 - Facts you cannot verify are labelled unverified. No success claim without command output.
 
 ## Process files
@@ -31,6 +31,7 @@ Columns: Backlog, In progress, In review, Done. Blocked is a board field (Blocke
 - process/design-review.md: UI cards.
 - process/board.md: the board, its fields and the sync Action.
 - process/retro.md: short review after a group of cards.
+- process/orchestration.md: Claude implements cards with planner, worker and reviewer agents.
 
 ## Project conventions
 @AGENTS.md
