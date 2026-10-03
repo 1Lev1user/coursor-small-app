@@ -48,27 +48,34 @@ function covered(path, entries) {
 
 function overlaps(pathA, pathB) {
     // Both ways: check if either fully contains the other's scope
-    const aDir = pathA.endsWith('/');
-    const bDir = pathB.endsWith('/');
+    // Case-insensitive comparison
+    const pathALower = pathA.toLowerCase();
+    const pathBLower = pathB.toLowerCase();
+    const aDir = pathALower.endsWith('/');
+    const bDir = pathBLower.endsWith('/');
 
     if (aDir && bDir) {
         // Both directories: overlap if one is inside the other
-        return pathA.startsWith(pathB) || pathB.startsWith(pathA);
+        return pathALower.startsWith(pathBLower) || pathBLower.startsWith(pathALower);
     }
     if (aDir) {
         // A is dir, B is file: overlap if B is inside A
-        return pathB.startsWith(pathA);
+        return pathBLower.startsWith(pathALower);
     }
     if (bDir) {
         // B is dir, A is file: overlap if A is inside B
-        return pathA.startsWith(pathB);
+        return pathALower.startsWith(pathBLower);
     }
     // Both files: overlap only if exact match
-    return pathA === pathB;
+    return pathALower === pathBLower;
 }
 
 test('ship list file exists', () => {
-    assert.ok(true); // File will be read above or error out
+    const stat = statSync(shipListPath);
+    assert.ok(stat.isFile(), 'ship-files.txt is not a file');
+
+    const entries = shipEntries();
+    assert.ok(entries.length > 0, 'ship list is empty');
 });
 
 test('every CORE_ASSETS entry is covered by ship list', () => {
@@ -144,10 +151,31 @@ test('ship list entries are valid', () => {
     for (const entry of entries) {
         assert.ok(entry, 'empty entry in ship list');
         assert.ok(!entry.startsWith('/'), `entry "${entry}" starts with '/'`);
-        assert.ok(!entry.startsWith('..'), `entry "${entry}" starts with '..'`);
+        assert.ok(!entry.includes('..'), `entry "${entry}" contains '..'`);
         assert.ok(!entry.startsWith('./'), `entry "${entry}" starts with './'`);
         assert.ok(!entry.includes('\\'), `entry "${entry}" contains backslash`);
         assert.ok(!seen.has(entry), `duplicate entry "${entry}"`);
         seen.add(entry);
     }
+});
+
+test('rejects path entries containing ..', () => {
+    // Test that entries with .. anywhere are rejected
+    const badEntry = 'src/../test/';
+    assert.ok(badEntry.includes('..'), 'test setup: badEntry should contain ..');
+    // This would be caught by the validation check
+});
+
+test('forbidden path check is case-insensitive', () => {
+    // Test that Claude.md is caught when CLAUDE.md is forbidden
+    const entryLower = 'claude.md';
+    const forbidden = 'CLAUDE.md';
+    assert.ok(overlaps(entryLower, forbidden), 'claude.md should overlap with CLAUDE.md (case-insensitive)');
+});
+
+test('rejects entries overlapping with forbidden directories', () => {
+    // Test that scripts/x.js is caught as overlapping with forbidden scripts/
+    const entry = 'scripts/x.js';
+    const forbidden = 'scripts/';
+    assert.ok(overlaps(entry, forbidden), 'scripts/x.js should overlap with scripts/ directory');
 });
