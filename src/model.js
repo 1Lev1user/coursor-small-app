@@ -425,3 +425,22 @@ export function deleteSubcategory(data, categoryId, subcategoryId) {
 
     return { ok: true, movedCount };
 }
+
+export function removeEntry(data, type, id) {
+    const list = { expense: data.expenses, income: data.incomes }[type];
+    const index = list === undefined ? -1 : list.findIndex((entry) => entry.id === id);
+    if (index === -1) {
+        return null;
+    }
+    const [entry] = list.splice(index, 1);
+    return { entry, index };
+}
+
+export function restoreEntry(data, type, entry, index) {
+    const list = { expense: data.expenses, income: data.incomes }[type];
+    if (list === undefined || list.some(({ id }) => id === entry.id)) {
+        return false;
+    }
+    list.splice(Math.max(0, Math.min(index, list.length)), 0, entry);
+    return true;
+}
