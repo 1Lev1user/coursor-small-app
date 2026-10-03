@@ -32,7 +32,7 @@ My Expenses lets one person track EUR expenses and income on their phone, plan t
 Slice 1: "All cards of slice 1 are in Done in BOARD.md, `npm test` exits 0, and claude-progress.txt is updated, or stop after 40 turns."
 
 ## Board mirror
-- Existing GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user), number: (fill after scripts/gh-board-attach.sh). Column field: Status (mapping in board-ops skill). Map cards: Kind=Map, Status=Done, view Map.
+- Existing GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user), number: 1 (stored by the owner as repository secret PROJECT_NUMBER; GitHub masks every "1" in Action logs because of that). Column field: Status (mapping in board-ops skill). Map cards: Kind=Map, Status=Done, view Map.
 - Sync: .github/workflows/board-sync.yml, secret PROJECT_TOKEN and variable PROJECT_NUMBER set by the owner.
 
 ## Open questions

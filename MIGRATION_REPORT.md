@@ -70,3 +70,7 @@ The 3 failures are card C-001 (slice 1), not a migration regression.
 ## Open questions
 - Goal and actors in SPEC.md: owner to confirm (integration step 4).
 - Guide scripts dependencies (pypdf, reportlab, playwright) undocumented; `npm run serve` calls `python`.
+
+## Board sync (added 2026-10-03)
+- First real run of `.github/workflows/board-sync.yml` (run 37110338226): created 60 items (3 Work, 19 Map, 38 Plan), 14 fields, 0 warnings.
+- Not yet verified: diff-mode update of an existing card on the real board (first card move will test it).
