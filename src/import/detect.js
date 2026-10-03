@@ -50,7 +50,13 @@ function detectXml(text) {
     ) {
         return 'camt';
     }
+    if (name === 'ofx') return 'ofx';
     return 'unknown';
+}
+
+function looksMt940(body) {
+    const text = body.replace(/^\{1:[^\r\n]*?\{4:\s*/, '');
+    return /^:20:/.test(text) && /^:25:/m.test(text) && /^:60[FM]:/m.test(text);
 }
 
 function countOutsideQuotes(line, delimiter) {
@@ -91,6 +97,9 @@ export function detectFormat(text, fileName = '') {
 
     const body = stripBom(text).trimStart();
     if (body === '') return 'unknown';
+
+    if (body.startsWith('OFXHEADER:')) return 'ofx';
+    if (looksMt940(body)) return 'mt940';
 
     if (body.startsWith('<')) {
         return detectXml(body);
