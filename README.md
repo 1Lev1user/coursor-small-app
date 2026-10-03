@@ -55,7 +55,7 @@ Open the link in Safari (iPhone) or Chrome (Android), then Add to Home Screen / 
 ## Development
 
 - `npm test` runs all tests (Node 22, no packages to install). GitHub runs them on every push and pull request.
-- Releasing: raise `version` in `package.json` and `VERSION` in `sw.js` together. A test fails if they differ or if a file in `src/` or `fonts/` is missing from the offline cache list in `sw.js`.
+- Releasing: run `npm version <new version>`; it raises `version` in `package.json`, syncs `VERSION` in `sw.js` (`scripts/sync-version.mjs`) and commits both. A test fails if they differ or if a file in `src/` or `fonts/` is missing from the offline cache list in `sw.js`.
 - Data format changes: raise `SCHEMA_VERSION` in `src/model.js` and add one step to `MIGRATIONS` that lifts the previous version by exactly one, with a test.
 - The live site is published from the `v1` branch, which holds only the shipped files. Work goes to `main` first.
 - Colours, fonts, radii and motion are design tokens at the top of `style.css`, with a dark theme below them.
