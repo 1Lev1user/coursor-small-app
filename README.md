@@ -3,6 +3,7 @@
 Local-only EUR expense and income tracker (PWA). Data stays on your device: no account, no cloud sync.
 
 Live app: https://1lev1user.github.io/coursor-small-app/
+User guide (PDF): https://github.com/1Lev1user/coursor-small-app/releases/latest
 
 ## First-run setup
 
