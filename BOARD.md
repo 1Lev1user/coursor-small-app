@@ -18,12 +18,11 @@ Current slice: 1
 (none)
 
 ## Approved (status ready)
-- C-002 (P1, S, haiku) Regression test: past month without plan choice is refused. depends_on C-001: start after C-001 is merged into slice-1.
 
 Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits 0) needs C-001 done first.
 
 ## In progress
-- C-001 (P0, S, haiku) Make 3 import tests date-independent.
+- C-002 (P1, S, haiku) Regression test: past month without plan choice is refused.
 - C-003 (P1, S, haiku) Direct tests for escapeField edge cases.
 
 ## Verify
@@ -33,7 +32,7 @@ Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits
 (none)
 
 ## Done
-(none)
+- C-001 (P0, S, haiku) Make 3 import tests date-independent.
 
 ## Blocked
 (none)
