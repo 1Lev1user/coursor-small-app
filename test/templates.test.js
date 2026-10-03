@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultData } from '../src/model.js';
 import { addTemplate, deleteTemplate, templateToExpense } from '../src/templates.js';
+import { todayISO } from '../src/months.js';
 
 test('addTemplate requires a trimmed non-empty name up to 40 characters', () => {
     const data = defaultData();
@@ -65,6 +66,5 @@ test('templateToExpense builds a v2-shaped draft defaulting to the given date', 
 
 test('templateToExpense defaults the date to today', () => {
     const draft = templateToExpense({ categoryId: 'random', amountCents: 100 });
-    const today = new Date().toISOString().slice(0, 10);
-    assert.equal(draft.date, today);
+    assert.equal(draft.date, todayISO());
 });
