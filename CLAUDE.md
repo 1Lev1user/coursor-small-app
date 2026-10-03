@@ -1,38 +1,36 @@
 # CLAUDE.md: My Expenses
 
-## Delivery system (agent-kit)
+## Delivery system
+Claude Code (local, on the owner's machine) is the **planner and reviewer**. The owner implements cards in Cursor (rules in AGENTS.md). The GitHub Project board (owner 1Lev1user, number 1) holds the only status of every card.
 
-This project is planned by the planner (the owner's cloud orchestrator session) and delivered by a lead agent (Opus) and worker agents. Start every lead session with `claude --agent lead`. This is the only supported way, because it pins the lead to Opus.
+Columns: Backlog, In progress, In review, Done. Blocked is a board field (Blocked = yes), not a column.
 
-Files that carry state across sessions (read at session start, in this order): anchor.md, SPEC.md, STORYMAP.md, BOARD.md, feature_list.json, claude-progress.txt.
+| Step | Who | What happens |
+|---|---|---|
+| Wish | Owner | Says what to add or change |
+| Plan | Claude | Story map step, then cards in `cards/`, pushed straight to `main`; the board-sync Action creates them in Backlog |
+| Take | Owner | Moves a card to In progress, implements it in Cursor on `card/C-NNN-...` |
+| Hand over | Owner | Opens the pull request, moves the card to In review, tells Claude |
+| Review | Claude | process/review.md; merge = Done, or a PR comment and back to In progress |
 
-Rules for every agent:
-- Think first (think-first skill): goal, options including ones the request did not name, recommendation, then act. Out-of-scope options are proposed, not built.
-- Short replies (terse skill). Explain or detail only when the user asks.
-- Work only on a card. No card, no edit. Cards live in feature_list.json.
-- Edit only the card allowed_paths. Never edit or delete existing tests to make checks pass, unless the card lists that existing test file in allowed_paths and its notes record owner approval (decision D1, 2026-10-03).
-- Planner (owner's cloud session) also performs the lead role (owner decision 2026-10-03): SPEC.md, STORYMAP.md, creating cards, priority, size, risk, start_tier, routing to worker-light/standard/heavy, completion-check Levels 1 to 4, merging card branches into slice-N, all statuses incl. Done, BOARD.md, claude-progress.txt, GitHub mirror, push.
-- Approved = the owner's go signal: the owner moves a card Backlog -> Approved (internal status `ready`) and tells the planner; nothing starts before. A Done card is never reopened; changes become new Backlog cards.
-- `claude --agent lead` on the owner's machine is optional; same rules (pulls Approved cards, Levels 1 to 3, up to Review, never creates cards, never sets Done).
-- Handoff: one side writes the state files at a time; `git pull` before starting, push when done. Each slice runs on branch `slice-N` from main; card branches come from it; after acceptance the owner merges it to main by pull request.
-- Never claim success without command output.
-- Irreversible actions (delete, force-push, secrets, production data) go to the user first.
-- Unverified facts are labelled as unverified. Do not invent numbers, sources or API details.
+## Rules for Claude here
+- Session start: `git pull`, read anchor.md, then the board (`gh project item-list 1 --owner 1Lev1user --format json`). The board, not a file, says what is in progress or in review.
+- Wish to cards: process/story-map.md, then process/card-writing.md. Ask the owner before cards when the wish is ambiguous.
+- Cards and planning files (cards/, STORYMAP.md, SPEC.md, anchor.md, process/) go straight to `main`. CI checks them with `npm run check:kit`. Never put app code in such a commit.
+- Never change a card that is In progress or In review without telling the owner; a Done card is never reopened (changes become a new card).
+- Review only what the owner moved to In review. Merge a pull request only after process/review.md passes. Move the card to Done after the merge (`gh project item-edit`), or back to In progress with the findings as a PR comment.
+- Never implement cards yourself unless the owner asks for that card explicitly.
+- Board moves need the gh `project` scope (`gh auth refresh -s project`). Without it, say so and ask the owner to move the card.
+- Reviewer subagent: `.claude/agents/reviewer.md` (Sonnet; Opus for risk high).
+- Facts you cannot verify are labelled unverified. No success claim without command output.
 
-Routing: S + low risk + automatic check goes to Haiku; M or L goes to Sonnet; high risk or architecture goes to Opus. Escalation ladder Haiku, Sonnet, Opus; 2 attempts per tier; ceiling 6 / 4 / 2 by start tier; then Blocked and a question to the user.
-
-Long runs: set a goal with /goal, for example "All cards of slice 1 are in Done in BOARD.md, <test command> exits 0, or stop after 40 turns." Use auto mode for unattended runs.
+## Process files
+- process/story-map.md: from a wish to story steps.
+- process/card-writing.md: card format and rules.
+- process/review.md: checking a pull request and closing a card.
+- process/design-review.md: UI cards.
+- process/board.md: the board, its fields and the sync Action.
+- process/retro.md: short review after a group of cards.
 
 ## Project conventions
-
-Source: README.md "Development" section, unless marked [inferred].
-
-- Tests: `npm test` runs all tests (`node --test`, Node 22, no packages to install). GitHub runs them on every push and pull request.
-- Kit check: `npm run check:kit` (separate from `npm test`, decision D3).
-- Release: raise `version` in package.json and `VERSION` in sw.js together. test/serviceWorker.test.js fails if they differ or if a file in `src/` or `fonts/` is missing from `CORE_ASSETS` in sw.js.
-- Data format change: raise `SCHEMA_VERSION` in src/model.js and add one step to `MIGRATIONS` that lifts the previous version by exactly one, with a test.
-- Branches: the live site is published from branch `v1`, which holds only shipped files. Work goes to `main` first.
-- Design: colours, fonts, radii and motion are design tokens at the top of style.css, with the dark theme below them. No raw colours outside tokens [inferred]. See DESIGN.md and the design-review skill.
-- Data stays on the device: no network calls, no accounts, no analytics [inferred from README "Data stays on your device"].
-- State files at the root (anchor.md, SPEC.md, STORYMAP.md, BOARD.md, feature_list.json, claude-progress.txt, DESIGN.md, CLAUDE.md) are not shipped to `v1`.
-- Tests that depend on dates must pass a fixed `now` (for example `buildImport(..., { now: NOW })`). Lesson from C-001.
+@AGENTS.md

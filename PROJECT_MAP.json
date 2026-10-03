@@ -1,5 +1,5 @@
 {
-  "rules": "Map of existing features. One-way mirror to the GitHub Project as Kind=Map cards. Edited by the lead.",
+  "rules": "Map of existing features. Mirrored to the GitHub Project as Kind=Map items by the board-sync Action. Edited by the planner (Claude).",
   "items": [
     {
       "id": "M-S1.1",
