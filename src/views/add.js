@@ -56,6 +56,7 @@ const draft = {
 const TEMPLATE_NAME_MAX = 40;
 const SOFT_BACKUP_DAYS = 14;
 const STRONG_BACKUP_DAYS = 30;
+const OVERDUE_BACKUP_DAYS = 60;
 const SNOOZE_DAYS = 7;
 
 const incomeDraft = {
@@ -491,23 +492,34 @@ function addDaysISO(dateISO, days) {
 
 /**
  * Home backup reminder state. Hidden while snoozed or with no entries.
- * @returns {null | { level: 'soft' | 'strong', days: number | null }}
+ * @returns {null | { level: 'soft' | 'strong' | 'overdue', days: number | null }}
  */
 export function backupReminder(data, now = new Date()) {
     if (data.expenses.length + data.incomes.length === 0) {
         return null;
     }
     const today = todayISO(now);
+
+    const last = isoDay(data.settings.lastBackupISO);
     const snoozedUntil = data.settings.backupSnoozedUntil;
-    if (typeof snoozedUntil === 'string' && snoozedUntil !== '' && today < snoozedUntil) {
+    const isSnoozed = typeof snoozedUntil === 'string' && snoozedUntil !== '' && today < snoozedUntil;
+
+    if (last === null) {
+        if (isSnoozed) {
+            return null;
+        }
+        return { level: 'strong', days: null };
+    }
+
+    const days = Math.round((isoDay(today) - last) / 86_400_000);
+    if (days >= OVERDUE_BACKUP_DAYS) {
+        return { level: 'overdue', days };
+    }
+
+    if (isSnoozed) {
         return null;
     }
 
-    const last = isoDay(data.settings.lastBackupISO);
-    if (last === null) {
-        return { level: 'strong', days: null };
-    }
-    const days = Math.round((isoDay(today) - last) / 86_400_000);
     if (days >= STRONG_BACKUP_DAYS) {
         return { level: 'strong', days };
     }
@@ -518,7 +530,8 @@ export function backupReminder(data, now = new Date()) {
 }
 
 function renderBackupReminder(ctx, reminder) {
-    const strong = reminder.level === 'strong';
+    const overdue = reminder.level === 'overdue';
+    const strong = reminder.level === 'strong' || overdue;
     const card = element('section', strong ? 'home-backup is-strong' : 'home-backup');
     card.setAttribute('aria-labelledby', 'home-backup-title');
 
@@ -537,21 +550,25 @@ function renderBackupReminder(ctx, reminder) {
     exportBtn.type = 'button';
     exportBtn.addEventListener('click', () => doExportBackup(ctx));
 
-    const laterBtn = element('button', 'btn btn-ghost', 'Later');
-    laterBtn.type = 'button';
-    laterBtn.addEventListener('click', () => {
-        const previous = ctx.data.settings.backupSnoozedUntil;
-        ctx.data.settings.backupSnoozedUntil = addDaysISO(todayISO(), SNOOZE_DAYS);
-        if (ctx.save() === false) {
-            ctx.data.settings.backupSnoozedUntil = previous;
-            ctx.render();
-            return;
-        }
-        ctx.toast('Reminder snoozed for 7 days');
-    });
-
     const actions = element('div', 'home-backup-actions');
-    actions.append(exportBtn, laterBtn);
+    actions.append(exportBtn);
+
+    if (!overdue) {
+        const laterBtn = element('button', 'btn btn-ghost', 'Later');
+        laterBtn.type = 'button';
+        laterBtn.addEventListener('click', () => {
+            const previous = ctx.data.settings.backupSnoozedUntil;
+            ctx.data.settings.backupSnoozedUntil = addDaysISO(todayISO(), SNOOZE_DAYS);
+            if (ctx.save() === false) {
+                ctx.data.settings.backupSnoozedUntil = previous;
+                ctx.render();
+                return;
+            }
+            ctx.toast('Reminder snoozed for 7 days');
+        });
+        actions.append(laterBtn);
+    }
+
     card.append(title, actions);
     return card;
 }
