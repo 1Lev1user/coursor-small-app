@@ -11,6 +11,7 @@ on:
       - PROJECT_MAP.json
       - RELEASE_PLAN.json
       - scripts/board-sync.mjs
+      - .github/workflows/board-sync.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -40,7 +41,7 @@ jobs:
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || '1Lev1user' }}
-          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER || secrets.PROJECT_NUMBER }}
           MODE: ${{ inputs.mode || 'diff' }}
           BEFORE: ${{ github.event.before }}
         run: |
