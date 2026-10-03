@@ -1,0 +1,45 @@
+# BOARD
+
+Human-readable view of feature_list.json. Written only by the lead. GitHub Project mirror is one-way (this file to GitHub).
+
+## Policies
+- Columns: Backlog, Ready, In progress, Verify, Review, Done, Blocked.
+- WIP limit: 3 in In progress, 2 in Review.
+- A card enters Ready only with: story step, size, priority, risk, acceptance commands, allowed paths.
+- Cards touching the same files do not run in parallel. Parallel cards use isolation: worktree.
+- Done is set only by the lead after verification levels 1 to 4 (see completion-check skill).
+- Ladder: Haiku, Sonnet, Opus. Up to 2 attempts per tier, each in a fresh context with the previous error text. Ceiling 6 attempts for a card started on Haiku, 4 on Sonnet, 2 on Opus. Then Blocked and a question to the user.
+- Pull order: priority first (P0 over P1 over P2), then older work item age first.
+
+## Slice
+Current slice: 1
+
+## Backlog
+(none)
+
+## Ready
+(none)
+
+## In progress
+(none)
+
+## Verify
+(none)
+
+## Review
+(none)
+
+## Done
+(none)
+
+## Blocked
+(none)
+
+## Metrics (updated by the lead at each slice end)
+| Tier | Cards started | Passed first try | Escalated | First-pass rate |
+|---|---|---|---|---|
+| haiku | 0 | 0 | 0 | n/a |
+| sonnet | 0 | 0 | 0 | n/a |
+| opus | 0 | 0 | 0 | n/a |
+
+Starting threshold [assumption]: if Haiku first-pass rate stays below 70 percent, start those cards on Sonnet.

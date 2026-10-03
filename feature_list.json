@@ -1,0 +1,24 @@
+{
+  "project": "PROJECT_NAME",
+  "current_slice": 1,
+  "rules": "Only the lead edits this file. Workers report in their final message. Fields id, story_step, title, acceptance, allowed_paths are fixed after Ready. Only status, attempts and evidence change.",
+  "cards": [
+    {
+      "id": "C-001",
+      "story_step": "S1.1",
+      "title": "Example card, replace me",
+      "size": "S",
+      "priority": "P1",
+      "risk": "low",
+      "start_tier": "haiku",
+      "attempts": [],
+      "acceptance": ["npm test -- example exits 0", "npm run lint exits 0"],
+      "allowed_paths": ["src/example/", "tests/example/"],
+      "forbidden": ["editing existing test files"],
+      "depends_on": [],
+      "status": "backlog",
+      "evidence": null,
+      "mirror_id": null
+    }
+  ]
+}

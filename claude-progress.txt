@@ -1,0 +1,5 @@
+Session log. Append only. The lead writes one entry at the end of each session or slice.
+
+Format:
+DATE | slice | cards moved | what works now | what is broken | next card
+
