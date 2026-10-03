@@ -21,7 +21,7 @@ jobs:
       - run: npm run check:kit
       # Card branches (card/C-NNN-...) may change only the card's allowed_paths; the card is read from the base branch.
       - name: Card guard
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'card/')
         env:
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}

@@ -1,7 +1,7 @@
 // Tests for scripts/cards.mjs (card files) and scripts/check-card.mjs (PR guard). No git, no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFrontmatter, parseCard, pathAllowed } from '../scripts/cards.mjs';
+import { parseFrontmatter, parseCard, pathAllowed, pathsOverlap, CARD_BRANCH } from '../scripts/cards.mjs';
 import { checkCard } from '../scripts/check-card.mjs';
 
 const CARD = `---
@@ -55,33 +55,44 @@ test('pathAllowed: a trailing slash allows a folder, otherwise the exact file', 
   assert.equal(pathAllowed('src/example2/a.js', allowed), false);
   assert.equal(pathAllowed('test/example.test.js', allowed), true);
   assert.equal(pathAllowed('test/example.test.js.bak', allowed), false);
+  assert.equal(pathsOverlap('scripts/', 'scripts/check-kit.mjs'), true);
+  assert.equal(pathsOverlap('scripts/check-kit.mjs', 'scripts/'), true);
+  assert.equal(pathsOverlap('scripts/a.mjs', 'scripts/b.mjs'), false);
 });
 
 const card = parseCard(CARD, 'cards/C-042.md');
-const run = (over) => checkCard({ branch: 'card/C-042-example', cards: [card], changes: [], testFilesAtBase: new Set(['test/old.test.js', 'test/other.test.js']), ...over });
+const atBase = new Set(['test/old.test.js', 'test/other.test.js']);
+const run = (over) => checkCard({ id: 'C-042', card, changes: [], existedAtBase: (p) => atBase.has(p), ...over });
 
-test('checkCard skips branches that are not card branches', () => {
-  const r = run({ branch: 'system/cursor-flow', changes: [{ status: 'M', path: 'anything.js' }] });
-  assert.match(r.skipped, /not a card branch/);
-  assert.deepEqual(r.problems, []);
+test('CARD_BRANCH takes the card id from card branches only', () => {
+  assert.equal('card/C-042-example'.match(CARD_BRANCH)?.[1], 'C-042');
+  assert.equal('card/C-042'.match(CARD_BRANCH)?.[1], 'C-042');
+  assert.equal('system/cursor-flow'.match(CARD_BRANCH), null);
+  assert.equal('card/C-0421-x'.match(CARD_BRANCH), null);
 });
 
 test('checkCard passes a diff inside allowed_paths, including an approved test edit and a new test', () => {
   const r = run({ changes: [{ status: 'M', path: 'src/example/a.js' }, { status: 'A', path: 'test/example.test.js' }, { status: 'M', path: 'test/old.test.js' }] });
-  assert.deepEqual(r.problems, []);
+  assert.deepEqual(r, []);
 });
 
-test('checkCard flags files outside allowed_paths and a missing card', () => {
-  const r = run({ changes: [{ status: 'M', path: 'src/app.js' }] });
-  assert.equal(r.problems.length, 1);
-  assert.match(r.problems[0], /src\/app\.js.*outside allowed_paths/);
-  const missing = run({ branch: 'card/C-777-x', changes: [] });
-  assert.match(missing.problems[0], /C-777.*no card file/);
+test('checkCard flags files outside allowed_paths, system files and a missing card', () => {
+  const r = run({ changes: [{ status: 'M', path: 'src/app.js' }, { status: 'M', path: 'cards/C-042.md' }] });
+  assert.equal(r.length, 2);
+  assert.match(r[0], /src\/app\.js.*outside allowed_paths/);
+  assert.match(r[1], /cards\/C-042\.md: system file/);
+  assert.match(run({ id: 'C-777', card: null })[0], /C-777.*no card file/);
+});
+
+test('system files stay blocked even when a card lists them', () => {
+  const c = { ...card, allowed_paths: ['.github/'] };
+  const r = run({ card: c, changes: [{ status: 'M', path: '.github/workflows/test.yml' }, { status: 'A', path: '.github/workflows/publish.yml' }] });
+  assert.deepEqual(r, ['.github/workflows/test.yml: system file, only the planner changes it.']);
 });
 
 test('checkCard flags edits, deletes and renames of existing tests not listed in test_edits', () => {
   const c = { ...card, allowed_paths: ['test/'] };
-  const r = run({ cards: [c], changes: [{ status: 'M', path: 'test/other.test.js' }, { status: 'D', path: 'test/other.test.js' }, { status: 'R', oldPath: 'test/other.test.js', path: 'test/moved.test.js' }] });
-  assert.equal(r.problems.length, 3);
-  for (const p of r.problems) assert.match(p, /existing test test\/other\.test\.js/);
+  const r = run({ card: c, changes: [{ status: 'M', path: 'test/other.test.js' }, { status: 'D', path: 'test/other.test.js' }, { status: 'R100', oldPath: 'test/other.test.js', path: 'test/moved.test.js' }] });
+  assert.equal(r.length, 3);
+  for (const p of r) assert.match(p, /existing test test\/other\.test\.js/);
 });

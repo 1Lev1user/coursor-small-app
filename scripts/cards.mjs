@@ -4,7 +4,14 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CARDS_DIR = 'cards';
-export const CARD_FILE = /^C-\d{3}\.md$/;
+const CARD_ID = 'C-\\d{3}';
+export const CARD_FILE = new RegExp(`^${CARD_ID}\\.md$`);
+export const CARD_BRANCH = new RegExp(`^card/(${CARD_ID})(?:-|$)`);
+
+// Files only the planner changes. No card may list them, and a card branch may not touch them.
+export const SYSTEM_PATHS = ['cards/', 'process/', '.claude/', 'CLAUDE.md', 'AGENTS.md', 'anchor.md', 'SPEC.md', 'STORYMAP.md',
+  'scripts/cards.mjs', 'scripts/check-card.mjs', 'scripts/check-kit.mjs', 'scripts/board-sync.mjs',
+  '.github/workflows/test.yml', '.github/workflows/board-sync.yml'];
 
 const unquote = (v) => {
   v = v.trim();
@@ -83,3 +90,7 @@ export function readCards(root) {
 export function pathAllowed(path, allowed) {
   return allowed.some((a) => (a.endsWith('/') ? path.startsWith(a) : path === a));
 }
+
+// True when two allowed_paths-style entries share any file (either may be a folder).
+export const pathsOverlap = (a, b) => pathAllowed(a, [b]) || pathAllowed(b, [a]);
+export const isSystemPath = (p) => SYSTEM_PATHS.some((s) => pathsOverlap(p, s));

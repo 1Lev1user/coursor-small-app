@@ -129,10 +129,15 @@ test('Kind without option Plan: warning, plan items skipped, others created', ()
   assert.equal(r.summary.skipped, files['RELEASE_PLAN.json'].items.length);
 });
 
-test('Status missing a required column is an error and plans nothing', () => {
+test('Status missing a column that new items need is an error and plans nothing', () => {
   const r = planSync({ newFiles: base(), boardItems: [], fields: fullFields(['Backlog', 'Done']), mode: 'all' });
   assert.equal(r.actions.length, 0);
-  assert.match(r.errors[0], /In progress, In review/);
+  assert.match(r.errors[0], /missing option\(s\): In progress/);
+});
+
+test('a column no new item needs may be missing', () => {
+  const r = planSync({ newFiles: base(), boardItems: [], fields: fullFields(['Backlog', 'In progress', 'Done']), mode: 'all' });
+  assert.deepEqual(r.errors, []);
 });
 
 test('an extra Status option such as Approved is allowed', () => {

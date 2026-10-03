@@ -16,7 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://api.github.com/graphql';
 
 export const FILES = ['PROJECT_MAP.json', 'RELEASE_PLAN.json'];
-// Columns the board must have. Other options (for example an old "Ready" or "Approved") are allowed and ignored.
+// The board's columns (process/board.md). Other options (for example an old "Ready" or "Approved") are ignored.
 export const STATUS_OPTIONS = ['Backlog', 'In progress', 'In review', 'Done'];
 export const ACTIVITIES = ['Sets up', 'Records entries', 'Reviews money', 'Imports bank statement', 'Plans and saves', 'Backs up and updates'];
 const SS = 'SINGLE_SELECT';
@@ -98,7 +98,9 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
     const st = byName.get('Status');
     if (!st || st.dataType !== SS) errors.push('Field "Status" (single select) not found in the project. It must be the built-in Status column.');
     else {
-      const miss = STATUS_OPTIONS.filter((o) => !st.options?.some((x) => x.name === o));
+      // Only the statuses new items are created with must exist; the sync never moves items between columns.
+      const needed = new Set([...wanted.values()].map((i) => i.status).filter(Boolean));
+      const miss = [...needed].filter((o) => !st.options?.some((x) => x.name === o));
       if (miss.length) errors.push(`Status is missing option(s): ${miss.join(', ')}. Add them in Project settings > Status; nothing was changed.`);
     }
     for (const s of FIELD_SPECS) {

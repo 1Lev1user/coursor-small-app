@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter, readCards } from './cards.mjs';
+import { parseFrontmatter, readCards, CARD_FILE, isSystemPath } from './cards.mjs';
 
 const ROOT = process.env.KIT_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..');
 const problems = [];
@@ -27,7 +27,7 @@ for (const f of list('.claude/agents').filter((x) => x.endsWith('.md'))) {
   if (!check(fm, `${p}: missing frontmatter`)) continue;
   check(str(fm.name), `${p}: empty name`);
   check(fm.name === basename(f, '.md'), `${p}: name "${fm.name}" != file basename`);
-  check(str(fm.description) && CLAUDE_ONLY.test(fm.description), `${p}: description must start with "Claude only"`);
+  check(CLAUDE_ONLY.test(fm.description ?? ''), `${p}: description must start with "Claude only"`);
   if (fm.model !== undefined) {
     check(MODELS.includes(fm.model) || fm.model.startsWith('claude-'), `${p}: bad model "${fm.model}"`);
   }
@@ -43,7 +43,7 @@ for (const d of list('.claude/skills').filter((x) => isDir(`.claude/skills/${x}`
   const fm = frontmatter(read(p));
   if (!check(fm, `${p}: missing frontmatter`)) continue;
   check(fm.name === d, `${p}: name "${fm.name}" != folder "${d}"`);
-  check(str(fm.description) && CLAUDE_ONLY.test(fm.description), `${p}: description must start with "Claude only"`);
+  check(CLAUDE_ONLY.test(fm.description ?? ''), `${p}: description must start with "Claude only"`);
 }
 
 // Rule and state files. BOARD.md and feature_list.json belonged to the old file-driven board; the GitHub Project
@@ -60,17 +60,12 @@ for (const f of ['CLAUDE.md', 'AGENTS.md'].filter((x) => existsSync(join(ROOT, x
 // Cards (cards/C-NNN.md)
 const SETS = { size: ['S', 'M', 'L'], priority: ['P0', 'P1', 'P2'], risk: ['low', 'medium', 'high'] };
 const FIELDS = ['id', 'title', 'story_step', 'size', 'priority', 'risk', 'slice', 'depends_on', 'allowed_paths', 'test_edits'];
-// Files only the planner changes. A card may not hand them to the executor.
-const SYSTEM = ['cards/', 'process/', '.claude/', 'CLAUDE.md', 'AGENTS.md', 'anchor.md', 'SPEC.md', 'STORYMAP.md',
-  'scripts/cards.mjs', 'scripts/check-card.mjs', 'scripts/check-kit.mjs', 'scripts/board-sync.mjs',
-  '.github/workflows/test.yml', '.github/workflows/board-sync.yml'];
-const covers = (entry, sys) => entry === sys || (entry.endsWith('/') && sys.startsWith(entry)) || (sys.endsWith('/') && entry.startsWith(sys));
 const story = existsSync(join(ROOT, 'STORYMAP.md')) ? read('STORYMAP.md') : '';
 const stepRow = (s) => new RegExp(`^\\|\\s*${String(s).replace(/\./g, '\\.')}\\s*\\|`, 'm').test(story);
 check(isDir('cards'), 'cards/: missing');
 const cards = readCards(ROOT);
 const ids = new Set(cards.map((c) => c.id));
-for (const f of list('cards').filter((x) => x.endsWith('.md'))) check(/^C-\d{3}\.md$/.test(f), `cards/${f}: file name must be C-NNN.md`);
+for (const f of list('cards').filter((x) => x.endsWith('.md'))) check(CARD_FILE.test(f), `cards/${f}: file name must be C-NNN.md`);
 for (const c of cards) {
   const w = c.file;
   if (!check(!c.invalid, `${w}: ${c.invalid}`)) continue;
@@ -83,7 +78,7 @@ for (const c of cards) {
   check(c.acceptance.length > 0, `${w}: needs at least one bullet under "## Acceptance"`);
   check(c.allowed_paths.length > 0, `${w}: allowed_paths must not be empty`);
   for (const p of new Set([...c.allowed_paths, ...c.test_edits])) {
-    for (const sys of SYSTEM) check(!covers(p, sys), `${w}: allowed path "${p}" covers system file ${sys}`);
+    check(!isSystemPath(p), `${w}: allowed path "${p}" covers a system file (planner only)`);
   }
   for (const t of c.test_edits) check(t.startsWith('test/') && existsSync(join(ROOT, t)), `${w}: test_edits "${t}" is not an existing file under test/`);
   for (const d of c.depends_on) check(ids.has(d), `${w}: depends_on "${d}" has no card file`);
@@ -94,7 +89,6 @@ if (existsSync(join(ROOT, 'PROJECT_MAP.json'))) {
   let map = null;
   try { map = JSON.parse(read('PROJECT_MAP.json')); } catch (e) { check(false, `PROJECT_MAP.json: invalid JSON (${e.message})`); }
   if (map && check(Array.isArray(map.items), 'PROJECT_MAP.json: "items" is not an array')) {
-    const story = existsSync(join(ROOT, 'STORYMAP.md')) ? read('STORYMAP.md') : '';
     const activities = new Set();
     for (const line of story.split('\n')) {
       const m = line.match(/^\|\s*Owner[^|]*\|\s*([^|]+?)\s*\|\s*Owner:/);
@@ -108,7 +102,7 @@ if (existsSync(join(ROOT, 'PROJECT_MAP.json'))) {
       check(typeof it.id === 'string' && /^M-S\d+\.\d+$/.test(it.id), `${w}: bad id "${it.id}" (want M-S<n>.<n>)`);
       check(!mapIds.has(it.id), `${w}: duplicate id`);
       mapIds.add(it.id);
-      check(str(it.story_step) && new RegExp(`^\\|\\s*${String(it.story_step).replace(/\./g, '\\.')}\\s*\\|`, 'm').test(story), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
+      check(str(it.story_step) && stepRow(it.story_step), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
       check(activities.has(it.activity), `${w}: activity "${it.activity}" is not a backbone activity in STORYMAP.md`);
       for (const k of ['title', 'what', 'where_in_app']) check(str(it[k]), `${w}: empty ${k}`);
       for (const k of ['files', 'tests']) {
@@ -125,7 +119,6 @@ if (existsSync(join(ROOT, 'RELEASE_PLAN.json'))) {
   let plan = null;
   try { plan = JSON.parse(read('RELEASE_PLAN.json')); } catch (e) { check(false, `RELEASE_PLAN.json: invalid JSON (${e.message})`); }
   if (plan && check(Array.isArray(plan.items), 'RELEASE_PLAN.json: "items" is not an array')) {
-    const story = existsSync(join(ROOT, 'STORYMAP.md')) ? read('STORYMAP.md') : '';
     const BOARD_STATUS = { done: 'Done', partial: 'In progress', not_started: 'Backlog', changed: 'Done' };
     const planIds = new Set(plan.items.map((it) => it && it.id));
     const seenPlan = new Set();
@@ -139,7 +132,7 @@ if (existsSync(join(ROOT, 'RELEASE_PLAN.json'))) {
       check(Object.hasOwn(BOARD_STATUS, it.status) && it.board_status === BOARD_STATUS[it.status], `${w}: board_status "${it.board_status}" does not match status "${it.status}" (want ${BOARD_STATUS[it.status]})`);
       check(['2.0', '2.1', '2.2', 'next'].includes(it.release), `${w}: release "${it.release}" not in 2.0|2.1|2.2|next`);
       check(str(it.title), `${w}: empty title`);
-      check(it.story_step === null || (str(it.story_step) && new RegExp(`^\\|\\s*${String(it.story_step).replace(/\./g, '\\.')}\\s*\\|`, 'm').test(story)), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
+      check(it.story_step === null || (str(it.story_step) && stepRow(it.story_step)), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
       check(it.follow_up_of === null || planIds.has(it.follow_up_of), `${w}: follow_up_of "${it.follow_up_of}" is not an existing item id`);
     });
   }
