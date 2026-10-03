@@ -18,6 +18,7 @@ import { render as renderSetup } from './views/setup.js';
 import { render as renderImport } from './views/import.js';
 
 const TOAST_MS = 2000;
+const UNDO_TOAST_MS = 8000;
 
 const views = {
     add: { render: renderAdd },
@@ -50,7 +51,7 @@ const duePrompt = {
     deleting: false,
 };
 
-function toast(message) {
+function toast(message, action) {
     let node = document.getElementById('toast');
 
     if (node === null) {
@@ -64,7 +65,22 @@ function toast(message) {
 
     node.textContent = message;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => node.remove(), TOAST_MS);
+    if (action !== undefined) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'toast-action';
+        button.textContent = action.label;
+        button.addEventListener('click', () => {
+            clearTimeout(toastTimer);
+            node.remove();
+            action.onClick();
+        });
+        node.append(button);
+    }
+    toastTimer = setTimeout(
+        () => node.remove(),
+        action === undefined ? TOAST_MS : UNDO_TOAST_MS,
+    );
 }
 
 function save() {

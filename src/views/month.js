@@ -7,7 +7,12 @@ import {
     monthLabel,
     shortDate,
 } from '../months.js';
-import { SAVINGS_ID, UNCATEGORISED_ID } from '../model.js';
+import {
+    SAVINGS_ID,
+    UNCATEGORISED_ID,
+    removeEntry,
+    restoreEntry,
+} from '../model.js';
 import { describeForeign } from '../currency.js';
 import { renderMonthNav } from './monthNav.js';
 import {
@@ -500,17 +505,15 @@ function saveIncomeEdit(ctx, income, fields, currency) {
 }
 
 function confirmDeleteEntry(ctx, type, entry) {
-    const list = type === 'expense' ? ctx.data.expenses : ctx.data.incomes;
-    const index = list.findIndex(({ id }) => id === entry.id);
-    if (index === -1) {
+    const removed = removeEntry(ctx.data, type, entry.id);
+    if (removed === null) {
         closeEntryUi();
         ctx.render();
         return;
     }
 
-    const [removed] = list.splice(index, 1);
     if (ctx.save() === false) {
-        list.splice(index, 0, removed);
+        restoreEntry(ctx.data, type, removed.entry, removed.index);
         entryUi.saveError = 'Could not save to this device. Nothing was deleted. Try again.';
         entryUi.focusError = true;
         ctx.render();
@@ -519,7 +522,19 @@ function confirmDeleteEntry(ctx, type, entry) {
 
     closeEntryUi();
     ctx.render();
-    ctx.toast('Deleted');
+    ctx.toast('Deleted', {
+        label: 'Undo',
+        onClick: () => {
+            restoreEntry(ctx.data, type, removed.entry, removed.index);
+            if (ctx.save() === false) {
+                removeEntry(ctx.data, type, removed.entry.id);
+                ctx.render();
+                return;
+            }
+            ctx.render();
+            ctx.toast('Entry restored');
+        },
+    });
 }
 
 function renderExpenseEditor(ctx, expense) {
@@ -810,8 +825,8 @@ function renderDeleteConfirm(ctx, type, entry) {
     box.setAttribute('role', 'group');
 
     const message = type === 'expense'
-        ? 'Delete this expense? This cannot be undone.'
-        : 'Delete this income? This cannot be undone.';
+        ? 'Delete this expense?'
+        : 'Delete this income?';
 
     const formError = element('p', 'error-text');
     formError.setAttribute('role', 'alert');

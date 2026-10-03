@@ -929,6 +929,24 @@ body.is-setup .tabbar {
     animation: toast-in var(--dur) var(--ease);
 }
 
+.toast-action {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    margin-inline-start: var(--s4);
+    padding: var(--s2) var(--s3);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.toast-action:focus-visible {
+    outline-color: var(--bg);
+}
+
 @keyframes toast-in {
     from {
         opacity: 0;
