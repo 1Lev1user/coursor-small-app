@@ -1,23 +1,34 @@
-# Anchor: PROJECT_NAME
+# Anchor: My Expenses
 
 Context persistence file. Read at the start of every session and after every compaction.
 
 ## Goal
-(copy of SPEC.md product goal)
+My Expenses lets one person track EUR expenses and income on their phone, plan the month, import bank statements and keep backups, with all data kept on the device [inferred from README]. Owner to confirm.
 
 ## Constraints
-- 
+- Local-only data, no accounts, no cloud sync, no server.
+- No npm dependencies; Node 22; plain ES modules, no build step.
+- PWA, offline via sw.js; version in package.json and sw.js raised together.
+- Live site from branch `v1` (shipped files only); work goes to `main` first.
+- Budgets always EUR.
+- Rights reserved.
 
 ## Decisions log
-- YYYY-MM-DD: decision, reason.
+- 2026-10-03: D1, card C-001 may edit test/importCore.test.js only (add `now: NOW` to three buildImport calls). Reason: the defect is in the test, not the app.
+- 2026-10-03: D2, slice 1 = C-001, C-002, C-003.
+- 2026-10-03: D3, kit check is a separate script `npm run check:kit`, not inside `npm test`. Reason: app tests stay about the app.
+- 2026-10-03: agent-kit integrated on branch claude/compassionate-wright-rg71w2.
+- 2026-10-03: existing GitHub Project of the owner used as a one-way mirror (BOARD.md to GitHub).
 
 ## Progress
-CHECKPOINT N - YYYY-MM-DD
-Goal:
-Steps done:
-Current state:
-Next step:
-Unverified:
+CHECKPOINT 1 - 2026-10-03
+Goal: slice 1, import stays trustworthy (date-independent import tests, past-month plan rule and CSV quoting guarded by tests).
+Steps done: agent-kit integrated; state files filled; cards C-001..C-003 written.
+Current state: baseline `npm test` 355 tests, 352 pass, 3 fail (test/importCore.test.js lines 495, 538, 613; date-dependent).
+Next step: owner runs `claude --agent lead`, slice 1.
+Unverified: product goal and actors (inferred); DESIGN.md brief (inferred); GitHub Project number not filled.
 
 ## Open questions
-- 
+- Guide scripts dependencies undocumented (pypdf, reportlab, playwright).
+- `npm run serve` calls `python`.
+- Goal and actors to be confirmed by owner.

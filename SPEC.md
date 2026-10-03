@@ -3,27 +3,38 @@
 Source of truth for what the project is. Only the user and the lead (Opus) edit this file.
 
 ## Product goal
-One or two sentences. What outcome exists when the project is finished.
+My Expenses lets one person track EUR expenses and income on their phone, plan the month, import bank statements and keep backups, with all data kept on the device [inferred from README]. To be confirmed by the owner.
 
 ## Users (actors)
-- Actor name: who they are, what they need.
+- Owner: sole user of the app on the phone, and product owner. Needs a quick, trustworthy view of what is left to spend [inferred].
+- Owner as operator: releases the app via branch `v1` and keeps backups [inferred].
 
 ## Out of scope
-- What this project will not do.
+- Accounts and sign-in.
+- Cloud sync.
+- Any server.
+- Multi-currency budgets: budgets are always EUR (foreign purchases keep the original amount, budgets use the euro amount).
 
 ## Constraints
-- Stack, budget, deadlines, legal, security, hosting.
+- Local-only data: nothing leaves the device.
+- No npm dependencies.
+- Node 22 for tests.
+- Plain ES modules, no build step.
+- PWA, offline via sw.js.
+- Rights reserved (README "Rights"); fonts under SIL OFL 1.1.
 
 ## Definition of Done (project level)
 - Every card in Done passed verification levels 1 to 4.
 - Every story map step in the current slice has a Done card.
-- Checks that must exit 0: (list commands, for example `npm test`, `npm run lint`, `npm run build`).
+- Checks that must exit 0: `npm test`, `npm run check:kit`.
 
 ## Goal condition for /goal
-Template: "All cards of slice N are in Done in BOARD.md, `<test command>` exits 0, and claude-progress.txt is updated, or stop after 40 turns."
+Slice 1: "All cards of slice 1 are in Done in BOARD.md, `npm test` exits 0, and claude-progress.txt is updated, or stop after 40 turns."
 
 ## Board mirror
-- GitHub Project number and owner: (fill after running scripts/gh-board-setup.sh)
+- Existing GitHub Project of 1Lev1user, number: (fill after scripts/gh-board-attach.sh)
 
 ## Open questions
-- Question, owner, date.
+- Guide scripts (scripts/build_user_guide_pdf.py, scripts/capture_guide_screens.js) have undocumented dependencies: pypdf, reportlab, playwright. Owner, 2026-10-03.
+- `npm run serve` calls `python`, which is `python3` on many Linux and macOS machines. Owner, 2026-10-03.
+- Product goal and actors above are inferred; owner to confirm. Owner, 2026-10-03.

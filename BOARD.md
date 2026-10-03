@@ -15,10 +15,13 @@ Human-readable view of feature_list.json. Written only by the lead. GitHub Proje
 Current slice: 1
 
 ## Backlog
-(none)
+- C-002 (P1, S, haiku) Regression test: past month without plan choice is refused. Waits for C-001.
 
 ## Ready
-(none)
+- C-001 (P0, S, haiku) Make 3 import tests date-independent.
+- C-003 (P1, S, haiku) Tests for CSV field quoting.
+
+Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits 0) needs C-001 done first.
 
 ## In progress
 (none)
