@@ -63,7 +63,10 @@ add_or_check() {
 }
 
 # 2. Kit fields (Status is the column, so there is no Stage).
-add          "Kind"         SINGLE_SELECT "Map,Work"
+add          "Kind"         SINGLE_SELECT "Map,Work,Plan"
+if has "Kind" && ! has_opt "Kind" "Plan"; then
+  WARNINGS+=("Field \"Kind\" exists without option \"Plan\" (needed for release plan items). gh cannot add options: in the browser open Project settings > Kind and add option \"Plan\".")
+fi
 add          "Blocked"      SINGLE_SELECT "yes"
 add_or_check "Priority"                   "P0,P1,P2"
 add_or_check "Size"                       "S,M,L"

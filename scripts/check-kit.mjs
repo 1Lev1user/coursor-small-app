@@ -145,6 +145,31 @@ if (existsSync(join(ROOT, 'PROJECT_MAP.json'))) {
   }
 }
 
+// RELEASE_PLAN.json (optional): release plan steps with audited progress, mirrored to the GitHub Project as Kind=Plan items
+if (existsSync(join(ROOT, 'RELEASE_PLAN.json'))) {
+  let plan = null;
+  try { plan = JSON.parse(read('RELEASE_PLAN.json')); } catch (e) { check(false, `RELEASE_PLAN.json: invalid JSON (${e.message})`); }
+  if (plan && check(Array.isArray(plan.items), 'RELEASE_PLAN.json: "items" is not an array')) {
+    const story = existsSync(join(ROOT, 'STORYMAP.md')) ? read('STORYMAP.md') : '';
+    const BOARD_STATUS = { done: 'Done', partial: 'In progress', not_started: 'Backlog', changed: 'Done' };
+    const planIds = new Set(plan.items.map((it) => it && it.id));
+    const seenPlan = new Set();
+    plan.items.forEach((it, i) => {
+      const w = `RELEASE_PLAN.json item #${i + 1}${it && it.id ? ` (${it.id})` : ''}`;
+      if (!check(it && typeof it === 'object', `${w}: not an object`)) return;
+      check(typeof it.id === 'string' && /^P-[A-Z]+\d+$/.test(it.id), `${w}: bad id "${it.id}" (want P-<letters><n>)`);
+      check(!seenPlan.has(it.id), `${w}: duplicate id`);
+      seenPlan.add(it.id);
+      check(Object.hasOwn(BOARD_STATUS, it.status), `${w}: status "${it.status}" not in ${Object.keys(BOARD_STATUS).join('|')}`);
+      check(Object.hasOwn(BOARD_STATUS, it.status) && it.board_status === BOARD_STATUS[it.status], `${w}: board_status "${it.board_status}" does not match status "${it.status}" (want ${BOARD_STATUS[it.status]})`);
+      check(['2.0', '2.1', '2.2', 'next'].includes(it.release), `${w}: release "${it.release}" not in 2.0|2.1|2.2|next`);
+      check(str(it.title), `${w}: empty title`);
+      check(it.story_step === null || (str(it.story_step) && new RegExp(`^\\|\\s*${String(it.story_step).replace(/\./g, '\\.')}\\s*\\|`, 'm').test(story)), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
+      check(it.follow_up_of === null || planIds.has(it.follow_up_of), `${w}: follow_up_of "${it.follow_up_of}" is not an existing item id`);
+    });
+  }
+}
+
 if (problems.length) {
   console.error(`check-kit: ${problems.length} problem(s) in ${checks} checks`);
   for (const p of problems) console.error(`  - ${p}`);

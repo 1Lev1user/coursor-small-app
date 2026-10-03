@@ -19,6 +19,9 @@ My Expenses lets one person track EUR expenses and income on their phone, plan t
 - 2026-10-03: D3, kit check is a separate script `npm run check:kit`, not inside `npm test`. Reason: app tests stay about the app.
 - 2026-10-03: agent-kit integrated on branch claude/compassionate-wright-rg71w2.
 - 2026-10-03: existing GitHub Project of the owner used as a one-way mirror (BOARD.md to GitHub).
+- 2026-10-03: release plan items go on the board as Kind=Plan (source RELEASE_PLAN.json), with audited status mapping: done to Done, partial to In progress, not_started to Backlog, changed to Done with note "Decision changed". Not counted in WIP or metrics.
+- 2026-10-03: a card in Done is never reopened. Any change to done work becomes a new Backlog card that references the original.
+- 2026-10-03: roles: planner (creates and prioritises cards, sets Done after Level 4) and lead (runs cards through In progress, Verify, Review). Board column = the existing Status field of the GitHub Project.
 
 ## Progress
 CHECKPOINT 1 - 2026-10-03

@@ -34,13 +34,15 @@ Column field:
 - Existing template project (this one): the built-in Status field, options Backlog, Ready, In progress, In review, Done. Mapping from feature_list.json status: backlog to Backlog, ready to Ready, in_progress and verify to In progress, review to In review, done to Done. blocked keeps the current Status and sets the single select Blocked=yes; clear Blocked when unblocked.
 - Project made with gh-board-setup.sh: the Stage field (Backlog, Ready, In progress, Verify, Review, Done, Blocked), Status is not used.
 
-Other fields: Kind (Map, Work), Blocked (yes), Priority, Size, Risk, Start tier, Current tier, Card ID, Story step, Depends on, Slice, Attempts. Priority and Size may be the template's own fields; attach only warns if options are missing.
+Other fields: Kind (Map, Work, Plan), Blocked (yes), Priority, Size, Risk, Start tier, Current tier, Card ID, Story step, Depends on, Slice, Attempts. Priority and Size may be the template's own fields; attach only warns if options are missing.
 
 Sync with the gh CLI (needs the project scope):
 - New card: `gh project item-create <number> --owner <owner> --title "C-014 title" --body "<acceptance>" --format json`, keep the returned item id in the card as `mirror_id` in feature_list.json.
 - Change a field: look up ids with `gh project field-list <number> --owner <owner> --format json` and `gh project view <number> --owner <owner> --format json` (project id), then `gh project item-edit --id <mirror_id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>`. One field per call.
 - Kind field: every work card gets Kind=Work.
 - Map cards (Kind=Map, Status=Done or Stage=Done, one per existing feature) come from PROJECT_MAP.json via `scripts/gh-board-map.sh <number>`. They are not work: not counted in metrics or WIP, and the work view filters them out with `-kind:Map`.
+- Plan items (Kind=Plan, one per release plan step, with audited progress) come from RELEASE_PLAN.json. Board column per item is its board_status (Done, In progress, Backlog). They are not work: not counted in WIP or metrics, and the work view filters them out with `-kind:Plan`.
+- Owner rule (2026-10-03): a card in Done is never reopened. Any change to done work becomes a new Backlog card or item that references the original (`follow_up_of` for plan items, `depends_on` or the title for cards).
 - Never read card state back from GitHub into the board. If they differ, the file wins.
 - If gh is not logged in or lacks the project scope, skip the mirror, say so once, and continue with files only.
 
