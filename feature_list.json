@@ -27,7 +27,7 @@
         "changing assertions; only add `now: NOW` to the buildImport meta at test lines 512, 548, 617"
       ],
       "depends_on": [],
-      "status": "ready",
+      "status": "in_progress",
       "evidence": null,
       "mirror_id": null,
       "notes": "Root cause: buildImport called without now uses today's date; rows dated 2026-09 became a past month on 2026-10-01 and applyImport requires a plan choice. Exception to the no-test-edit rule approved by owner (D1, 2026-10-03)."
@@ -83,7 +83,7 @@
         "existing test files"
       ],
       "depends_on": [],
-      "status": "ready",
+      "status": "in_progress",
       "evidence": null,
       "mirror_id": null,
       "notes": "Existing test/csv.test.js lines 73-100 already cover doubled quotes, embedded newline and the delimiter for both flavours through buildMonthCsv, and line 191 covers formula escaping, so those are out of scope. Cover only escapeField(value, delimiter) called directly (src/csv.js, verified: quotes when the text contains the delimiter, a double quote, \\n or \\r; doubles quotes; no special handling of leading/trailing spaces): (1) a value containing \\r is quoted; (2) a value containing the delimiter is quoted, for ',' and for ';' (two tests or one test with both); (3) a value with no special characters is returned unchanged; (4) a value with leading/trailing spaces and no special characters is returned unchanged (spaces are not special). At least 4 passing tests. Allowed path is the new test file only."

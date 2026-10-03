@@ -5,3 +5,4 @@ DATE | slice | cards moved | what works now | what is broken | next card
 
 2026-10-03 | 0 | none | agent-kit integrated, baseline 352/355 | 3 date-dependent import tests | C-001
 2026-10-03 | 1 | C-002 backlog -> ready (planner) | slice-1 branch created from main after PR #4 | 3 date-dependent import tests | C-001
+2026-10-03 | 1 | C-001, C-003 ready -> in_progress (planner executes in cloud with kit agents, owner decision) | - | - | C-001, C-003
