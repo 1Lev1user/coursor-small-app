@@ -33,6 +33,7 @@ Slice 1: "All cards of slice 1 are in Done in BOARD.md, `npm test` exits 0, and 
 
 ## Board mirror
 - Existing GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user), number: (fill after scripts/gh-board-attach.sh). Column field: Status (mapping in board-ops skill). Map cards: Kind=Map, Status=Done, view Map.
+- Sync: .github/workflows/board-sync.yml, secret PROJECT_TOKEN and variable PROJECT_NUMBER set by the owner.
 
 ## Open questions
 - Guide scripts (scripts/build_user_guide_pdf.py, scripts/capture_guide_screens.js) have undocumented dependencies: pypdf, reportlab, playwright. Owner, 2026-10-03.
