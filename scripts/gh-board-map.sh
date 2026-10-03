@@ -9,7 +9,7 @@ NUM="${1:?usage: gh-board-map.sh <project-number>}"
 OWNER="${OWNER:-@me}"
 MAP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/PROJECT_MAP.json"
 
-ACTIVITIES='Sets up,Records entries,Reviews money,Imports bank statement,"Plans and saves",Backs up and updates'
+ACTIVITIES='Sets up,Records entries,Reviews money,Imports bank statement,Plans and saves,Backs up and updates'
 
 [ -f "$MAP" ] || { echo "PROJECT_MAP.json not found at $MAP" >&2; exit 1; }
 
