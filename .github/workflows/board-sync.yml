@@ -1,21 +1,24 @@
-# Mirrors feature_list.json, PROJECT_MAP.json and RELEASE_PLAN.json to the GitHub Project.
-# Push: diff mode, only items changed in the push are touched. Manual run: choose the mode.
+# Mirrors cards/ (one file per card), PROJECT_MAP.json and RELEASE_PLAN.json to the GitHub Project.
+# Text and fields only: Status is set when an item is created (Backlog for cards) and never changed afterwards;
+# the owner and the planner move cards on the board.
+# Push to main: diff mode, only items changed in the push are touched. Manual run: choose the mode.
 # Setup by the owner: secret PROJECT_TOKEN (project scope). Project number is set below.
 name: Board sync
 
 on:
   push:
-    branches: [main, 'claude/**', 'slice-*']
+    branches: [main]
     paths:
-      - feature_list.json
+      - 'cards/**'
       - PROJECT_MAP.json
       - RELEASE_PLAN.json
       - scripts/board-sync.mjs
+      - scripts/cards.mjs
       - .github/workflows/board-sync.yml
   workflow_dispatch:
     inputs:
       mode:
-        description: 'diff = last commit only, all = create missing items, all-force = also reset existing items to the files'
+        description: 'diff = last push only, all = create missing items, all-force = also rewrite text and fields of existing items (never Status)'
         type: choice
         options: [diff, all, all-force]
         default: all
@@ -54,9 +57,8 @@ jobs:
             all-force) node scripts/board-sync.mjs --all --force ;;
             *)
               BASE="$BEFORE"
-              # New branch: compare with main instead of creating everything blind
               if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-                BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)
+                BASE=HEAD~1
               fi
               node scripts/board-sync.mjs --base "$BASE" ;;
           esac

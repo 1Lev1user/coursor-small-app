@@ -1,6 +1,6 @@
 # SPEC
 
-Source of truth for what the project is. Only the user and the lead (Opus) edit this file.
+Source of truth for what the project is. Only the owner and the planner (Claude) edit this file.
 
 ## Product goal
 My Expenses lets one person track EUR expenses and income on their phone, plan the month, import bank statements and keep backups, with all data kept on the device [inferred from README]. To be confirmed by the owner.
@@ -24,16 +24,13 @@ My Expenses lets one person track EUR expenses and income on their phone, plan t
 - Rights reserved (README "Rights"); fonts under SIL OFL 1.1.
 
 ## Definition of Done (project level)
-- Every card in Done passed verification levels 1 to 4.
+- Every card in Done passed process/review.md and its pull request is merged into `main`.
 - Every story map step in the current slice has a Done card.
-- Checks that must exit 0: `npm test`, `npm run check:kit`.
+- Checks that must exit 0: `npm test`, `npm run check:kit`; on pull requests also `npm run check:card`.
 
-## Goal condition for /goal
-Slice 1: "All cards of slice 1 are in Done in BOARD.md, `npm test` exits 0, and claude-progress.txt is updated, or stop after 40 turns."
-
-## Board mirror
-- Existing GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user), number: 1 (stored by the owner as repository secret PROJECT_NUMBER; GitHub masks every "1" in Action logs because of that). Column field: Status (mapping in board-ops skill). Map cards: Kind=Map, Status=Done, view Map.
-- Sync: .github/workflows/board-sync.yml, secret PROJECT_TOKEN set by the owner; project number 1 is in the workflow.
+## Board
+- GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user, number 1). Its Status column (Backlog, In progress, In review, Done) is the only status of a card. Details: process/board.md.
+- Sync: .github/workflows/board-sync.yml with the secret PROJECT_TOKEN creates and updates items from cards/, PROJECT_MAP.json and RELEASE_PLAN.json; it never changes Status.
 
 ## Open questions
 - Guide scripts (scripts/build_user_guide_pdf.py, scripts/capture_guide_screens.js) have undocumented dependencies: pypdf, reportlab, playwright. Owner, 2026-10-03.

@@ -12,7 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm test
+      - run: npm run check:kit
+      # Card branches (card/C-NNN-...) may change only the card's allowed_paths; the card is read from the base branch.
+      - name: Card guard
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: npm run check:card -- --base "origin/$BASE_REF" --branch "$HEAD_REF"

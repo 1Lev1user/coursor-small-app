@@ -1,26 +1,24 @@
 #!/usr/bin/env node
-// Mirrors feature_list.json, PROJECT_MAP.json and RELEASE_PLAN.json to an existing GitHub Project (v2).
-// Run by .github/workflows/board-sync.yml on push. No dependencies: global fetch against the GraphQL API.
-// Default (diff) mode touches only items whose synced values changed between --base and the working tree,
-// so manual board moves by the owner are never overwritten. Never deletes or archives items.
+// Mirrors the card files (cards/C-NNN.md), PROJECT_MAP.json and RELEASE_PLAN.json to an existing GitHub Project (v2).
+// Run by .github/workflows/board-sync.yml on push to main. No dependencies: global fetch against the GraphQL API.
+// The board's Status column is the only status source: Status is set once, when an item is created, and never
+// changed afterwards. Default (diff) mode touches only items whose text or fields changed between --base and the
+// working tree. Never deletes or archives items.
 // Usage: node scripts/board-sync.mjs [--base <ref>] | --all [--force]  [--dry-run]
 // Env: PROJECT_TOKEN, PROJECT_OWNER (user or organization), PROJECT_NUMBER.
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { CARDS_DIR, loadCards, readCards } from './cards.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://api.github.com/graphql';
 
-export const FILES = ['feature_list.json', 'PROJECT_MAP.json', 'RELEASE_PLAN.json'];
-export const STATUS_OPTIONS = ['Backlog', 'Ready', 'In progress', 'In review', 'Done'];
-// The owner may rename the Status option "Ready" to "Approved" at any time. Internal status "ready" and the
-// name "Ready" stay in the files; planSync maps them to "Approved" when the board has that option.
-export const READY_ALIASES = ['Approved', 'Ready'];
-export const STATUS_MAP = { backlog: 'Backlog', ready: 'Ready', in_progress: 'In progress', verify: 'In progress', review: 'In review', done: 'Done' };
+export const FILES = ['PROJECT_MAP.json', 'RELEASE_PLAN.json'];
+// Columns the board must have. Other options (for example an old "Ready" or "Approved") are allowed and ignored.
+export const STATUS_OPTIONS = ['Backlog', 'In progress', 'In review', 'Done'];
 export const ACTIVITIES = ['Sets up', 'Records entries', 'Reviews money', 'Imports bank statement', 'Plans and saves', 'Backs up and updates'];
-const TIERS = ['haiku', 'sonnet', 'opus'];
 const SS = 'SINGLE_SELECT';
 
 // Fields we ensure. Existing fields are never modified; missing options give warnings.
@@ -30,12 +28,10 @@ export const FIELD_SPECS = [
   { name: 'Priority', type: SS, options: ['P0', 'P1', 'P2'] },
   { name: 'Size', type: SS, options: ['S', 'M', 'L'] },
   { name: 'Risk', type: SS, options: ['low', 'medium', 'high'] },
-  { name: 'Start tier', type: SS, options: TIERS },
-  { name: 'Current tier', type: SS, options: TIERS },
   { name: 'Activity', type: SS, options: ACTIVITIES },
   { name: 'Release', type: SS, options: ['2.0', '2.1', '2.2', 'next'] },
   ...['Card ID', 'Story step', 'Depends on', 'Files', 'Progress'].map((name) => ({ name, type: 'TEXT' })),
-  ...['Slice', 'Attempts'].map((name) => ({ name, type: 'NUMBER' })),
+  { name: 'Slice', type: 'NUMBER' },
 ];
 const SPEC = Object.fromEntries(FIELD_SPECS.map((s) => [s.name, s]));
 SPEC.Status = { name: 'Status', type: SS, options: STATUS_OPTIONS };
@@ -44,36 +40,20 @@ const bullets = (a) => (Array.isArray(a) && a.length ? a.map((x) => '- `' + x + 
 const text = (v) => (v == null || v === '' ? null : String(v));
 const prefix = (title) => String(title || '').split(' ')[0];
 
-function lastTier(card) {
-  const a = Array.isArray(card.attempts) ? card.attempts : [];
-  for (let i = a.length - 1; i >= 0; i--) {
-    const t = a[i] && typeof a[i] === 'object' ? a[i].tier : String(a[i]).match(/haiku|sonnet|opus/)?.[0];
-    if (t) return t;
-  }
-  return card.start_tier ?? null;
-}
-
 // Board items wanted by the files: Map key -> { key, kind, title, body, status, values }.
-// status null means "keep the board's Status" (blocked work card).
+// files.cards: parsed card files (scripts/cards.mjs). status is used only when the item is created.
 export function buildItems(files, warnings = []) {
   const out = new Map();
-  const feature = files?.['feature_list.json'];
-  for (const c of feature?.cards ?? []) {
-    const blocked = c.status === 'blocked';
-    const status = blocked ? null : STATUS_MAP[c.status] ?? null;
-    if (!blocked && !status) warnings.push(`${c.id}: unknown status "${c.status}", Status not set`);
+  for (const c of files?.cards ?? []) {
+    if (c.invalid || !c.id) { warnings.push(`${c.file}: ${c.invalid ?? 'no id'}, skipped`); continue; }
     out.set(c.id, {
-      key: c.id, kind: 'Work', title: `${c.id} ${c.title}`, status,
-      body: `**Acceptance**\n${bullets(c.acceptance)}\n\n**Allowed paths**\n${bullets(c.allowed_paths)}`
-        + (c.notes ? `\n\n**Notes**\n${c.notes}` : '')
-        + `\n\nStory step: ${c.story_step}. Mirrored from feature_list.json; edit the file, not this card.`,
+      key: c.id, kind: 'Work', title: `${c.id} ${c.title}`, status: 'Backlog',
+      body: `${c.body.trim()}\n\n**Allowed paths**\n${bullets(c.allowed_paths)}`
+        + (c.test_edits.length ? `\n\n**Existing tests this card may edit**\n${bullets(c.test_edits)}` : '')
+        + `\n\nSource: ${c.file}. Edit the file, not this card. Branch: card/${c.id}-<short-name>.`,
       values: {
-        Blocked: blocked ? 'yes' : null,
         'Card ID': c.id, 'Story step': text(c.story_step), Priority: text(c.priority), Size: text(c.size), Risk: text(c.risk),
-        'Start tier': text(c.start_tier), 'Current tier': text(lastTier(c)),
-        Attempts: Array.isArray(c.attempts) ? c.attempts.length : 0,
-        'Depends on': text((c.depends_on ?? []).join(', ')),
-        Slice: c.slice ?? feature.current_slice ?? null,
+        'Depends on': text(c.depends_on.join(', ')), Slice: c.slice,
       },
     });
   }
@@ -86,11 +66,11 @@ export function buildItems(files, warnings = []) {
     });
   }
   for (const i of files?.['RELEASE_PLAN.json']?.items ?? []) {
-    const known = STATUS_OPTIONS.includes(i.board_status) || i.board_status === 'Approved';
+    const known = STATUS_OPTIONS.includes(i.board_status);
     if (!known) warnings.push(`${i.id}: unknown board_status "${i.board_status}", Status not set`);
     const parts = [['Evidence', i.evidence], ['Missing', i.missing], ['Note', i.note], ['Follow-up of', i.follow_up_of]].filter(([, v]) => v);
     out.set(i.id, {
-      key: i.id, kind: 'Plan', title: `${i.id} ${i.title}`, status: known ? (i.board_status === 'Approved' ? 'Ready' : i.board_status) : null,
+      key: i.id, kind: 'Plan', title: `${i.id} ${i.title}`, status: known ? i.board_status : null,
       body: parts.map(([k, v]) => `**${k}**\n${v}`).join('\n\n')
         + `\n\nRelease: ${i.release}. Mirrored from RELEASE_PLAN.json; edit the file, not this card.`,
       values: {
@@ -113,16 +93,12 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
   const old = mode === 'diff' ? buildItems(oldFiles) : new Map();
   const byName = fields ? new Map(fields.map((f) => [f.name, f])) : null;
   const badType = new Set();
-  const readyName = byName?.get('Status')?.options?.some((o) => o.name === 'Approved') ? 'Approved' : 'Ready';
-  const statusName = (v) => (v === 'Ready' ? readyName : v);
 
   if (byName) {
     const st = byName.get('Status');
     if (!st || st.dataType !== SS) errors.push('Field "Status" (single select) not found in the project. It must be the built-in Status column.');
     else {
-      const has = (o) => st.options?.some((x) => x.name === o);
-      const miss = STATUS_OPTIONS.filter((o) => (o === 'Ready' ? !READY_ALIASES.some(has) : !has(o)))
-        .map((o) => (o === 'Ready' ? 'Approved (or Ready)' : o));
+      const miss = STATUS_OPTIONS.filter((o) => !st.options?.some((x) => x.name === o));
       if (miss.length) errors.push(`Status is missing option(s): ${miss.join(', ')}. Add them in Project settings > Status; nothing was changed.`);
     }
     for (const s of FIELD_SPECS) {
@@ -172,7 +148,7 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
 
     const vals = how === 'diff' ? [] : [{ field: 'Kind', value: it.kind }];
     if (how === 'create') {
-      vals.push({ field: 'Status', value: statusName(it.status ?? 'Backlog') });
+      vals.push({ field: 'Status', value: it.status ?? 'Backlog' });
       for (const [field, value] of Object.entries(it.values)) if (value != null) vals.push({ field, value });
       actions.push({ type: 'createItem', key, title: it.title, body: it.body, values: keep(vals, key) });
       summary.created++;
@@ -182,7 +158,6 @@ export function planSync({ oldFiles = {}, newFiles, boardItems = null, fields = 
     const prev = how === 'diff' ? old.get(key) : null;
     if (!prev || prev.title !== it.title) act.title = it.title;
     if (!prev || prev.body !== it.body) act.body = it.body;
-    if (it.status != null && (!prev || prev.status !== it.status)) vals.push({ field: 'Status', value: statusName(it.status) });
     for (const [field, value] of Object.entries(it.values)) if (!prev || prev.values[field] !== value) vals.push({ field, value });
     act.values = keep(vals, key);
     if ((act.title || act.body) && b && b.isDraft === false) {
@@ -348,8 +323,8 @@ export async function execute(gql, projectId, actions, fields) {
 
 // ---- CLI ----
 
-function readFiles(read) {
-  const out = {};
+function readFiles(read, cards) {
+  const out = { cards };
   for (const f of FILES) {
     const raw = read(f);
     out[f] = raw == null ? null : JSON.parse(raw);
@@ -370,7 +345,7 @@ async function main(argv) {
   let mode = has('--all') ? (has('--force') ? 'all-force' : 'all') : 'diff';
   const notes = [];
 
-  const newFiles = readFiles((f) => (existsSync(join(ROOT, f)) ? readFileSync(join(ROOT, f), 'utf8') : null));
+  const newFiles = readFiles((f) => (existsSync(join(ROOT, f)) ? readFileSync(join(ROOT, f), 'utf8') : null), readCards(ROOT));
   let oldFiles = {};
   if (mode === 'diff') {
     let valid = base && !/^0+$/.test(base);
@@ -384,6 +359,9 @@ async function main(argv) {
         try { raw = git(['show', `${base}:${f}`]); } catch { raw = null; }
         try { oldFiles[f] = raw == null ? null : JSON.parse(raw); } catch { oldFiles[f] = null; notes.push(`${f} at ${base} is not valid JSON; treated as empty.`); }
       }
+      let names = [];
+      try { names = git(['ls-tree', '--name-only', `${base}:${CARDS_DIR}`]).split('\n').filter(Boolean); } catch { names = []; }
+      oldFiles.cards = loadCards(names, (n) => { try { return git(['show', `${base}:${CARDS_DIR}/${n}`]); } catch { return null; } });
     }
   }
 
