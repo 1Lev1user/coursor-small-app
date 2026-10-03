@@ -278,7 +278,7 @@ export function renderBackupSection(ctx) {
                 'p',
                 'muted',
                 'This device kept a copy of your data as it was before the 2.0 update.'
-                    + ' If something looks wrong, download it and restore it with Import backup.',
+                    + ' If something looks wrong, use Restore pre-update copy to go back to it, or download it first.',
             ),
         );
         if (state.confirmDeletePreUpdate) {
