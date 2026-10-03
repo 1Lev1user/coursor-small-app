@@ -11,6 +11,7 @@ The GitHub Project '@1Lev1user's Expenses app project' (owner 1Lev1user, number 
 | Done | Claude | after the merge (process/review.md) |
 
 - Blocked is a field (Blocked = yes) on any column, with the reason as a PR or item comment.
+- Agent is a text field: which agent works on the card right now (process/orchestration.md). Board-only, never synced.
 - An old Status option such as Ready or Approved may stay on the board; nothing uses it. The owner can delete it in Project settings > Status.
 - Pull order for the owner: priority (P0, P1, P2), then cards others depend on.
 - Hygiene: a card In progress for more than a week gets split or blocked.
