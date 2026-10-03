@@ -7,6 +7,7 @@
     "type": "module",
     "scripts": {
         "test": "node --test",
-        "serve": "python -m http.server 8080"
+        "serve": "python -m http.server 8080",
+        "check:kit": "node scripts/check-kit.mjs"
     }
 }

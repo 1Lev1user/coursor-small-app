@@ -1,0 +1,337 @@
+{
+  "rules": "Map of existing features. One-way mirror to the GitHub Project as Kind=Map cards. Edited by the lead.",
+  "items": [
+    {
+      "id": "M-S1.1",
+      "story_step": "S1.1",
+      "activity": "Sets up",
+      "title": "First-run setup",
+      "what": "Asks for name, monthly budget, savings (euro or %) and usual income once, so the app has a plan from day one.",
+      "where_in_app": "First launch > Setup screen",
+      "files": [
+        "src/views/setup.js",
+        "src/budget.js",
+        "src/money.js",
+        "src/app.js"
+      ],
+      "tests": [
+        "test/budget.test.js",
+        "test/money.test.js"
+      ]
+    },
+    {
+      "id": "M-S1.2",
+      "story_step": "S1.2",
+      "activity": "Sets up",
+      "title": "Edit the plan",
+      "what": "Changes name, budget, savings and usual income later; the current month plan is refreshed.",
+      "where_in_app": "Settings > Plan",
+      "files": [
+        "src/views/settings/plan.js",
+        "src/views/more.js",
+        "src/budget.js"
+      ],
+      "tests": [
+        "test/budget.test.js"
+      ]
+    },
+    {
+      "id": "M-S2.1",
+      "story_step": "S2.1",
+      "activity": "Records entries",
+      "title": "Add an expense",
+      "what": "Records an expense with category and optional foreign currency plus the euro amount charged by the bank.",
+      "where_in_app": "Home > Add expense",
+      "files": [
+        "src/views/add.js",
+        "src/views/currencyFields.js",
+        "src/currency.js",
+        "src/money.js"
+      ],
+      "tests": [
+        "test/currency.test.js",
+        "test/uiHelpers.test.js",
+        "test/money.test.js"
+      ]
+    },
+    {
+      "id": "M-S2.2",
+      "story_step": "S2.2",
+      "activity": "Records entries",
+      "title": "Expense templates",
+      "what": "Saves a frequent expense as a template and adds it again with one tap.",
+      "where_in_app": "Home > Templates (saved from Add expense > Save as template)",
+      "files": [
+        "src/templates.js",
+        "src/views/add.js"
+      ],
+      "tests": [
+        "test/templates.test.js"
+      ]
+    },
+    {
+      "id": "M-S2.3",
+      "story_step": "S2.3",
+      "activity": "Records entries",
+      "title": "Add income or refund",
+      "what": "Records extra income, and marks an expense as a refund so it lowers spending.",
+      "where_in_app": "Home > Add income; Month > open entry > Refund",
+      "files": [
+        "src/views/add.js",
+        "src/views/month.js",
+        "src/budget.js",
+        "src/views/entryDisplay.js"
+      ],
+      "tests": [
+        "test/budget.test.js",
+        "test/uiHelpers.test.js"
+      ]
+    },
+    {
+      "id": "M-S3.1",
+      "story_step": "S3.1",
+      "activity": "Reviews money",
+      "title": "Left to spend",
+      "what": "Shows what is left to spend this month, latest entries and the nearest savings goal.",
+      "where_in_app": "Home",
+      "files": [
+        "src/views/add.js",
+        "src/budget.js",
+        "src/views/goalCard.js"
+      ],
+      "tests": [
+        "test/budget.test.js"
+      ],
+      "notes": "Home screen is src/views/add.js (tab \"add\" in app.js)."
+    },
+    {
+      "id": "M-S3.2",
+      "story_step": "S3.2",
+      "activity": "Reviews money",
+      "title": "Month list and search",
+      "what": "Lists the month entries and searches all history by text, category, type, amount and dates.",
+      "where_in_app": "Month; Month > Search",
+      "files": [
+        "src/views/month.js",
+        "src/views/monthNav.js",
+        "src/views/searchPanel.js",
+        "src/search.js",
+        "src/views/entryDisplay.js",
+        "src/months.js"
+      ],
+      "tests": [
+        "test/search.test.js",
+        "test/uiHelpers.test.js",
+        "test/months.test.js"
+      ]
+    },
+    {
+      "id": "M-S3.3",
+      "story_step": "S3.3",
+      "activity": "Reviews money",
+      "title": "Charts",
+      "what": "Shows Spending, Income, Trends (12 months) and Year totals with a yearly CSV.",
+      "where_in_app": "Chart > Spending / Income / Trends / Year",
+      "files": [
+        "src/views/chartView.js",
+        "src/views/trends.js",
+        "src/views/year.js",
+        "src/analytics.js",
+        "src/donut.js"
+      ],
+      "tests": [
+        "test/analytics.test.js",
+        "test/donut.test.js",
+        "test/viewHelpers.test.js"
+      ]
+    },
+    {
+      "id": "M-S3.4",
+      "story_step": "S3.4",
+      "activity": "Reviews money",
+      "title": "Month CSV export",
+      "what": "Downloads the month as CSV in Europe (;) or Standard (,) format.",
+      "where_in_app": "Settings > Backup & export > Europe CSV / Standard CSV",
+      "files": [
+        "src/csv.js",
+        "src/views/settings/backup.js",
+        "src/files.js"
+      ],
+      "tests": [
+        "test/csv.test.js"
+      ]
+    },
+    {
+      "id": "M-S4.1",
+      "story_step": "S4.1",
+      "activity": "Imports bank statement",
+      "title": "Import a bank statement",
+      "what": "Reads CSV, pasted text, .xlsx, camt XML or FiDAViSTA XML on the device and turns rows into entries.",
+      "where_in_app": "Settings > Import > Import a bank statement",
+      "files": [
+        "src/views/import.js",
+        "src/import/detect.js",
+        "src/import/text.js",
+        "src/import/xlsx.js",
+        "src/import/xml.js",
+        "src/import/types.js",
+        "src/import/core.js"
+      ],
+      "tests": [
+        "test/importDetect.test.js",
+        "test/importText.test.js",
+        "test/importXlsx.test.js",
+        "test/importXml.test.js",
+        "test/importCore.test.js",
+        "test/importUi.test.js"
+      ]
+    },
+    {
+      "id": "M-S4.2",
+      "story_step": "S4.2",
+      "activity": "Imports bank statement",
+      "title": "Duplicates and rules",
+      "what": "Flags rows already in the app, lets the owner pick a kind per row and remember it as a rule.",
+      "where_in_app": "Settings > Import > Import a bank statement (review step); Settings > Rules",
+      "files": [
+        "src/import/core.js",
+        "src/views/import.js",
+        "src/views/settings/importSettings.js"
+      ],
+      "tests": [
+        "test/importCore.test.js",
+        "test/importUi.test.js"
+      ]
+    },
+    {
+      "id": "M-S4.3",
+      "story_step": "S4.3",
+      "activity": "Imports bank statement",
+      "title": "Plan choice for past months",
+      "what": "Asks once, for a past month without a plan, to use the current budget or record only actual spending.",
+      "where_in_app": "Settings > Import > Import a bank statement (plan question)",
+      "files": [
+        "src/import/core.js",
+        "src/views/import.js",
+        "src/budget.js"
+      ],
+      "tests": [
+        "test/importCore.test.js"
+      ]
+    },
+    {
+      "id": "M-S4.5",
+      "story_step": "S4.5",
+      "activity": "Imports bank statement",
+      "title": "Undo an import",
+      "what": "Removes exactly one import entries and keeps rules and manual entries.",
+      "where_in_app": "Settings > Import > Undo import",
+      "files": [
+        "src/import/core.js",
+        "src/views/settings/importSettings.js"
+      ],
+      "tests": [
+        "test/importCore.test.js"
+      ]
+    },
+    {
+      "id": "M-S5.1",
+      "story_step": "S5.1",
+      "activity": "Plans and saves",
+      "title": "Savings goals",
+      "what": "Creates goals with a target and optional deadline; edit, close or delete them.",
+      "where_in_app": "Settings > Goals; nearest goal on Home",
+      "files": [
+        "src/goals.js",
+        "src/views/settings/goals.js",
+        "src/views/goalCard.js"
+      ],
+      "tests": [
+        "test/goals.test.js",
+        "test/viewHelpers.test.js"
+      ]
+    },
+    {
+      "id": "M-S5.2",
+      "story_step": "S5.2",
+      "activity": "Plans and saves",
+      "title": "Add money to a goal",
+      "what": "Adds money to a goal; it is recorded as a Savings expense and progress updates.",
+      "where_in_app": "Home > goal card > Add money; Settings > Goals > Add money",
+      "files": [
+        "src/goals.js",
+        "src/views/goalCard.js",
+        "src/views/settings/goals.js"
+      ],
+      "tests": [
+        "test/goals.test.js"
+      ]
+    },
+    {
+      "id": "M-S6.1",
+      "story_step": "S6.1",
+      "activity": "Backs up and updates",
+      "title": "JSON backup",
+      "what": "Exports a full JSON backup and restores it on this or another device after confirmation.",
+      "where_in_app": "Settings > Backup & export > Export backup / Import backup",
+      "files": [
+        "src/backup.js",
+        "src/views/settings/backup.js"
+      ],
+      "tests": [
+        "test/backup.test.js"
+      ]
+    },
+    {
+      "id": "M-S6.2",
+      "story_step": "S6.2",
+      "activity": "Backs up and updates",
+      "title": "Backup reminder",
+      "what": "Reminds the owner after 14 days without a backup and more strongly after 30; can be snoozed.",
+      "where_in_app": "Home (reminder card); Settings > Backup reminder",
+      "files": [
+        "src/views/add.js",
+        "src/views/settings/backup.js"
+      ],
+      "tests": [
+        "test/uiHelpers.test.js"
+      ]
+    },
+    {
+      "id": "M-S6.3",
+      "story_step": "S6.3",
+      "activity": "Backs up and updates",
+      "title": "Update bar and data conversion",
+      "what": "Shows an Update bar when a new version is ready; converts data once and keeps the old copy.",
+      "where_in_app": "Update bar at top; Settings > Backup & export > Download pre-update copy",
+      "files": [
+        "src/app.js",
+        "sw.js",
+        "src/storage.js",
+        "src/model.js",
+        "src/views/settings/backup.js"
+      ],
+      "tests": [
+        "test/storage.test.js",
+        "test/model.test.js",
+        "test/serviceWorker.test.js"
+      ]
+    },
+    {
+      "id": "M-S6.4",
+      "story_step": "S6.4",
+      "activity": "Backs up and updates",
+      "title": "Release via branch v1",
+      "what": "Ships a new version by raising the version pair and publishing the v1 branch.",
+      "where_in_app": "Not in the app: repository release step (see README Development)",
+      "files": [
+        "package.json",
+        "sw.js"
+      ],
+      "tests": [
+        "test/serviceWorker.test.js"
+      ],
+      "notes": "Operator step, no UI. The version pair is checked by a test."
+    }
+  ]
+}
