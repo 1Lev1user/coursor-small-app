@@ -114,6 +114,37 @@ if (data && check(Array.isArray(data.cards), 'feature_list.json: "cards" is not 
   });
 }
 
+// PROJECT_MAP.json (optional): map of existing features, mirrored to the GitHub Project as Kind=Map cards
+if (existsSync(join(ROOT, 'PROJECT_MAP.json'))) {
+  let map = null;
+  try { map = JSON.parse(read('PROJECT_MAP.json')); } catch (e) { check(false, `PROJECT_MAP.json: invalid JSON (${e.message})`); }
+  if (map && check(Array.isArray(map.items), 'PROJECT_MAP.json: "items" is not an array')) {
+    const story = existsSync(join(ROOT, 'STORYMAP.md')) ? read('STORYMAP.md') : '';
+    const activities = new Set();
+    for (const line of story.split('\n')) {
+      const m = line.match(/^\|\s*Owner[^|]*\|\s*([^|]+?)\s*\|\s*Owner:/);
+      if (m) activities.add(m[1]);
+    }
+    check(activities.size > 0, 'PROJECT_MAP.json: no backbone activities found in STORYMAP.md');
+    const mapIds = new Set();
+    map.items.forEach((it, i) => {
+      const w = `PROJECT_MAP.json item #${i + 1}${it && it.id ? ` (${it.id})` : ''}`;
+      if (!check(it && typeof it === 'object', `${w}: not an object`)) return;
+      check(typeof it.id === 'string' && /^M-S\d+\.\d+$/.test(it.id), `${w}: bad id "${it.id}" (want M-S<n>.<n>)`);
+      check(!mapIds.has(it.id), `${w}: duplicate id`);
+      mapIds.add(it.id);
+      check(str(it.story_step) && new RegExp(`^\\|\\s*${String(it.story_step).replace(/\./g, '\\.')}\\s*\\|`, 'm').test(story), `${w}: story_step "${it.story_step}" not found in STORYMAP.md`);
+      check(activities.has(it.activity), `${w}: activity "${it.activity}" is not a backbone activity in STORYMAP.md`);
+      for (const k of ['title', 'what', 'where_in_app']) check(str(it[k]), `${w}: empty ${k}`);
+      for (const k of ['files', 'tests']) {
+        if (!check(Array.isArray(it[k]), `${w}: ${k} must be an array`)) continue;
+        for (const f of it[k]) check(str(f) && existsSync(join(ROOT, f)), `${w}: ${k} path "${f}" does not exist`);
+      }
+      check(Array.isArray(it.files) && it.files.length > 0, `${w}: files must not be empty`);
+    });
+  }
+}
+
 if (problems.length) {
   console.error(`check-kit: ${problems.length} problem(s) in ${checks} checks`);
   for (const p of problems) console.error(`  - ${p}`);

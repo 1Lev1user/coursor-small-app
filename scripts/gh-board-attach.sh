@@ -30,6 +30,7 @@ add() {
   CREATED+=("$name")
 }
 
+add "Kind"         SINGLE_SELECT "Map,Work"
 add "Stage"        SINGLE_SELECT "Backlog,Ready,In progress,Verify,Review,Done,Blocked"
 add "Priority"     SINGLE_SELECT "P0,P1,P2"
 add "Size"         SINGLE_SELECT "S,M,L"

@@ -11,7 +11,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | Owner | Records entries | Owner: spending is known |
 | Owner | Reviews money | Owner: sees what is left and trends |
 | Owner | Imports bank statement | Owner: entries without typing |
-| Owner | Plans and saves (goals, budget) | Owner: reaches savings goals |
+| Owner | Plans and saves | Owner: reaches savings goals |
 | Owner | Backs up and updates | Owner: data is safe and app is current |
 
 ## Steps under each activity (top = more important)
@@ -32,8 +32,8 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S4.3 | Owner | Imports bank statement | Chooses a plan once for a past month without a plan | Past months stay correct | P1 | exists |
 | S4.4 | Owner | Imports bank statement | Past-month plan rule is guarded by date-independent tests | Import stays trustworthy | P0 | slice 1 |
 | S4.5 | Owner | Imports bank statement | Undoes an import from Settings > Import | Mistakes are reversible | P1 | exists |
-| S5.1 | Owner | Plans and saves (goals, budget) | Sets savings goals with target and optional deadline | Saving has a target | P2 | exists |
-| S5.2 | Owner | Plans and saves (goals, budget) | Adds money to a goal (recorded as Savings expense) | Progress visible | P2 | exists |
+| S5.1 | Owner | Plans and saves | Sets savings goals with target and optional deadline | Saving has a target | P2 | exists |
+| S5.2 | Owner | Plans and saves | Adds money to a goal (recorded as Savings expense) | Progress visible | P2 | exists |
 | S6.1 | Owner | Backs up and updates | Exports and imports a JSON backup | Data survives device loss | P1 | exists |
 | S6.2 | Owner | Backs up and updates | Gets a reminder after 14 and 30 days without backup | Backups happen | P2 | exists |
 | S6.3 | Owner | Backs up and updates | Taps the Update bar; data converted once, old copy kept | App stays current | P1 | exists |

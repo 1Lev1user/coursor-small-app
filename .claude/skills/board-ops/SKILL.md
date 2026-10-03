@@ -23,11 +23,13 @@ Append each attempt to the card: tier, result, error text. Respect the ceiling p
 At slice end update the metrics table: cards started per tier, passed on first try, escalated. Use them to adjust the start tier rules.
 
 ## GitHub Project mirror (one way, file to GitHub)
-Created once per project with scripts/gh-board-setup.sh. The project number and owner are recorded in SPEC.md under "Board mirror". Fields: Stage, Priority, Size, Risk, Start tier, Current tier, Card ID, Story step, Depends on, Slice, Attempts. The built-in Status field is not used.
+Created once per project with scripts/gh-board-setup.sh. The project number and owner are recorded in SPEC.md under "Board mirror". Fields: Kind (Map, Work), Stage, Priority, Size, Risk, Start tier, Current tier, Card ID, Story step, Depends on, Slice, Attempts. The built-in Status field is not used.
 
 Sync with the gh CLI (needs the project scope):
 - New card: `gh project item-create <number> --owner <owner> --title "C-014 title" --body "<acceptance>" --format json`, keep the returned item id in the card as `mirror_id` in feature_list.json.
 - Change a field: look up ids with `gh project field-list <number> --owner <owner> --format json` and `gh project view <number> --owner <owner> --format json` (project id), then `gh project item-edit --id <mirror_id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>`. One field per call.
+- New work cards get Kind=Work.
+- Map cards (Kind=Map, Stage=Done, one per existing feature) come from PROJECT_MAP.json via `scripts/gh-board-map.sh <number>`. They are not work: not counted in metrics or WIP, and the work view filters them out with `-kind:Map`.
 - Never read card state back from GitHub into the board. If they differ, the file wins.
 - If gh is not logged in or lacks the project scope, skip the mirror, say so once, and continue with files only.
 
