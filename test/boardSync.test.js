@@ -1,15 +1,38 @@
 // planSync tests for scripts/board-sync.mjs. No network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { planSync, makeClient, FILES, FIELD_SPECS, STATUS_OPTIONS } from '../scripts/board-sync.mjs';
-import { readCards } from '../scripts/cards.mjs';
+import { planSync, makeClient, FIELD_SPECS, STATUS_OPTIONS } from '../scripts/board-sync.mjs';
+import { parseCard } from '../scripts/cards.mjs';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
+// Self-contained fixture: four cards, one map item, three plan items (no project files are read).
+const cardText = (id, title, deps = []) => `---
+id: ${id}
+title: "${title}"
+story_step: S1.1
+size: S
+priority: P1
+risk: low
+depends_on: [${deps.join(', ')}]
+allowed_paths:
+  - src/${id}/
+test_edits: []
+---
+
+## Goal
+${title}.
+
+## Acceptance
+- \`npm test\` exits 0
+`;
 const real = {
-  cards: readCards(ROOT),
-  ...Object.fromEntries(FILES.map((f) => [f, JSON.parse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))])),
+  cards: [['C-001', 'First card'], ['C-002', 'Second card', ['C-001']], ['C-003', 'Third card'], ['C-004', 'Fourth card']]
+    .map(([id, title, deps]) => parseCard(cardText(id, title, deps), `cards/${id}.md`)),
+  'PROJECT_MAP.json': { items: [{ id: 'M-S1.1', title: 'Existing feature', what: 'What it does', where_in_app: 'Home', files: ['src/a.js'], tests: [], story_step: 'S1.1', activity: 'Sets up' }] },
+  'RELEASE_PLAN.json': { items: [
+    { id: 'P-A1', title: 'Shipped item', status: 'done', board_status: 'Done', release: '2.0', story_step: 'S1.1', evidence: 'a.js' },
+    { id: 'P-A2', title: 'Half-done item', status: 'partial', board_status: 'In progress', release: '2.1', story_step: 'S1.1', missing: 'tests' },
+    { id: 'P-A3', title: 'Not started item', status: 'not_started', board_status: 'Backlog', release: 'next', story_step: null },
+  ] },
 };
 const base = () => structuredClone(real);
 const card = (files, id) => files.cards.find((c) => c.id === id);
