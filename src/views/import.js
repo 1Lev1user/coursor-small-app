@@ -454,7 +454,12 @@ function isOldExcel(bytes) {
 const UNKNOWN_FILE = 'This file does not look like a bank statement.'
     + ' Use a CSV, Excel (.xlsx), camt.053 or FiDAViSTA XML file.';
 
-async function readStatementFile(file) {
+const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT940 yet.'
+    + ' Export the same statement as CSV or camt.053 XML.';
+const OFX_FILE = 'This looks like an OFX/QFX statement. The app cannot read OFX/QFX yet.'
+    + ' Export the same statement as CSV or camt.053 XML.';
+
+export async function readStatementFile(file) {
     if (file.size > MAX_FILE_BYTES) {
         return { ok: false, reason: 'This file is larger than 10 MB. Export a shorter period.' };
     }
@@ -470,6 +475,8 @@ async function readStatementFile(file) {
 
     const { text, encoding } = decodeBytes(bytes);
     const format = detectFormat(text, file.name);
+    if (format === 'mt940') return { ok: false, reason: MT940_FILE };
+    if (format === 'ofx') return { ok: false, reason: OFX_FILE };
     if (format === 'camt' || format === 'fidavista') {
         const parsed = format === 'camt' ? parseCamt(text) : parseFidavista(text);
         if (!parsed.ok) return parsed;
