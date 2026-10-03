@@ -69,6 +69,23 @@ export function deletePreUpdateCopy(storage = globalThis.localStorage) {
     }
 }
 
+/*
+ * Reads the pre-update copy and lifts it to the current format. Writes
+ * nothing and keeps the copy; the caller saves the data so the newer-data
+ * guard in save() still applies.
+ */
+export function restorePreUpdateCopy(storage = globalThis.localStorage) {
+    const raw = readPreUpdateCopy(storage);
+    if (raw === null) {
+        return { ok: false, reason: 'No pre-update copy on this device.' };
+    }
+    const parsed = parseStored(raw);
+    if (parsed === undefined) {
+        return { ok: false, reason: 'Pre-update copy is not valid JSON.' };
+    }
+    return normalise(parsed);
+}
+
 /** The rescue copy saved when a load could not be read, or null. */
 export function readRescueCopy(storage = globalThis.localStorage) {
     try {

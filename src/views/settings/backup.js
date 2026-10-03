@@ -10,6 +10,7 @@ import { downloadText } from '../../files.js';
 import {
     readPreUpdateCopy,
     deletePreUpdateCopy,
+    restorePreUpdateCopy,
     readRescueCopy,
     deleteRescueCopy,
 } from '../../storage.js';
@@ -127,6 +128,32 @@ function confirmImportBackup(ctx, mode = 'all') {
     if (persist(ctx)) {
         ctx.toast(mode === 'settings' ? 'Settings imported' : 'Backup imported');
     }
+}
+
+/*
+ * Checks the copy first, downloads the current data, then replaces it.
+ * If the save fails, the current data is put back; save() already
+ * reported the error.
+ */
+function restorePreUpdate(ctx) {
+    state.confirmRestorePreUpdate = false;
+    const result = restorePreUpdateCopy();
+    if (result.ok !== true) {
+        ctx.toast(result.reason);
+        ctx.render();
+        return;
+    }
+
+    const json = JSON.stringify(ctx.data, null, 2);
+    const before = JSON.parse(json);
+    downloadText(`my-expenses-before-restore-${todayISO()}.json`, json, 'application/json');
+    replaceAppData(ctx, result.data);
+    if (!persist(ctx)) {
+        replaceAppData(ctx, before);
+        ctx.render();
+        return;
+    }
+    ctx.toast('Pre-update copy restored');
 }
 
 export function renderBackupReminder(ctx) {
@@ -268,13 +295,37 @@ export function renderBackupSection(ctx) {
                     ctx.render();
                 },
             ));
+        } else if (state.confirmRestorePreUpdate) {
+            const box = element('div', 'confirm-box');
+            box.setAttribute('role', 'group');
+            box.append(
+                element(
+                    'p',
+                    'confirm-copy',
+                    'Entries added since the update are removed. Your current data is downloaded first.',
+                ),
+                actionButton('btn', 'Cancel', () => {
+                    state.confirmRestorePreUpdate = false;
+                    ctx.render();
+                }),
+                actionButton('btn btn-danger', 'Restore', () => {
+                    restorePreUpdate(ctx);
+                }),
+            );
+            section.append(box);
         } else {
             const preUpdateActions = element('div', 'backup-actions');
             preUpdateActions.append(
                 actionButton('btn', 'Download pre-update copy', () => {
                     downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
                 }),
+                actionButton('btn', 'Restore pre-update copy', () => {
+                    state.confirmDeletePreUpdate = false;
+                    state.confirmRestorePreUpdate = true;
+                    ctx.render();
+                }),
                 actionButton('btn btn-ghost-danger', 'Delete this copy', () => {
+                    state.confirmRestorePreUpdate = false;
                     state.confirmDeletePreUpdate = true;
                     ctx.render();
                 }),
