@@ -24,7 +24,7 @@ Rules for the agent that implements cards (Cursor). The planner and reviewer (Cl
 ## Project conventions (everyone)
 - Tests: `npm test` runs all tests (`node --test`, Node 22, no packages to install). GitHub runs them on every push and pull request.
 - System checks: `npm run check:kit` (cards and rule files) and `npm run check:card -- --base origin/main` (the card guard, also run by CI on pull requests).
-- Release: raise `version` in package.json and `VERSION` in sw.js together. test/serviceWorker.test.js fails if they differ or if a file in `src/` or `fonts/` is missing from `CORE_ASSETS` in sw.js.
+- Release: run `npm version <new version>` on a clean tree; package.json is the version source and `scripts/sync-version.mjs` copies it into `VERSION` in sw.js in the same commit. test/serviceWorker.test.js fails if they differ or if a file in `src/` or `fonts/` is missing from `CORE_ASSETS` in sw.js.
 - Data format change: raise `SCHEMA_VERSION` in src/model.js and add one step to `MIGRATIONS` that lifts the previous version by exactly one, with a test.
 - Branches: the live site is published from branch `v1`, which holds only shipped files. Work goes to `main` first.
 - Design: colours, fonts, radii and motion are design tokens at the top of style.css, with the dark theme below them. No raw colours outside tokens. See DESIGN.md and process/design-review.md.
