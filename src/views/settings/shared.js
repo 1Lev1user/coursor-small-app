@@ -38,6 +38,7 @@ export const state = {
     importError: '',
 
     confirmDeletePreUpdate: false,
+    confirmRestorePreUpdate: false,
     confirmDeleteRescue: false,
 };
 
@@ -62,6 +63,7 @@ export function closeTransientUi() {
     state.pendingImportCounts = null;
     state.importError = '';
     state.confirmDeletePreUpdate = false;
+    state.confirmRestorePreUpdate = false;
     state.confirmDeleteRescue = false;
     state.renameDrafts.clear();
     state.editPlanCategoryId = null;
