@@ -1,9 +1,11 @@
 ---
 name: card-writing
-description: "Turn a story map step into a board card with size, priority, risk, start tier, acceptance commands and allowed paths. Use before a card enters Ready."
+description: "Turn a story map step into a board card with size, priority, risk, start tier, acceptance commands and allowed paths. Use before a card enters Ready. Planner only."
 ---
 
 # Card writing
+
+Planner only. The lead never creates cards; it records new ideas as a "Proposals" line in claude-progress.txt.
 
 One card equals one story step slice that one worker can finish and one reviewer can check.
 

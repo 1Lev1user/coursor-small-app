@@ -1,11 +1,11 @@
 ---
 name: grill
-description: "Interrogate the user before any ambiguous task, one decision at a time, with answer options and a recommended default. Lead only, because subagents cannot ask the user questions."
+description: "Interrogate the user before any ambiguous task, one decision at a time, with answer options and a recommended default. Planner or lead in a main session, because subagents cannot ask the user questions."
 ---
 
 # Grill
 
-Purpose: remove ambiguity before work starts. Lead only.
+Purpose: remove ambiguity before work starts. Planner or lead, in a main session only.
 
 ## When
 - The request admits more than one reading, or has missing constraints, or contradicts itself.

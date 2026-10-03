@@ -1,11 +1,13 @@
 ---
 name: slice-retro
-description: "Short review at the end of a slice: what shipped, what escalated, what to change in routing or cards. Use when all cards of a slice are Done or Blocked. Lead only."
+description: "Short review at the end of a slice: what shipped, what escalated, what to change in routing or cards. Use when all cards of a slice are Done or Blocked. Planner owns the conclusions; the lead may run the numbers."
 ---
 
 # Slice retro
 
 Keep it short. The output is a few lines in claude-progress.txt and changes to the board policy if justified.
+
+The lead may run the numbers (checks, metrics, cost) and write them to claude-progress.txt. The planner owns the conclusions, routing-rule changes and the anchor.md and SPEC.md updates.
 
 1. Compare the slice against its goal in STORYMAP.md and SPEC.md. Run the full checks.
 2. Read the metrics: first-pass rate per tier, escalations, Blocked cards, work item age.

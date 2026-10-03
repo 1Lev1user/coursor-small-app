@@ -1,13 +1,13 @@
 # BOARD
 
-Human-readable view of feature_list.json. Written only by the lead. GitHub Project mirror is one-way (this file to GitHub).
+Human-readable view of feature_list.json. The planner writes cards and Done; the lead writes execution statuses (see board-ops skill). GitHub Project mirror is one-way (this file to GitHub).
 
 ## Policies
 - Columns: Backlog, Ready, In progress, Verify, Review, Done, Blocked.
 - WIP limit: 3 in In progress, 2 in Review.
 - A card enters Ready only with: story step, size, priority, risk, acceptance commands, allowed paths.
 - Cards touching the same files do not run in parallel. Parallel cards use isolation: worktree.
-- Done is set only by the lead after verification levels 1 to 4 (see completion-check skill).
+- Done is set only by the planner after Levels 1 to 4; the lead moves cards up to Review (see completion-check skill).
 - Ladder: Haiku, Sonnet, Opus. Up to 2 attempts per tier, each in a fresh context with the previous error text. Ceiling 6 attempts for a card started on Haiku, 4 on Sonnet, 2 on Opus. Then Blocked and a question to the user.
 - Pull order: priority first (P0 over P1 over P2), then older work item age first.
 
@@ -19,7 +19,7 @@ Current slice: 1
 
 ## Ready
 - C-001 (P0, S, haiku) Make 3 import tests date-independent.
-- C-003 (P1, S, haiku) Tests for CSV field quoting.
+- C-003 (P1, S, haiku) Direct tests for escapeField edge cases.
 
 Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits 0) needs C-001 done first.
 

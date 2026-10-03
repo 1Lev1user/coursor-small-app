@@ -1,6 +1,6 @@
 ---
 name: think-first
-description: "Think before acting on any non-trivial request. State the goal, surface options including ones the request did not name, recommend one, then act. Same procedure every time unless the user changes it. Use at the start of every non-trivial task. Lead only."
+description: "Think before acting on any non-trivial request. State the goal, surface options including ones the request did not name, recommend one, then act. Same procedure every time unless the user changes it. Use at the start of every non-trivial task. Planner and lead."
 ---
 
 # Think first, then do
@@ -15,7 +15,7 @@ Any request that is not both tiny and fully clear. Tiny and clear: just do it.
 4. Gate:
    - Cheap and reversible, one clear recommendation: say the choice in one line and proceed.
    - Costly, irreversible, touches shared state, or options are close: stop and ask the user (AskUserQuestion, options with the recommended first).
-5. Scope rule: options outside the original request are only proposed. They are not built until the user approves. Approved ones go to STORYMAP.md first, then to cards.
+5. Scope rule: options outside the original request are only proposed. They are not built until the user approves. Approved ones go to STORYMAP.md first, then to cards, both by the planner. The lead records them as a "Proposals" line in claude-progress.txt.
 6. Act. Verify with command output. Report in the terse format.
 
 ## Consistency rule

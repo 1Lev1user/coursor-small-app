@@ -1,9 +1,11 @@
 ---
 name: story-map
-description: "Build the backbone and user story map before any card. Use at project start and when scope changes. Lead only."
+description: "Build the backbone and user story map before any card. Use at project start and when scope changes. Planner only, with the owner."
 ---
 
 # Story map
+
+Planner only, with the owner. If the lead finds STORYMAP.md empty or a template, it stops and asks the owner to get it from the planner.
 
 Order of work: product goal, actors, backbone, steps, slices, then cards.
 

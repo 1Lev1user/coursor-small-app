@@ -2,7 +2,7 @@
 
 ## Delivery system (agent-kit)
 
-This project is delivered by a lead agent (Opus) and worker agents. Start every session with `claude --agent lead`. This is the only supported way, because it pins the lead to Opus.
+This project is planned by the planner (the owner's cloud orchestrator session) and delivered by a lead agent (Opus) and worker agents. Start every lead session with `claude --agent lead`. This is the only supported way, because it pins the lead to Opus.
 
 Files that carry state across sessions (read at session start, in this order): anchor.md, SPEC.md, STORYMAP.md, BOARD.md, feature_list.json, claude-progress.txt.
 
@@ -10,9 +10,10 @@ Rules for every agent:
 - Think first (think-first skill): goal, options including ones the request did not name, recommendation, then act. Out-of-scope options are proposed, not built.
 - Short replies (terse skill). Explain or detail only when the user asks.
 - Work only on a card. No card, no edit. Cards live in feature_list.json.
-- Edit only the card allowed_paths. Never edit or delete existing tests to make checks pass.
-  - Exception: a card may edit an existing test only when its allowed_paths and forbidden fields name that test file explicitly and the owner approved it (decision D1, 2026-10-03).
-- Only the lead writes BOARD.md and feature_list.json and sets Done.
+- Edit only the card allowed_paths. Never edit or delete existing tests to make checks pass, unless the card lists that existing test file in allowed_paths and its notes record owner approval (decision D1, 2026-10-03).
+- Planner (owner's cloud session): SPEC.md, STORYMAP.md, creating cards, priority, size, risk, start_tier, moving cards to Ready, Level 4 acceptance, Done, slice-retro conclusions, routing rules.
+- Lead (`claude --agent lead`, owner's machine): pulls Ready cards, routes, escalates, completion-check Levels 1 to 3, merges card branches into the slice branch, statuses in_progress, verify, review and blocked, attempts, evidence, BOARD.md lists, claude-progress.txt, GitHub mirror, push. Never creates cards, never sets Done.
+- Handoff: one side writes the state files at a time; `git pull` before starting, push when done. Each slice runs on branch `slice-N` from main; card branches come from it; after planner acceptance the owner merges it to main by pull request.
 - Never claim success without command output.
 - Irreversible actions (delete, force-push, secrets, production data) go to the user first.
 - Unverified facts are labelled as unverified. Do not invent numbers, sources or API details.

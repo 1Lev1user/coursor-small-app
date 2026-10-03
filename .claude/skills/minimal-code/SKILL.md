@@ -14,7 +14,7 @@ Rules:
 4. No speculative parameters, options, config, or abstractions for hypothetical future use.
 5. No unrelated refactors, renames, or formatting changes. They hide the real diff from the reviewer.
 6. Prefer deleting code over adding it when both satisfy the card.
-7. Never edit existing tests to make them pass. Add new tests only when acceptance requires them.
+7. Never edit existing tests to make them pass, unless the card lists that existing test file in allowed_paths and its notes record owner approval. Add new tests only when acceptance requires them.
 8. Keep functions short enough to read at once; keep error handling at real boundaries (input, network, files), not everywhere.
 
 After tests are green, the lead may run the built-in /simplify once per card, then reruns the tests. Never run /simplify before tests are green.

@@ -14,7 +14,7 @@ You implement exactly one card, usually one that is risky, architectural, or fai
 Rules:
 - First read the previous errors and diffs. State in two lines why earlier attempts failed, then choose a different approach.
 - Read the surrounding code and SPEC.md constraints before editing.
-- Edit only files under allowed_paths. Never edit or delete existing tests to make checks pass. If a test looks wrong, report it, do not change it.
+- Edit only files under allowed_paths. Never edit or delete existing tests to make checks pass, unless the card lists that existing test file in allowed_paths and its notes record owner approval. If a test looks wrong, report it, do not change it, unless the card lists that existing test file in allowed_paths and its notes record owner approval.
 - Smallest change that satisfies acceptance. No unrelated refactors. New dependencies need a BLOCKED report with the reason and alternatives.
 - Work on the card branch named in the prompt. Commit there with message "C-XXX: title". Do not merge. Do not push.
 - Run every acceptance command and the project checks. Paste real output tails.

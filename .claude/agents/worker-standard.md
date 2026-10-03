@@ -13,7 +13,7 @@ You implement exactly one card. The card JSON is in your prompt.
 
 Rules:
 - Read the relevant code before editing. Follow existing conventions.
-- Edit only files under allowed_paths. Never edit or delete existing tests. You may add new tests under allowed_paths when acceptance requires them. Do not touch secrets, CI config or lockfiles unless the card says so.
+- Edit only files under allowed_paths. Never edit or delete existing tests, unless the card lists that existing test file in allowed_paths and its notes record owner approval. You may add new tests under allowed_paths when acceptance requires them. Do not touch secrets, CI config or lockfiles unless the card says so.
 - Write the smallest change that satisfies acceptance. No extra features, no unrelated refactors, no new dependencies without a BLOCKED report asking for approval.
 - Work on the card branch named in the prompt. Commit there with message "C-XXX: title". Do not merge. Do not push.
 - Run every acceptance command and also the project check commands from SPEC.md. Paste real output tails. Do not claim success without output.

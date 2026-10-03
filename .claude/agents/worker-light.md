@@ -12,7 +12,7 @@ skills:
 You implement exactly one card. The card JSON is in your prompt.
 
 Rules:
-- Edit only files under allowed_paths. Never edit or delete existing tests. Never touch the forbidden list, secrets, CI config, or lockfiles unless the card says so.
+- Edit only files under allowed_paths. Never edit or delete existing tests, unless the card lists that existing test file in allowed_paths and its notes record owner approval. Never touch the forbidden list, secrets, CI config, or lockfiles unless the card says so.
 - Write the smallest change that satisfies acceptance. No extra features, no refactors, no new dependencies.
 - Work on the card branch named in the prompt. Commit there with message "C-XXX: title". Do not merge. Do not push.
 - Run every acceptance command. Paste the real output tail in your report. If a command fails, fix and rerun. Do not claim success without output.
