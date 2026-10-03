@@ -5,6 +5,7 @@ const NOT_EXCEL = 'This file is not an Excel workbook.';
 const TOO_LARGE = 'This Excel file is too large to read.';
 const DAMAGED = 'The Excel file is damaged and could not be read.';
 const PROTECTED = 'This workbook is password protected. Remove the password and try again.';
+const NO_UNZIP = 'This browser cannot open Excel files. Save the file as CSV and try again.';
 
 // ---------------------------------------------------------------------------
 // ZIP
@@ -68,8 +69,12 @@ const MAX_ENTRY_BYTES = 50 * 1024 * 1024;
 const MAX_COLUMNS = 16384;
 
 class TooLargeError extends Error {}
+class NoUnzipError extends Error {}
 
 async function inflateRaw(data) {
+    if (typeof globalThis.DecompressionStream !== 'function') {
+        throw new NoUnzipError();
+    }
     const reader = new Blob([data]).stream()
         .pipeThrough(new DecompressionStream('deflate-raw'))
         .getReader();
@@ -417,6 +422,12 @@ export async function readXlsx(input) {
         };
         return { ok: true, rows: readRows(sheet, context) };
     } catch (error) {
-        return { ok: false, reason: error instanceof TooLargeError ? TOO_LARGE : DAMAGED };
+        if (error instanceof NoUnzipError) {
+            return { ok: false, reason: NO_UNZIP };
+        }
+        if (error instanceof TooLargeError) {
+            return { ok: false, reason: TOO_LARGE };
+        }
+        return { ok: false, reason: DAMAGED };
     }
 }
