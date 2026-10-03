@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultData } from '../src/model.js';
-import { statementRow } from '../src/import/types.js';
 import {
     defaultDecisions,
     buildImport,
@@ -12,10 +11,6 @@ import { decisionsForBuild } from '../src/views/import.js';
 
 const NOW = new Date(2026, 8, 25, 12, 0, 0);
 
-function row(date, amountCents, direction, description, extra = {}) {
-    return statementRow({ date, amountCents, direction, description, ...extra });
-}
-
 function freshData() {
     const data = defaultData();
     data.rules = [];
@@ -23,13 +18,7 @@ function freshData() {
     return data;
 }
 
-function expenseDecision(categoryId = 'necessary', subcategoryId = 'groceries', extra = {}) {
-    return { include: true, kind: 'expense', categoryId, subcategoryId, incomeCategoryId: '', remember: false, ...extra };
-}
-
-// Test 1: camt with three currencies (EUR, USD, GBP)
-test('parseCamt reads a statement with EUR, USD and GBP amounts', () => {
-    const camt = `<?xml version="1.0" encoding="UTF-8"?>
+const THREE_CURRENCY_CAMT = `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
   <BkToCstmrStmt>
     <GrpHdr><MsgId>STMT-1</MsgId><CreDtTm>2026-09-25T12:00:00</CreDtTm></GrpHdr>
@@ -93,7 +82,22 @@ test('parseCamt reads a statement with EUR, USD and GBP amounts', () => {
   </BkToCstmrStmt>
 </Document>`;
 
-    const result = parseCamt(camt);
+const CSV_ROWS = [
+    ['Date', 'Description', 'Amount', 'Currency', 'Amount EUR'],
+    ['2026-09-22', 'Payment one', '-10.00', 'EUR', ''],
+    ['2026-09-23', 'Payment two USD', '-10.00', 'USD', '-9.20'],
+    ['2026-09-24', 'Payment three GBP', '-10.00', 'GBP', ''],
+];
+
+const CSV_LAYOUT = {
+    decimalSeparator: '.',
+    dateFormat: 'YMD',
+    columns: { date: 0, amount: 2, description: 1, currency: 3, eurAmount: 4, direction: -1, debit: -1, credit: -1, bankRef: -1 },
+};
+
+// Test 1: camt with three currencies (EUR, USD, GBP)
+test('parseCamt reads a statement with EUR, USD and GBP amounts', () => {
+    const result = parseCamt(THREE_CURRENCY_CAMT);
     assert.equal(result.ok, true);
     assert.equal(result.format, 'camt');
     assert.equal(result.rows.length, 3);
@@ -129,20 +133,7 @@ test('parseCamt reads a statement with EUR, USD and GBP amounts', () => {
 
 // Test 2: CSV with three currencies via rowsToStatement
 test('rowsToStatement processes CSV rows with EUR, USD and GBP with Amount EUR column', () => {
-    const rows = [
-        ['Date', 'Description', 'Amount', 'Currency', 'Amount EUR'],
-        ['2026-09-22', 'Payment one', '-10.00', 'EUR', ''],
-        ['2026-09-23', 'Payment two USD', '-10.00', 'USD', '-9.20'],
-        ['2026-09-24', 'Payment three GBP', '-10.00', 'GBP', ''],
-    ];
-
-    const layout = {
-        decimalSeparator: '.',
-        dateFormat: 'YMD',
-        columns: { date: 0, amount: 2, description: 1, currency: 3, eurAmount: 4, direction: -1, debit: -1, credit: -1, bankRef: -1 },
-    };
-
-    const result = rowsToStatement(rows, 0, layout);
+    const result = rowsToStatement(CSV_ROWS, 0, CSV_LAYOUT);
     assert.equal(result.rows.length, 3);
     assert.equal(result.skipped.length, 0);
 
@@ -159,44 +150,24 @@ test('rowsToStatement processes CSV rows with EUR, USD and GBP with Amount EUR c
     assert.deepEqual(result.rows[2].originalAmountCents, 1000);
 });
 
-// Test 3: buildImport with CSV rows requiring EUR amount for GBP
-test('buildImport on CSV rows without EUR amounts gives an error for GBP', () => {
-    const csvRows = [
-        row('2026-09-22', 1000, 'out', 'Payment one', { currency: 'EUR' }),
-        row('2026-09-23', 920, 'out', 'Payment two USD', { currency: 'USD', originalAmountCents: 1000 }),
-        row('2026-09-24', null, 'out', 'Payment three GBP', { currency: 'GBP', originalAmountCents: 1000 }),
-    ];
-
-    const decisions = [
-        expenseDecision(),
-        expenseDecision(),
-        expenseDecision(),
-    ];
-
+// Test 3: buildImport on the rows rowsToStatement returned
+test('buildImport with defaultDecisions on parsed CSV rows asks for the EUR amount of the GBP row', () => {
+    const { rows } = rowsToStatement(CSV_ROWS, 0, CSV_LAYOUT);
     const data = freshData();
-    const built = buildImport(data, decisions, { rows: csvRows, format: 'csv', fileName: 'test.csv', now: NOW });
+    const decisions = defaultDecisions(data, rows);
+    const built = buildImport(data, decisions, { rows, format: 'csv', fileName: 'test.csv', now: NOW });
     assert.equal(built.ok, false);
     assert.equal(built.errors.length, 1);
     assert.deepEqual(built.errors[0], { index: 2, reason: 'Enter the amount in EUR for this GBP payment.' });
 });
 
-test('buildImport with decisionsForBuild and typed EUR amounts builds successfully', () => {
-    const csvRows = [
-        row('2026-09-22', 1000, 'out', 'Payment one', { currency: 'EUR' }),
-        row('2026-09-23', 920, 'out', 'Payment two USD', { currency: 'USD', originalAmountCents: 1000 }),
-        row('2026-09-24', null, 'out', 'Payment three GBP', { currency: 'GBP', originalAmountCents: 1000 }),
-    ];
-
-    const decisions = [
-        expenseDecision(),
-        expenseDecision(),
-        expenseDecision(),
-    ];
-
+test('buildImport with decisionsForBuild and a typed GBP EUR amount builds three expenses', () => {
+    const { rows } = rowsToStatement(CSV_ROWS, 0, CSV_LAYOUT);
     const data = freshData();
+    const decisions = defaultDecisions(data, rows);
     const eurInputs = ['', '', '11.70'];
-    const finalDecisions = decisionsForBuild(csvRows, decisions, eurInputs);
-    const built = buildImport(data, finalDecisions, { rows: csvRows, format: 'csv', fileName: 'test.csv', now: NOW });
+    const finalDecisions = decisionsForBuild(rows, decisions, eurInputs);
+    const built = buildImport(data, finalDecisions, { rows, format: 'csv', fileName: 'test.csv', now: NOW });
 
     assert.equal(built.ok, true);
     assert.deepEqual(built.errors, []);
@@ -225,42 +196,22 @@ test('buildImport with decisionsForBuild and typed EUR amounts builds successful
     assert.equal(built.totals.totalOutCents, 3090);
 });
 
-// Test 4: parseCamt builds successfully without requiring typed amounts
-test('parseCamt rows with missing EUR amounts build okay with empty EUR inputs', () => {
-    const camt = `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
-  <BkToCstmrStmt>
-    <GrpHdr><MsgId>STMT-1</MsgId><CreDtTm>2026-09-25T12:00:00</CreDtTm></GrpHdr>
-    <Stmt>
-      <Id>1</Id>
-      <Acct><Id><IBAN>LV80BANK0000435195001</IBAN></Id><Ccy>EUR</Ccy></Acct>
-      <Ntry>
-        <NtryRef>N-1</NtryRef>
-        <Amt Ccy="EUR">10.00</Amt>
-        <CdtDbtInd>DBIT</CdtDbtInd>
-        <Sts>BOOK</Sts>
-        <BookgDt><Dt>2026-09-22</Dt></BookgDt>
-        <ValDt><Dt>2026-09-22</Dt></ValDt>
-        <AcctSvcrRef>RF202609220001</AcctSvcrRef>
-        <NtryDtls>
-          <TxDtls>
-            <Refs><EndToEndId>EUR-PAYMENT</EndToEndId></Refs>
-            <RmtInf><Ustrd>Payment one</Ustrd></RmtInf>
-          </TxDtls>
-        </NtryDtls>
-      </Ntry>
-    </Stmt>
-  </BkToCstmrStmt>
-</Document>`;
-
-    const result = parseCamt(camt);
-    const camtRows = result.rows;
-
-    const decisions = [expenseDecision()];
+// Test 4: camt rows already carry the EUR amount, so nothing has to be typed
+test('buildImport on parsed camt rows with EUR, USD and GBP needs no typed EUR amounts', () => {
+    const { rows } = parseCamt(THREE_CURRENCY_CAMT);
     const data = freshData();
-    const built = buildImport(data, decisions, { rows: camtRows, format: 'camt', fileName: 'test.xml', now: NOW });
+    const decisions = defaultDecisions(data, rows);
+    const built = buildImport(data, decisions, { rows, format: 'camt', fileName: 'test.xml', now: NOW });
 
     assert.equal(built.ok, true);
     assert.equal(built.errors.length, 0);
-    assert.equal(built.importRecord.counts.expenses, 1);
+    assert.equal(built.importRecord.counts.expenses, 3);
+    assert.deepEqual(
+        built.expenses.map((expense) => [expense.currency, expense.amountCents, expense.originalAmountCents]),
+        [
+            ['EUR', 1000, 1000],
+            ['USD', 920, 1000],
+            ['GBP', 1170, 1000],
+        ],
+    );
 });
