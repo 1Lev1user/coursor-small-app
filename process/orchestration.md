@@ -23,7 +23,12 @@ The orchestrator then does Level 4 (process/review.md), merges, sets Status Done
 - Worker BLOCKED or reviewer FAIL → a new worker run with the findings, same tier once, then one tier up (haiku → sonnet → opus). Ceiling: 2 attempts per tier, then Blocked and a question to the owner.
 - NEEDS_HUMAN → Blocked, question to the owner at once.
 
+## Conveyor (owner, 2026-10-03)
+- At most 3 agents run at the same time, each with its own context, of any type: one may plan while another builds and a third reviews.
+- Each card moves on its own: plan, build, check, execute. When a slot frees up, the orchestrator starts the next step of any card that is ready.
+- Reviewers run `check-card` with the local branch name (card/C-NNN-...), not the remote-prefixed name, which is skipped.
+
 ## Limits
-- WIP 3 cards at once; cards that share allowed_paths never run at the same time.
+- Cards that share allowed_paths never run at the same time.
 - Live or irreversible steps (publishing, releases) wait for the owner's explicit go, even when the card is otherwise done.
-- Manual acceptance items are listed for the owner in the pull request; they are never marked done by an agent.
+- Manual acceptance items are listed for the owner in the pull request; they are never marked done by an agent. They gate the release (publishing to v1), not the merge into main, because main is not live.
