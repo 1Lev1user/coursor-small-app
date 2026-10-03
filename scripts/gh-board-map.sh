@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mirrors PROJECT_MAP.json to an EXISTING GitHub Project (v2) as "map" cards (Kind=Map, Stage=Done).
+# Mirrors PROJECT_MAP.json to an EXISTING GitHub Project (v2) as "map" cards (Kind=Map, Status=Done).
 # One draft item per map entry, titled "M-S4.1 <title>". Safe to re-run: items whose title exists are skipped.
 # Never deletes or edits other items. If a run stops half-way, delete the half-made card in the browser and re-run.
 # Requires: gh logged in with the project scope (gh auth refresh -s project), node. Run scripts/gh-board-attach.sh first.
@@ -48,7 +48,7 @@ opt_id() { awk -F'\t' -v f="$1" -v o="$2" '$1 == f && $2 == o { print $3; exit }
 opt_count() { awk -F'\t' -v f="$1" '$1 == f { n++ } END { print n + 0 }' <<<"$FIELD_OPTS"; }
 
 load_fields
-for need in "Stage" "Story step"; do
+for need in "Status" "Story step"; do
   if [ -z "$(field_id "$need")" ]; then
     echo "Field \"$need\" is missing. Run scripts/gh-board-attach.sh $NUM first." >&2
     exit 1
@@ -78,12 +78,12 @@ if [ "$(opt_count Activity)" -ne 6 ]; then
 fi
 
 KIND_ID=$(field_id Kind);   KIND_MAP=$(opt_id Kind Map)
-STAGE_ID=$(field_id Stage); STAGE_DONE=$(opt_id Stage Done)
+STATUS_ID=$(field_id Status); STATUS_DONE=$(opt_id Status Done)
 ACT_ID=$(field_id Activity)
 STEP_ID=$(field_id "Story step")
 FILES_ID=$(field_id Files)
-for v in KIND_ID KIND_MAP STAGE_ID STAGE_DONE ACT_ID STEP_ID FILES_ID; do
-  [ -n "${!v}" ] || { echo "Could not resolve $v (Kind needs option Map, Stage needs option Done)." >&2; exit 1; }
+for v in KIND_ID KIND_MAP STATUS_ID STATUS_DONE ACT_ID STEP_ID FILES_ID; do
+  [ -n "${!v}" ] || { echo "Could not resolve $v (Kind needs option Map, Status needs option Done)." >&2; exit 1; }
 done
 
 # 2. Create missing map cards.
@@ -99,7 +99,7 @@ for ((n = 0; n < COUNT; n++)); do
   [ -n "$ACT_OPT" ] || { echo "$TITLE: activity \"$ACT\" is not an option of the Activity field." >&2; exit 1; }
   ID=$(gh project item-create "$NUM" --owner "$OWNER" --title "$TITLE" --body "$(item "$n" body)" --format json -q .id)
   gh project item-edit --id "$ID" --project-id "$PID" --field-id "$KIND_ID"  --single-select-option-id "$KIND_MAP" >/dev/null
-  gh project item-edit --id "$ID" --project-id "$PID" --field-id "$STAGE_ID" --single-select-option-id "$STAGE_DONE" >/dev/null
+  gh project item-edit --id "$ID" --project-id "$PID" --field-id "$STATUS_ID" --single-select-option-id "$STATUS_DONE" >/dev/null
   gh project item-edit --id "$ID" --project-id "$PID" --field-id "$ACT_ID"   --single-select-option-id "$ACT_OPT" >/dev/null
   gh project item-edit --id "$ID" --project-id "$PID" --field-id "$STEP_ID"  --text "$(item "$n" step)" >/dev/null
   gh project item-edit --id "$ID" --project-id "$PID" --field-id "$FILES_ID" --text "$(item "$n" files)" >/dev/null
