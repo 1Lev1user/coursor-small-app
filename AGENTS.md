@@ -30,4 +30,5 @@ Rules for the agent that implements cards (Cursor). The planner and reviewer (Cl
 - Design: colours, fonts, radii and motion are design tokens at the top of style.css, with the dark theme below them. No raw colours outside tokens. See DESIGN.md and process/design-review.md.
 - Data stays on the device: no network calls, no accounts, no analytics.
 - Tests that depend on dates pass a fixed `now` (for example `buildImport(..., { now: NOW })`).
+- Commands with `TZ=...`: on Windows run them from PowerShell (`$env:TZ='...'`); Git Bash does not pass TZ to Node.
 - Planning and rule files (cards/, process/, CLAUDE.md, AGENTS.md, anchor.md, SPEC.md, STORYMAP.md, DESIGN.md) are not shipped to `v1`.
