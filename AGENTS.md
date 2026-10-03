@@ -31,4 +31,5 @@ Rules for the agent that implements cards (Cursor). The planner and reviewer (Cl
 - Data stays on the device: no network calls, no accounts, no analytics.
 - Tests that depend on dates pass a fixed `now` (for example `buildImport(..., { now: NOW })`).
 - Commands with `TZ=...`: on Windows run them from PowerShell (`$env:TZ='...'`); Git Bash does not pass TZ to Node.
+- Acceptance greps for `^# pass` need the TAP reporter: CI (Node 22, output piped) prints it; on a newer local Node add `--test-reporter=tap` before the file name.
 - Planning and rule files (cards/, process/, CLAUDE.md, AGENTS.md, anchor.md, SPEC.md, STORYMAP.md, DESIGN.md) are not shipped to `v1`.
