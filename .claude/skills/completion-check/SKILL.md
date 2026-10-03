@@ -16,7 +16,7 @@ Run the card acceptance commands and the project checks from SPEC.md (types, lin
 - Any violation fails the card and counts as an attempt.
 
 ## Level 3: fresh-context review
-Spawn the reviewer agent (Sonnet; Opus when risk is high) with card, branch, base. The reviewer flags only correctness problems and requirement gaps. PASS is required. FAIL findings go back to the next attempt as error text.
+Spawn the reviewer agent (Sonnet; Opus when risk is high) with card, branch, base. The reviewer flags only correctness problems and requirement gaps. The reviewer is never weaker than the model that wrote the card: a card done on Opus gets an Opus reviewer [assumption]. PASS is required. FAIL findings go back to the next attempt as error text.
 
 ## Level 4: lead acceptance
 - Card: does it satisfy its story step in STORYMAP.md? Is the value for the actor visible?

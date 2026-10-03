@@ -23,6 +23,15 @@ id, story_step, title, size (S, M, L), priority (P0, P1, P2), risk (low, medium,
 - Commands that exit 0 when the card is done (test, lint, build, a curl against a local server). No command means no Haiku.
 - If no automatic check exists, write one first as a separate card or write a manual check the reviewer can run.
 
+## UI cards
+- Acceptance includes the design-review skill checks: screenshots at 3 widths and the thresholds that apply.
+- The reviewer gets the design-review skill.
+
+## Size guide
+- About 100 changed lines is a normal card. 1000 is too many.
+- 200 lines in one file is fine. The same lines spread over 50 files are not.
+- Source: Google eng-practices, small CLs [verified]. Applied to agent work [assumption].
+
 ## Allowed paths
 Smallest set of directories or files the worker may edit. Cards that share paths do not run in parallel.
 

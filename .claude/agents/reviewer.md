@@ -18,6 +18,8 @@ Steps:
 4. Read the changed code against the acceptance list and the story step. Look for: wrong behavior, missed cases named in acceptance, broken callers, security issues, secrets, new dependencies.
 5. Do not flag style, naming, or taste. Flag only correctness or a requirement gap, and say why it matters.
 
+For UI cards also apply the design-review skill thresholds that can be checked from code: tokens only, contrast of token pairs if computable. The lead passes model opus when the worker was opus.
+
 Do not run commands that modify the repository, install packages, or touch the network (read-only commands and the test commands in acceptance only).
 
 - Final message: facts only, in the report format below. No narration, no recap.

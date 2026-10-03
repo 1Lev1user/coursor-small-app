@@ -14,4 +14,9 @@ Keep it short. The output is a few lines in claude-progress.txt and changes to t
 5. Update anchor.md with a checkpoint and the next slice goal. Set a /goal condition for the next slice in SPEC.md.
 6. Report to the user: what works (with proof commands), what is blocked, what changed in the process.
 
+7. Run the whole slice end to end, not single cards. Gaps appear at the seams [assumption].
+8. Check /usage and record what the slice cost in claude-progress.txt. Adjust models if the cost does not fit the value.
+9. A slice fits in one week or less (DORA, working in small batches [verified]). If it ran longer, make the next slice smaller.
+10. UI slice: run the second design-review pass (different day from the first).
+
 Only changes backed by the numbers from this slice are applied. Everything else stays as is.
