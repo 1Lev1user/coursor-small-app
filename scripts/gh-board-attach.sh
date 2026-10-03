@@ -12,7 +12,7 @@ if ! gh project view "$NUM" --owner "$OWNER" --format json >/dev/null 2>&1; then
   exit 1
 fi
 
-EXISTING=$(gh project field-list "$NUM" --owner "$OWNER" --format json -q '.fields[].name')
+EXISTING=$(gh project field-list "$NUM" --owner "$OWNER" --limit 100 --format json -q '.fields[].name')
 CREATED=()
 SKIPPED=()
 

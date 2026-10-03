@@ -12,7 +12,7 @@
       "risk": "low",
       "start_tier": "haiku",
       "attempts": [],
-      "acceptance": ["npm test exits 0", "node --test test/importCore.test.js exits 0"],
+      "acceptance": ["npm test exits 0", "FROZEN_DATE=2026-09-25 node --import ./scripts/frozen-date.mjs --test test/importCore.test.js exits 0", "FROZEN_DATE=2027-01-15 node --import ./scripts/frozen-date.mjs --test test/importCore.test.js exits 0"],
       "allowed_paths": ["test/importCore.test.js"],
       "forbidden": ["src/", "any other test file", "changing assertions; only add `now: NOW` to the buildImport meta at test lines 512, 548, 617"],
       "depends_on": [],
@@ -30,7 +30,7 @@
       "risk": "low",
       "start_tier": "haiku",
       "attempts": [],
-      "acceptance": ["node --test test/importPlanChoice.test.js exits 0", "npm test exits 0"],
+      "acceptance": ["node --test test/importPlanChoice.test.js exits 0", "grep -c \"Choose a plan for\" test/importPlanChoice.test.js prints 1 or more", "node --test test/importPlanChoice.test.js 2>&1 | grep -E '^# pass [1-9]' exits 0", "npm test exits 0"],
       "allowed_paths": ["test/importPlanChoice.test.js"],
       "forbidden": ["src/", "existing test files"],
       "depends_on": ["C-001"],
@@ -42,20 +42,20 @@
     {
       "id": "C-003",
       "story_step": "S3.5",
-      "title": "Tests for CSV field quoting",
+      "title": "Direct tests for escapeField edge cases",
       "size": "S",
       "priority": "P1",
       "risk": "low",
       "start_tier": "haiku",
       "attempts": [],
-      "acceptance": ["node --test test/csvQuoting.test.js exits 0"],
+      "acceptance": ["node --test test/csvQuoting.test.js exits 0", "node --test test/csvQuoting.test.js 2>&1 | grep -E '^# pass ([4-9]|[1-9][0-9])' exits 0"],
       "allowed_paths": ["test/csvQuoting.test.js"],
       "forbidden": ["src/", "existing test files"],
       "depends_on": [],
       "status": "ready",
       "evidence": null,
       "mirror_id": null,
-      "notes": "Cover delimiter, double quote, newline (and \\r), Europe (;) and Standard (,) formats. Exports of src/csv.js (verified): escapeField(value, delimiter), escapeText(value, delimiter), buildMonthCsv(data, monthKey, flavour) with flavour 'europe' or 'standard', csvFilename(monthKey, flavour)."
+      "notes": "Existing test/csv.test.js lines 73-100 already cover doubled quotes, embedded newline and the delimiter for both flavours through buildMonthCsv, and line 191 covers formula escaping, so those are out of scope. Cover only escapeField(value, delimiter) called directly (src/csv.js, verified: quotes when the text contains the delimiter, a double quote, \\n or \\r; doubles quotes; no special handling of leading/trailing spaces): (1) a value containing \\r is quoted; (2) a value containing the delimiter is quoted, for ',' and for ';' (two tests or one test with both); (3) a value with no special characters is returned unchanged; (4) a value with leading/trailing spaces and no special characters is returned unchanged (spaces are not special). At least 4 passing tests. Allowed path is the new test file only."
     }
   ]
 }

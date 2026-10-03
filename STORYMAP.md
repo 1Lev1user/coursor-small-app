@@ -26,7 +26,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S3.2 | Owner | Reviews money | Lists and searches entries in Month | Finds any entry | P2 | exists |
 | S3.3 | Owner | Reviews money | Views Chart: Spending, Income, Trends, Year (with yearly CSV) | Sees patterns | P2 | exists |
 | S3.4 | Owner | Reviews money | Exports Month CSV in Europe (;) or Standard (,) format | Data in a spreadsheet | P1 | exists |
-| S3.5 | Owner | Reviews money | Month CSV quotes fields with delimiter, quote or newline correctly, guarded by tests | Export opens correctly | P1 | slice 1 |
+| S3.5 | Owner | Reviews money | escapeField edge cases (carriage return, delimiter) are guarded by direct tests | Export opens correctly | P1 | slice 1 |
 | S4.1 | Owner | Imports bank statement | Imports CSV, pasted text, .xlsx, camt XML or FiDAViSTA XML | Entries without typing | P1 | exists |
 | S4.2 | Owner | Imports bank statement | Reviews duplicates and row kinds, remembers rules | No double entries | P1 | exists |
 | S4.3 | Owner | Imports bank statement | Chooses a plan once for a past month without a plan | Past months stay correct | P1 | exists |
@@ -48,7 +48,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 |---|---|
 | C-001 Make 3 import tests date-independent | S4.4 |
 | C-002 Regression test: past month without plan choice is refused | S4.4 |
-| C-003 Tests for CSV field quoting | S3.5 |
+| C-003 Direct tests for escapeField edge cases | S3.5 |
 
 ## Rules
 - Every card references one step ID.

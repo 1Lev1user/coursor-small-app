@@ -40,8 +40,8 @@ item() {
 
 # Field lookups, reloaded after fields are created.
 load_fields() {
-  FIELD_IDS=$(gh project field-list "$NUM" --owner "$OWNER" --format json -q '.fields[] | "\(.name)\t\(.id)"')
-  FIELD_OPTS=$(gh project field-list "$NUM" --owner "$OWNER" --format json -q '.fields[] | select(.options) | .name as $f | .options[] | "\($f)\t\(.name)\t\(.id)"')
+  FIELD_IDS=$(gh project field-list "$NUM" --owner "$OWNER" --limit 100 --format json -q '.fields[] | "\(.name)\t\(.id)"')
+  FIELD_OPTS=$(gh project field-list "$NUM" --owner "$OWNER" --limit 100 --format json -q '.fields[] | select(.options) | .name as $f | .options[] | "\($f)\t\(.name)\t\(.id)"')
 }
 field_id() { awk -F'\t' -v f="$1" '$1 == f { print $2; exit }' <<<"$FIELD_IDS"; }
 opt_id() { awk -F'\t' -v f="$1" -v o="$2" '$1 == f && $2 == o { print $3; exit }' <<<"$FIELD_OPTS"; }

@@ -1,6 +1,6 @@
 # MIGRATION_PLAN: agent-kit into My Expenses (coursor-small-app)
 
-Status: waiting for owner approval (integration step 3). Nothing has been changed yet.
+Status: approved by the owner on 2026-10-03 (D1, D2, D3 approved). Applied on branch claude/compassionate-wright-rg71w2; results in MIGRATION_REPORT.md.
 Branch: `claude/compassionate-wright-rg71w2` (rollback = do not merge it; `main` stays untouched).
 Date: 2026-10-03.
 
@@ -44,7 +44,8 @@ Date: 2026-10-03.
 - feature_list.json, slice 1 (proposed):
   - C-001 Make 3 import tests date-independent. S, low, haiku. Allowed path `test/importCore.test.js` only. Exception to "never edit existing tests" needed (see D1). Acceptance: `npm test` exits 0, and the suite passes with the date frozen to a later month.
   - C-002 Regression test: import into a past month without a plan choice is refused with "Choose a plan for <month>." S, low, haiku. New test file only.
-  - C-003 Tests for CSV field quoting (`escapeField`, delimiter, quote, newline, Europe and Standard formats). S, low, haiku. New test file only.
+  - C-003 Tests for CSV field quoting (`escapeField`, delimiter, quote, newline, Europe and Standard formats). S, low, haiku. New test file only. Narrowed after review to "Direct tests for escapeField edge cases" (carriage return, delimiter for ',' and ';', unchanged plain value, spaces): `test/csv.test.js` already covers quotes, newline and both flavours.
+- Added after approval at owner request: PROJECT_MAP.json (19 existing features) and scripts/gh-board-map.sh (Kind=Map cards).
 
 ## Order of changes (step 5, one commit each)
 1. Copy `.claude/agents` and `.claude/skills` unchanged.
@@ -66,9 +67,9 @@ After each commit: `npm test` (must stay 352/355 pass) and `npm run check:kit` o
 - Haiku first-pass rate unknown; the 70 percent threshold is an assumption.
 
 ## Decisions needed
-- D1: allow C-001 to edit `test/importCore.test.js` (only adding `now` to three calls). Recommended: yes, because the defect is in the test.
-- D2: slice 1 = C-001, C-002, C-003. Recommended: yes.
-- D3: kit check as a separate script, not inside `npm test`. Recommended: yes, so app tests stay about the app.
+- D1 (Approved): allow C-001 to edit `test/importCore.test.js` (only adding `now` to three calls). Recommended: yes, because the defect is in the test.
+- D2 (Approved): slice 1 = C-001, C-002, C-003. Recommended: yes.
+- D3 (Approved): kit check as a separate script, not inside `npm test`. Recommended: yes, so app tests stay about the app.
 
 ## Open questions
 - Python and Playwright dependencies of the guide scripts are undocumented (later card).
