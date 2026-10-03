@@ -56,7 +56,13 @@
       "priority": "P1",
       "risk": "low",
       "start_tier": "haiku",
-      "attempts": [],
+      "attempts": [
+        {
+          "tier": "haiku",
+          "result": "pass",
+          "note": "Report delivered within maxTurns 25"
+        }
+      ],
       "acceptance": [
         "node --test test/importPlanChoice.test.js exits 0",
         "grep -c \"Choose a plan for\" test/importPlanChoice.test.js prints 1 or more",
@@ -73,8 +79,18 @@
       "depends_on": [
         "C-001"
       ],
-      "status": "in_progress",
-      "evidence": null,
+      "status": "done",
+      "evidence": {
+        "commit": "5ca6e35",
+        "level1": [
+          "node --test test/importPlanChoice.test.js: 2/2",
+          "grep Choose a plan for: 2",
+          "npm test: 374/374"
+        ],
+        "level2": "only new file test/importPlanChoice.test.js (+74)",
+        "level3": "reviewer sonnet PASS; mutation: test 1 fails when the past-month plan check is removed; passes at FROZEN_DATE 2027-06-15",
+        "level4": "planner: S4.4 satisfied"
+      },
       "mirror_id": null,
       "notes": "Use buildImport with an explicit `now` later than the rows' month and no planChoices; expect applyImport result ok false and reason \"Choose a plan for <YYYY-MM>.\" (verified in src/import/core.js: `Choose a plan for ${monthKey}.`, errors[0].reason 'Plan choice is missing.'). npm test passes only after C-001, so it waits for C-001."
     },
@@ -118,6 +134,32 @@
       },
       "mirror_id": null,
       "notes": "Existing test/csv.test.js lines 73-100 already cover doubled quotes, embedded newline and the delimiter for both flavours through buildMonthCsv, and line 191 covers formula escaping, so those are out of scope. Cover only escapeField(value, delimiter) called directly (src/csv.js, verified: quotes when the text contains the delimiter, a double quote, \\n or \\r; doubles quotes; no special handling of leading/trailing spaces): (1) a value containing \\r is quoted; (2) a value containing the delimiter is quoted, for ',' and for ';' (two tests or one test with both); (3) a value with no special characters is returned unchanged; (4) a value with leading/trailing spaces and no special characters is returned unchanged (spaces are not special). At least 4 passing tests. Allowed path is the new test file only."
+    },
+    {
+      "id": "C-004",
+      "story_step": "S2.2",
+      "title": "Make the template date test timezone-safe",
+      "size": "S",
+      "priority": "P2",
+      "risk": "low",
+      "start_tier": "haiku",
+      "attempts": [],
+      "acceptance": [
+        "npm test exits 0",
+        "TZ=Pacific/Kiritimati FROZEN_DATE=2026-10-03 node --import ./scripts/frozen-date.mjs --test test/templates.test.js exits 0"
+      ],
+      "allowed_paths": [
+        "test/templates.test.js"
+      ],
+      "forbidden": [
+        "src/",
+        "any other test file"
+      ],
+      "depends_on": [],
+      "status": "backlog",
+      "evidence": null,
+      "mirror_id": null,
+      "notes": "Found by the C-001 reviewer: test/templates.test.js:68-69 compares templateToExpense(...).date with new Date().toISOString().slice(0,10) (UTC date) while the code uses todayISO() (local date, src/months.js:83). Fails near midnight in non-UTC timezones. Fix in the test only: compute the expected value with todayISO() from src/months.js. Editing this existing test file needs owner approval (like D1) before the card moves to Approved."
     }
   ]
 }

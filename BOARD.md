@@ -15,14 +15,13 @@ Human-readable view of feature_list.json. The planner writes cards and Done; the
 Current slice: 1
 
 ## Backlog
-(none)
+- C-004 (P2, S, haiku) Make the template date test timezone-safe. Needs owner approval to edit test/templates.test.js.
 
 ## Approved (status ready)
-
-Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits 0) needs C-001 done first.
+(none)
 
 ## In progress
-- C-002 (P1, S, haiku) Regression test: past month without plan choice is refused.
+(none)
 
 ## Verify
 (none)
@@ -31,6 +30,7 @@ Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits
 (none)
 
 ## Done
+- C-002 (P1, S, haiku) Regression test: past month without plan choice is refused.
 - C-003 (P1, S, haiku) Direct tests for escapeField edge cases.
 - C-001 (P0, S, haiku) Make 3 import tests date-independent.
 
@@ -40,7 +40,7 @@ Note: C-001 and C-002 do not share files, but C-002 acceptance (`npm test` exits
 ## Metrics (updated by the lead at each slice end)
 | Tier | Cards started | Passed first try | Escalated | First-pass rate |
 |---|---|---|---|---|
-| haiku | 0 | 0 | 0 | n/a |
+| haiku | 3 | 3 | 0 | 100% (slice 1) |
 | sonnet | 0 | 0 | 0 | n/a |
 | opus | 0 | 0 | 0 | n/a |
 
