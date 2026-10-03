@@ -172,6 +172,9 @@ test('every forbidden path from the card is flagged when listed', () => {
         assert.ok(forbiddenHits([path]).length > 0, `"${path}" should be flagged`);
     }
     assert.deepEqual(forbiddenHits(['src/', 'index.html']), []);
+    assert.ok(forbiddenHits(['scripts/x.js']).length > 0, 'file nested inside a forbidden directory');
+    assert.ok(forbiddenHits(['claude.md']).length > 0, 'forbidden file in different case');
+    assert.ok(forbiddenHits(['TEST/']).length > 0, 'forbidden directory in different case');
 });
 
 test('ship list entries are valid', () => {
@@ -186,7 +189,7 @@ test('ship list entries are valid', () => {
 });
 
 test('validateEntry rejects bad entries and accepts a good one', () => {
-    const bad = ['src/../test/', 'docs/..', 'a/../b', '/abs', './x', 'a\\b', ''];
+    const bad = ['src/../test/', 'docs/..', 'a/../b', '../x', '..', '/abs', './x', 'a\\b', ''];
     for (const entry of bad) {
         assert.ok(validateEntry(entry).length > 0, `"${entry}" should be rejected`);
     }
@@ -204,12 +207,14 @@ test('covered matches files, directories and the ./ root only', () => {
     assert.ok(covered('./src/a.js', ['src/']), 'file inside listed directory');
     assert.ok(!covered('./srcx/a.js', ['src/']), 'sibling prefix is not covered');
     assert.ok(!covered('./foo.js', ['index.html']), 'unlisted file');
+    assert.ok(!covered('index.html', ['index.h']), 'a file entry is not a prefix match');
 });
 
 test('forbidden path check is case-insensitive', () => {
     assert.ok(overlaps('Claude.MD', 'CLAUDE.md'), 'different case, entry first');
     assert.ok(overlaps('CLAUDE.md', 'Claude.MD'), 'different case, forbidden first');
     assert.ok(overlaps('Scripts/x.js', 'scripts/'), 'directory prefix in different case');
+    assert.ok(overlaps('SCRIPTS/', 'scripts/x.js'), 'uppercase directory containing a forbidden file');
 });
 
 test('overlaps handles every file and directory combination', () => {
