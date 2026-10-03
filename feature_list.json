@@ -57,7 +57,7 @@
       "depends_on": [
         "C-001"
       ],
-      "status": "backlog",
+      "status": "ready",
       "evidence": null,
       "mirror_id": null,
       "notes": "Use buildImport with an explicit `now` later than the rows' month and no planChoices; expect applyImport result ok false and reason \"Choose a plan for <YYYY-MM>.\" (verified in src/import/core.js: `Choose a plan for ${monthKey}.`, errors[0].reason 'Plan choice is missing.'). npm test passes only after C-001, so it waits for C-001."
