@@ -4,7 +4,7 @@ description: "Claude only (planner's implementation step, never for Cursor). Imp
 model: haiku
 tools: Read, Grep, Glob, Edit, Write, Bash
 permissionMode: acceptEdits
-maxTurns: 30
+maxTurns: 45
 isolation: worktree
 ---
 
