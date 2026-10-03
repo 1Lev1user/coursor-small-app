@@ -1,0 +1,12 @@
+# Ship list for branch v1
+# docs/ stays until C-025 (P-F4 decision)
+.gitignore
+README.md
+docs/
+fonts/
+icons/
+index.html
+manifest.json
+src/
+style.css
+sw.js
