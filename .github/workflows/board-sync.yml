@@ -1,6 +1,6 @@
 # Mirrors feature_list.json, PROJECT_MAP.json and RELEASE_PLAN.json to the GitHub Project.
 # Push: diff mode, only items changed in the push are touched. Manual run: choose the mode.
-# Setup by the owner: secret PROJECT_TOKEN (project scope) and variable PROJECT_NUMBER.
+# Setup by the owner: secret PROJECT_TOKEN (project scope). Project number is set below.
 name: Board sync
 
 on:
@@ -41,16 +41,22 @@ jobs:
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || '1Lev1user' }}
-          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER || secrets.PROJECT_NUMBER }}
+          PROJECT_NUMBER: '1'  # project number is not secret; owner's board is number 1
           MODE: ${{ inputs.mode || 'diff' }}
           BEFORE: ${{ github.event.before }}
         run: |
           if [ -z "$PROJECT_TOKEN" ] || [ -z "$PROJECT_NUMBER" ]; then
-            echo "::notice::Board sync not configured (owner sets secret PROJECT_TOKEN and variable PROJECT_NUMBER)."
+            echo "::notice::Board sync not configured (owner sets secret PROJECT_TOKEN)."
             exit 0
           fi
           case "$MODE" in
             all) node scripts/board-sync.mjs --all ;;
             all-force) node scripts/board-sync.mjs --all --force ;;
-            *) node scripts/board-sync.mjs --base "${BEFORE:-HEAD~1}" ;;
+            *)
+              BASE="$BEFORE"
+              # New branch: compare with main instead of creating everything blind
+              if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+                BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)
+              fi
+              node scripts/board-sync.mjs --base "$BASE" ;;
           esac
