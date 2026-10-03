@@ -9,6 +9,7 @@
         "test": "node --test",
         "serve": "python -m http.server 8080",
         "check:kit": "node scripts/check-kit.mjs",
-        "check:card": "node scripts/check-card.mjs"
+        "check:card": "node scripts/check-card.mjs",
+        "version": "node scripts/sync-version.mjs && git add sw.js"
     }
 }
