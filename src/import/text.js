@@ -312,11 +312,9 @@ function guessDecimalSeparator(sampleRows, columns) {
     const indexes = [columns.amount, columns.debit, columns.credit].filter((index) => index >= 0);
     for (const index of indexes) {
         for (const value of columnSamples(sampleRows, index)) {
-            if (/\d,\d{1,2}\)?-?$/.test(value)) {
-                return ',';
-            }
-            if (/\d\.\d{1,2}\)?-?$/.test(value)) {
-                return '.';
+            const match = /\d([.,])\d{1,2}\)?-?$/.exec(stripAmountDecoration(value).text);
+            if (match) {
+                return match[1];
             }
         }
     }
@@ -607,6 +605,27 @@ export function parseDateWith(value, format) {
 const NBSP_RE = /[  ]/g;
 
 /**
+ * Strips what surrounds an amount: non-breaking spaces, unicode minus signs,
+ * a trailing D/C/K mark (D means negative) and a leading or trailing currency
+ * code or symbol ('€ -12.50', 'EUR -12.50', '-12,50 EUR').
+ * @param {string} value
+ * @returns {{ text: string, negative: boolean }}
+ */
+export function stripAmountDecoration(value) {
+    let text = value.replace(NBSP_RE, ' ').trim();
+    let negative = false;
+
+    text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
+    const trailingMark = text.match(/\s+(DR|CR|D|C|K)$/i);
+    if (trailingMark) {
+        negative = /^D/i.test(trailingMark[1]);
+        text = text.slice(0, trailingMark.index).trim();
+    }
+    text = text.replace(/^(?:[A-Z]{3}|[€$£¥₽])\s*/i, '').replace(/\s*(?:[A-Z]{3}|[€$£¥₽])$/i, '').trim();
+    return { text, negative };
+}
+
+/**
  * Parses a money string into signed integer cents. Handles thousands and
  * decimal separators, leading/trailing minus, parentheses for negative,
  * a leading plus, and currency symbols/codes. Never uses floating-point
@@ -621,22 +640,13 @@ export function parseAmountWith(value, decimalSeparator = '.') {
         return null;
     }
 
-    let text = value.replace(NBSP_RE, ' ').trim();
-    if (text === '') {
+    if (value.trim() === '') {
         return null;
     }
 
-    let negative = false;
-
-    // Web pages and banks use real minus signs and dashes; currency marks
-    // and codes may sit before the sign ('€ -12.50', 'EUR -12.50').
-    text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
-    const trailingMark = text.match(/\s+(DR|CR|D|C|K)$/i);
-    if (trailingMark) {
-        negative = /^D/i.test(trailingMark[1]);
-        text = text.slice(0, trailingMark.index).trim();
-    }
-    text = text.replace(/^(?:[A-Z]{3}|[€$£¥₽])\s*/i, '').replace(/\s*(?:[A-Z]{3}|[€$£¥₽])$/i, '').trim();
+    const decorated = stripAmountDecoration(value);
+    let text = decorated.text;
+    let negative = decorated.negative;
 
     if (/^\(.*\)$/.test(text)) {
         negative = true;
