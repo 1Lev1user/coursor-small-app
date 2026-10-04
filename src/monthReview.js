@@ -24,6 +24,9 @@ export function getMonthReviewSuggestion(data, now = new Date()) {
     }
 
     const totals = monthTotals(data, previousKey, now);
+    if (!totals.hasBudget) {
+        return null;
+    }
     if (totals.spentCents <= 0 && totals.incomeCents <= 0) {
         return null;
     }
