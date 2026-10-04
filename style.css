@@ -874,6 +874,12 @@ body.is-setup .tabbar {
     color: var(--muted);
 }
 
+/* The example hint goes away the moment a field is tapped. Must stay after the rule above (same specificity). */
+input:focus::placeholder,
+textarea:focus::placeholder {
+    color: transparent;
+}
+
 .error-text {
     color: var(--danger);
     font-size: 0.875rem;
