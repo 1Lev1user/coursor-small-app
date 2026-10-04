@@ -138,7 +138,7 @@ export function renderYear(root, ctx, year) {
     section.append(element(
         'p',
         'muted',
-        'Income includes usual salary from Plan. Difference is income minus spent.',
+        'Income is what you received each month. Months before the money setup also include your usual salary from Plan. Difference is income minus spent.',
     ));
 
     const current = ctx.monthKey.startsWith(`${year}-`) ? Number(ctx.monthKey.slice(5, 7)) - 1 : 11;

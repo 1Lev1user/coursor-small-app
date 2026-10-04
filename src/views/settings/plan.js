@@ -12,7 +12,6 @@ import {
 
 const planDraft = {
     budget: null,
-    income: null,
     errorField: '',
     error: '',
 };
@@ -71,14 +70,12 @@ export function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, budgetField, incomeField) {
+function savePlan(ctx, budgetField) {
     clearError(budgetField);
-    clearError(incomeField);
     planDraft.error = '';
     planDraft.errorField = '';
 
     planDraft.budget = budgetField.control.value;
-    planDraft.income = incomeField.control.value;
 
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
@@ -89,22 +86,11 @@ function savePlan(ctx, budgetField, incomeField) {
         return;
     }
 
-    const incomeCents = parseAmount(planDraft.income, { allowZero: true });
-    if (incomeCents === null) {
-        planDraft.errorField = 'income';
-        planDraft.error = amountProblem(planDraft.income, { allowZero: true });
-        setError(incomeField, planDraft.error);
-        incomeField.control.focus();
-        return;
-    }
-
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     syncCategoryPlanFields(ctx.data.categories, budgetCents);
-    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
     planDraft.budget = null;
-    planDraft.income = null;
     planDraft.error = '';
     planDraft.errorField = '';
 
@@ -156,23 +142,9 @@ export function renderPlanSection(ctx) {
         clearError(budgetField);
     });
 
-    const incomeInput = document.createElement('input');
-    incomeInput.type = 'text';
-    incomeInput.inputMode = 'decimal';
-    incomeInput.autocomplete = 'off';
-    incomeInput.placeholder = '2000';
-    incomeInput.value = centsInputValue(settings.usualMonthlyIncomeCents, planDraft.income);
-    const incomeField = buildField('plan-income', 'Usual monthly income (EUR)', incomeInput);
-    incomeInput.addEventListener('input', () => {
-        planDraft.income = incomeInput.value;
-        clearError(incomeField);
-    });
-
     if (planDraft.error !== '') {
         if (planDraft.errorField === 'budget') {
             setError(budgetField, planDraft.error);
-        } else if (planDraft.errorField === 'income') {
-            setError(incomeField, planDraft.error);
         }
     }
 
@@ -180,17 +152,16 @@ export function renderPlanSection(ctx) {
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        savePlan(ctx, budgetField, incomeField);
+        savePlan(ctx, budgetField);
     });
 
     form.append(
         budgetField.wrapper,
-        incomeField.wrapper,
         element(
             'p',
             'muted',
-            'Usual monthly income is applied automatically each month in Month totals. '
-                + 'On Home, add only extra income such as a bonus or a gift. This salary is already counted.',
+            'Income is counted when it arrives: add regular incomes under Settings > Income, '
+                + 'and anything else with Add income on Home.',
         ),
         submit,
     );

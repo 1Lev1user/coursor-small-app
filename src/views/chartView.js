@@ -1,4 +1,5 @@
 import { monthTotals, subcategoryTotals, incomeBreakdown } from '../budget.js';
+import { usesNewCounting } from '../incomeSources.js';
 import { chartColour, renderDonut } from '../donut.js';
 import { formatEuro } from '../money.js';
 import { monthLabel } from '../months.js';
@@ -61,7 +62,7 @@ function renderLegend(rows, { drillInto, showPlanned } = {}) {
                         : `planned ${formatEuro(rowData.limitCents)}`,
             ));
         } else if (rowData.fromPlan === true) {
-            details.append(element('span', 'muted', 'from Settings → Plan'));
+            details.append(element('span', 'muted', 'from your usual income'));
         }
 
         row.append(
@@ -163,7 +164,9 @@ function renderIncomeOverview(layout, ctx, income) {
     section.append(element(
         'p',
         'muted',
-        'Usual salary from Plan plus extra income you logged. This raises Cash left, not the spend budget.',
+        usesNewCounting(ctx.data, ctx.monthKey)
+            ? 'Income you received, by category. This raises Cash left, not the spend budget.'
+            : 'Usual salary from Plan plus extra income you logged. This raises Cash left, not the spend budget.',
     ));
 
     if (income.totalCents === 0) {
@@ -171,7 +174,7 @@ function renderIncomeOverview(layout, ctx, income) {
         empty.append(element(
             'p',
             '',
-            `No income for ${monthLabel(ctx.monthKey)}. Set usual salary in Settings → Plan or add extra income from Home.`,
+            `No income for ${monthLabel(ctx.monthKey)}. Add income from Home.`,
         ));
         const add = element('button', 'btn btn-primary', 'Add income');
         add.type = 'button';
