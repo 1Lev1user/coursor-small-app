@@ -47,6 +47,25 @@ export function fingerprint(row) {
     return [row.date, amountKey(row), row.direction, rowText(row)].join('|');
 }
 
+// The text part of a stored fingerprint (date|amount|direction|text, optional #n).
+// The text may contain '|', so only the first three are separators. Returns the
+// candidates to compare with a row's text, or [] when the fingerprint is not in that form.
+function storedTexts(fp) {
+    if (typeof fp !== 'string') return [];
+    let start = -1;
+    for (let i = 0; i < 3; i += 1) {
+        start = fp.indexOf('|', start + 1);
+        if (start === -1) return [];
+    }
+    const tail = fp.slice(start + 1);
+    return [tail, tail.replace(/#\d+$/, '')];
+}
+
+// A bank transaction id such as RF2026091400001; running numbers and short references are reused.
+function isStrongReference(ref) {
+    return ref.length >= 12 && !/^\d+$/.test(ref);
+}
+
 export function makeFingerprints(rows) {
     const seen = new Map();
     return rows.map((row) => {
@@ -82,7 +101,8 @@ function isManual(entry) {
 }
 
 /**
- * Exact: same non-empty bankRef or same stored fingerprint.
+ * Exact: same stored fingerprint, or same non-empty bankRef with the same amount and either a date
+ *   within 1 day, equal text, or a strong reference (not purely digits, 12+ characters) within 5 days.
  * Probable: a manual or subscription-logged entry (no importId) with the same date, amount and direction.
  * Weak: any stored entry with the same amount and direction within +-2 days.
  * Each stored entry is claimed by at most one row, so two identical rows against one stored entry
@@ -100,15 +120,20 @@ export function findDuplicates(data, rows) {
         }
         if (item.entry.fingerprint) byFingerprint.set(item.entry.fingerprint, item);
     }
-    // A bank reference only proves a duplicate together with the same amount
-    // and a date within a few days: some banks reuse references.
+    // A bank reference only proves a duplicate together with the same amount and
+    // a close date, the same text or a strong reference: some banks reuse references.
     const byReference = (row) => {
         if (!row.bankRef) return undefined;
         const day = dayNumber(row.date);
+        const text = rowText(row);
         return (byBankRef.get(`${row.direction}|${row.bankRef}`) ?? []).find(({ entry }) => {
             const entryDay = dayNumber(entry.date);
-            return (entry.amountCents === row.amountCents || entry.originalAmountCents === row.originalAmountCents)
-                && day !== null && entryDay !== null && Math.abs(day - entryDay) <= 5;
+            if (!(entry.amountCents === row.amountCents || entry.originalAmountCents === row.originalAmountCents)
+                || day === null || entryDay === null) return false;
+            const gap = Math.abs(day - entryDay);
+            return gap <= 1
+                || (text !== '' && storedTexts(entry.fingerprint).includes(text))
+                || (gap <= 5 && isStrongReference(row.bankRef));
         });
     };
 
@@ -348,7 +373,7 @@ function suggestedRule(rules, row) {
 }
 
 /**
- * Pre-filled decisions for the wizard: rules applied, exact duplicates excluded.
+ * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
@@ -356,7 +381,7 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
         const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
         return {
-            include: duplicates[index]?.level !== 'exact' && duplicates[index]?.level !== 'probable',
+            include: !duplicates[index]?.level,
             kind,
             categoryId: rule?.categoryId || UNCATEGORISED_ID,
             subcategoryId: rule?.subcategoryId ?? '',

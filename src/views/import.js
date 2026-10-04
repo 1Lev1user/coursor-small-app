@@ -51,10 +51,10 @@ const SKIP_REASONS = {
     'unknown direction': 'Direction not recognised',
 };
 
-const DUPLICATE_GROUPS = [
+export const DUPLICATE_GROUPS = [
     ['exact', 'Exact', 'Already imported. The bank reference or every detail matches.'],
-    ['probable', 'Probable', 'Same date and amount as an entry you added yourself.'],
-    ['weak', 'Weak', 'Same amount within 2 days of a saved entry.'],
+    ['probable', 'Possible duplicate: added by you', 'Same date and amount as an entry you added yourself. Not imported unless you tick it.'],
+    ['weak', 'Possible duplicate: similar amount', 'Same amount within 2 days of a saved entry. Not imported unless you tick it.'],
 ];
 
 // ---------------------------------------------------------------------------

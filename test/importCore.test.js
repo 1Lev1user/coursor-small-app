@@ -572,7 +572,7 @@ test('a reused bank reference is not a duplicate when the amount or date differs
     assert.equal(findDuplicates(data, [sameAgain])[0].level, 'exact');
 });
 
-test('probable duplicates of manual entries start excluded, weak ones included', () => {
+test('probable and weak duplicates start excluded', () => {
     const data = defaultData();
     data.expenses = [
         { id: 'm1', categoryId: 'random', subcategoryId: '', amountCents: 320, note: 'Coffee', date: '2026-09-10' },
@@ -584,7 +584,7 @@ test('probable duplicates of manual entries start excluded, weak ones included',
     ];
     const duplicates = findDuplicates(data, rows);
     assert.deepEqual(duplicates.map(({ level }) => level), ['probable', 'weak']);
-    assert.deepEqual(defaultDecisions(data, rows, duplicates).map(({ include }) => include), [false, true]);
+    assert.deepEqual(defaultDecisions(data, rows, duplicates).map(({ include }) => include), [false, false]);
 });
 
 test('undo removes month plans the import created when the month is empty again', () => {
