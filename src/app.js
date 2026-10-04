@@ -15,6 +15,7 @@ import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
 import { render as renderSetup } from './views/setup.js';
+import { render as renderMoneySetup } from './views/moneySetup.js';
 import { render as renderImport } from './views/import.js';
 
 const TOAST_MS = 2000;
@@ -527,6 +528,17 @@ function render() {
         titleElement.textContent = 'Setup';
         document.title = 'Setup - My Expenses';
         renderSetup(viewElement, context());
+        return;
+    }
+
+    if (app.data.settings.balanceStart === null) {
+        removeDueOverlay();
+        resetDuePrompt();
+        document.body.classList.add('is-setup');
+        tabbarElement.hidden = true;
+        titleElement.textContent = 'Money setup';
+        document.title = 'Money setup - My Expenses';
+        renderMoneySetup(viewElement, context());
         return;
     }
 
