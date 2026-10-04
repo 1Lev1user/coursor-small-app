@@ -1437,6 +1437,34 @@ body.is-setup .tabbar {
     color: var(--text);
 }
 
+.home-money-figure {
+    width: 100%;
+    border: 0;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    --focus: var(--block-ink);
+}
+
+.home-money-figure.is-over {
+    --focus: var(--danger);
+}
+
+.home-money-figure:focus-visible {
+    outline-offset: -5px;
+}
+
+.home-money-line,
+.home-budget {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.home-budget.is-over {
+    color: var(--danger);
+    font-weight: 600;
+}
+
 .added-box {
     background: var(--surface);
 }

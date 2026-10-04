@@ -31,6 +31,8 @@ import { openSettingsSection } from './more.js';
 import { doExportBackup } from './settings/backup.js';
 import { renderGoalCard } from './goalCard.js';
 import { renderPaydayReminders } from './paydayReminder.js';
+import { renderMoneyBlock } from './homeMoney.js';
+import { moneyNow } from '../balance.js';
 import { entryAmountText } from './entryDisplay.js';
 import {
     amountErrorText,
@@ -644,6 +646,14 @@ export function homeFigureModel(totals) {
     };
 }
 
+/** The muted month-budget line under Money now. */
+export function homeBudgetText(model) {
+    const amount = formatEuro(model.valueCents);
+    return model.over
+        ? `Month budget: ${model.label} ${amount} · ${model.sub}`
+        : `Month budget: ${amount} ${model.label} · ${model.sub}`;
+}
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const monthKey = currentMonthKey();
@@ -652,7 +662,8 @@ function renderHome(root, ctx) {
     const monthName = monthLabel(monthKey).split(' ')[0];
     const heading = userName === '' ? monthLabel(monthKey) : `${userName}\u2019s ${monthName}`;
 
-    const { over, label, valueCents, sub } = homeFigureModel(totals);
+    const figureModel = homeFigureModel(totals);
+    const { over, label, valueCents, sub } = figureModel;
     const figureText = formatEuro(valueCents);
     const figure = element('section', over ? 'home-figure is-over' : 'home-figure');
     figure.setAttribute('aria-labelledby', 'home-figure-label');
@@ -681,7 +692,12 @@ function renderHome(root, ctx) {
     const actions = element('div', 'home-actions');
     actions.append(expenseBtn, incomeBtn);
 
-    layout.append(element('h2', 'home-title', heading), figure);
+    let figureArea = [figure];
+    if (moneyNow(ctx.data) !== null) {
+        const budgetClass = over ? 'muted home-budget is-over' : 'muted home-budget';
+        figureArea = [renderMoneyBlock(ctx), element('p', budgetClass, homeBudgetText(figureModel))];
+    }
+    layout.append(element('h2', 'home-title', heading), ...figureArea);
 
     const paydayReminders = renderPaydayReminders(ctx);
     if (paydayReminders !== null) {
