@@ -94,9 +94,12 @@
     --danger: #A3302A;
     --danger-soft: #F6E4E1;
     --danger-line: #D9A39C;
+    --warn-soft: #F3E6CC;
+    --warn-ink: #7A4E00;
+    --warn-line: #C9A66B;
     --ok: #1F5C45;
     --border: #D3DBCF;
-    --field-line: #7A887F;
+    --field-line: #6B7A70;
     --track: #C9D3C6;
     --btn-off: #D3DBCF;
     --btn-off-ink: #56635B;
@@ -157,12 +160,15 @@
         --accent: #86CBA8;
         --accent-hover: #9FD8BB;
         --accent-ink: #0E1A14;
-        --block: #1F4E3C;
+        --block: #25604A;
         --block-ink: #F2F7F4;
         --block-soft: #BCD8C9;
         --danger: #F0918A;
         --danger-soft: #3A2321;
         --danger-line: #7A413B;
+        --warn-soft: #33291A;
+        --warn-ink: #E2B666;
+        --warn-line: #6E5630;
         --ok: #86CBA8;
         --border: #2A352F;
         --field-line: #75847B;
@@ -1723,22 +1729,21 @@ body.is-setup .tabbar {
     gap: var(--s3);
     padding: var(--s3) var(--s4);
     border-radius: var(--radius-sm);
-    background: var(--surface);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-line);
 }
 
 .home-backup-title {
     font-size: 0.9375rem;
-    color: var(--muted);
+    color: var(--warn-ink);
 }
 
 .home-backup.is-strong {
     padding: var(--s4);
-    background: var(--danger-soft);
-    border: 1px solid var(--danger-line);
 }
 
 .home-backup.is-strong .home-backup-title {
-    color: var(--danger);
+    color: var(--warn-ink);
     font-weight: 600;
 }
 
