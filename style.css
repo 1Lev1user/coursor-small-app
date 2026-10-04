@@ -100,6 +100,15 @@
     --track: #C9D3C6;
     --btn-off: #D3DBCF;
     --btn-off-ink: #56635B;
+    --btn-bg: #1F5C45;
+    --btn-bg-hover: #174A37;
+    --btn-bg-press: #133D2E;
+    --btn-ink: #FFFFFF;
+    --btn-2: #DCE7DF;
+    --btn-2-ink: #1F5C45;
+    --btn-2-press: #CBDCD0;
+    --btn-2-on-bg: #F4F7F1;
+    --danger-press: #872520;
     --focus: var(--accent);
     --savings: #9A6408;
     --savings-ink: #8A5A00;
@@ -123,6 +132,8 @@
     --shadow: none;
     --ease: cubic-bezier(0.22, 1, 0.36, 1);
     --dur: 240ms;
+    --dur-press: 90ms;
+    --dur-release: 160ms;
 
     --s1: 0.25rem;
     --s2: 0.5rem;
@@ -158,6 +169,15 @@
         --track: #2E3A33;
         --btn-off: #2E3A33;
         --btn-off-ink: #7F8C84;
+        --btn-bg: #2E7D5F;
+        --btn-bg-hover: #2A7556;
+        --btn-bg-press: #256A4E;
+        --btn-ink: #FFFFFF;
+        --btn-2: #22362C;
+        --btn-2-ink: #9FD8BB;
+        --btn-2-press: #2B4436;
+        --btn-2-on-bg: #22362C;
+        --danger-press: #E2776F;
         --savings: #D6A04A;
         --savings-ink: #E2B666;
         --scrim: rgba(0, 0, 0, 0.6);
@@ -851,27 +871,27 @@ body.is-setup .tabbar {
     font-weight: 600;
 }
 
-/* Buttons */
+/* Buttons: tinted blocks. Primary is solid pine, secondary a pine tint, red only in a confirm step. */
 
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--s2);
-    min-height: var(--tap);
-    padding: var(--s3) var(--s4);
+    min-height: 48px;
+    padding: var(--s2) 20px;
     font: inherit;
     font-weight: 600;
-    color: var(--text);
-    background: var(--surface-2);
-    border: 1px solid transparent;
+    color: var(--btn-2-ink);
+    background: var(--btn-2);
+    border: 0;
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
 
 .btn-primary {
-    color: var(--accent-ink);
-    background: var(--accent);
+    color: var(--btn-ink);
+    background: var(--btn-bg);
 }
 
 .btn-danger {
@@ -879,28 +899,71 @@ body.is-setup .tabbar {
     background: var(--danger);
 }
 
-.btn-ghost {
-    color: var(--accent);
-    background: none;
+/* Edit and Delete chips: small, with a 44 px tap area drawn by ::after. */
+.btn-ghost,
+.btn-ghost-danger {
+    position: relative;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 0.9375rem;
+}
+
+.btn-ghost-danger {
+    color: var(--danger);
+    background: var(--danger-soft);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.btn-ghost::after,
+.btn-ghost-danger::after {
+    content: '';
+    position: absolute;
+    inset: -4px -2px;
+}
+
+/* A secondary placed straight on the sage page needs the lighter tint to read as a button. */
+.view > .btn:where(:not(.btn-primary):not(.btn-danger):not(.btn-ghost-danger)),
+.home-actions .btn:where(:not(.btn-primary):not(.btn-danger):not(.btn-ghost-danger)) {
+    background: var(--btn-2-on-bg);
 }
 
 @media (hover: hover) and (pointer: fine) {
     .btn:hover {
-        background: var(--track);
+        background: var(--btn-2-press);
     }
 
     .btn-primary:hover {
-        background: var(--accent-hover);
+        background: var(--btn-bg-hover);
     }
 
     .btn-danger:hover {
-        background: var(--danger);
-        filter: brightness(0.92);
+        background: var(--danger-press);
     }
 
     .btn-ghost:hover {
-        background: var(--surface-2);
+        background: var(--btn-2-press);
     }
+
+    .btn-ghost-danger:hover {
+        background: color-mix(in srgb, var(--danger) 16%, transparent);
+    }
+}
+
+.btn:active {
+    background: var(--btn-2-press);
+}
+
+.btn-primary:active {
+    background: var(--btn-bg-press);
+}
+
+.btn-danger:active {
+    background: var(--danger-press);
+}
+
+.btn-ghost-danger:active {
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -915,8 +978,17 @@ body.is-setup .tabbar {
             transform var(--dur) var(--ease);
     }
 
+    .btn,
+    .add-plus-btn {
+        transition-duration: var(--dur-release);
+    }
+
     .btn:active,
-    .add-plus-btn:active,
+    .add-plus-btn:active {
+        transform: scale(0.97);
+        transition-duration: var(--dur-press);
+    }
+
     .unit-toggle:active {
         transform: scale(0.98);
     }
@@ -1118,18 +1190,6 @@ body.is-setup .tabbar {
     gap: var(--s2);
 }
 
-.btn-ghost-danger {
-    color: var(--danger);
-    background: none;
-    border-color: transparent;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .btn-ghost-danger:hover {
-        background: var(--danger-soft);
-    }
-}
-
 .confirm-box {
     display: flex;
     flex-wrap: wrap;
@@ -1271,8 +1331,8 @@ body.is-setup .tabbar {
     padding: var(--s2);
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--accent);
+    background: var(--btn-2);
+    color: var(--btn-2-ink);
     font: inherit;
     font-size: 1.35rem;
     font-weight: 600;
@@ -1281,8 +1341,12 @@ body.is-setup .tabbar {
 
 @media (hover: hover) and (pointer: fine) {
     .add-plus-btn:hover {
-        background: var(--track);
+        background: var(--btn-2-press);
     }
+}
+
+.add-plus-btn:active {
+    background: var(--btn-2-press);
 }
 
 .home-title {
