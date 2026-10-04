@@ -6,7 +6,7 @@ import {
     goalProgress,
     updateGoal,
 } from '../../goals.js';
-import { formatEuro, formatPlain, parseAmount } from '../../money.js';
+import { amountProblem, formatEuro, formatPlain, parseAmount } from '../../money.js';
 import { monthLabel, todayISO } from '../../months.js';
 import {
     actionButton,
@@ -172,7 +172,7 @@ function renderAddMoneyForm(ctx, goal) {
         const cents = parseAmount(draft.amount);
         if (cents === null) {
             draft.errorField = 'amount';
-            draft.error = 'Enter a valid amount greater than zero.';
+            draft.error = amountProblem(draft.amount);
             state.focusId = amount.control.id;
             ctx.render();
             return;
@@ -223,7 +223,7 @@ function readGoalFields(nameField, targetField, deadlineField) {
     }
     const targetCents = parseAmount(targetField.control.value);
     if (targetCents === null) {
-        return { ok: false, errorField: 'target', error: 'Enter a valid amount greater than zero.' };
+        return { ok: false, errorField: 'target', error: amountProblem(targetField.control.value) };
     }
     return { ok: true, name, targetCents, deadline: deadlineField.control.value };
 }

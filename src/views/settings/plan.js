@@ -1,4 +1,4 @@
-import { parseAmount, formatEuro } from '../../money.js';
+import { amountProblem, parseAmount, formatEuro } from '../../money.js';
 import { refreshCurrentMonthPlan, syncCategoryPlanFields } from '../../budget.js';
 import {
     element,
@@ -83,7 +83,7 @@ function savePlan(ctx, budgetField, incomeField) {
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
         planDraft.errorField = 'budget';
-        planDraft.error = 'Enter a valid amount of zero or more.';
+        planDraft.error = amountProblem(planDraft.budget, { allowZero: true });
         setError(budgetField, planDraft.error);
         budgetField.control.focus();
         return;
@@ -92,7 +92,7 @@ function savePlan(ctx, budgetField, incomeField) {
     const incomeCents = parseAmount(planDraft.income, { allowZero: true });
     if (incomeCents === null) {
         planDraft.errorField = 'income';
-        planDraft.error = 'Enter a valid amount of zero or more.';
+        planDraft.error = amountProblem(planDraft.income, { allowZero: true });
         setError(incomeField, planDraft.error);
         incomeField.control.focus();
         return;
