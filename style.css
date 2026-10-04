@@ -906,7 +906,6 @@ body.is-setup .tabbar {
 @media (prefers-reduced-motion: no-preference) {
     .btn,
     .tab,
-    .more-jump,
     .choice,
     .add-plus-btn,
     .unit-toggle {
@@ -978,22 +977,59 @@ body.is-setup .tabbar {
     width: 100%;
 }
 
-.more-jumps {
+.settings-groups {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--s2);
 }
 
-.more-jump {
+.settings-group-title {
+    font: inherit;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: var(--s3);
+    width: 100%;
     min-height: var(--tap);
-    padding: var(--s2) var(--s3);
-    border-radius: var(--radius-sm);
+    padding: var(--s3) var(--s4);
     background: var(--surface);
     color: var(--text);
-    text-decoration: none;
+    border: 0;
+    border-radius: var(--radius);
+    font: inherit;
+    text-align: left;
+}
+
+.settings-row-summary {
+    color: var(--muted);
     font-size: 0.875rem;
-    display: inline-flex;
-    align-items: center;
+}
+
+.settings-row-summary.is-warning {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.settings-row-chevron {
+    display: inline-block;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    color: var(--muted);
+}
+
+.settings-row[aria-expanded="true"] .settings-row-chevron {
+    transform: rotate(90deg);
+}
+
+.settings-group-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+    margin-top: var(--s2);
 }
 
 #more-plan,
@@ -1005,7 +1041,9 @@ body.is-setup .tabbar {
 #more-rules,
 #more-layouts,
 #more-backup,
-#more-rights {
+#more-rights,
+#more-profile,
+.settings-group {
     scroll-margin-top: calc(4rem + env(safe-area-inset-top));
     scroll-margin-bottom: calc(var(--tabbar-height) + var(--s4) + env(safe-area-inset-bottom));
 }
@@ -1437,8 +1475,7 @@ body.is-setup .tabbar {
 }
 
 .setup-form .btn,
-.plan-form .btn,
-.add-extra-income-form .btn {
+.plan-form .btn {
     width: 100%;
     min-height: var(--tap);
 }
@@ -1463,11 +1500,6 @@ body.is-setup .tabbar {
 .income-entry-list {
     border-top: 1px solid var(--border);
     padding-top: var(--s2);
-}
-
-.add-extra-income-form {
-    padding-top: var(--s4);
-    border-top: 1px solid var(--border);
 }
 
 .subscription-list {

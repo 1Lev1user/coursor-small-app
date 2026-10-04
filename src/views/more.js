@@ -1,7 +1,7 @@
 import { resolvePlan } from '../budget.js';
 import { formatEuro } from '../money.js';
 import { todayISO } from '../months.js';
-import { element, state } from './settings/shared.js';
+import { closeTransientUi, element, state } from './settings/shared.js';
 import { renderPlanSection, renderProfileSection } from './settings/plan.js';
 import { renderIncomeSection } from './settings/income.js';
 import { renderSubscriptionsSection } from './settings/subscriptions.js';
@@ -152,53 +152,110 @@ export function groupSummary(groupId, data, now = new Date()) {
 }
 
 let pendingScrollId = null;
+let openGroupId = null;
 
 export function openSettingsSection(sectionId) {
     pendingScrollId = sectionId;
+    openGroupId = groupForSection(sectionId);
+}
+
+/** Section titles become h3 under the group's h2; hidden ones stay in the DOM as focus targets. */
+function convertHeadings(node, visible) {
+    for (const old of node.querySelectorAll('h2')) {
+        const heading = element('h3', old.className, old.textContent);
+        if (old.id !== '') {
+            heading.id = old.id;
+        }
+        if (old.hasAttribute('tabindex')) {
+            heading.tabIndex = old.tabIndex;
+        }
+        if (!visible) {
+            heading.classList.add('visually-hidden');
+        }
+        old.replaceWith(heading);
+    }
+}
+
+function renderGroupHeader(ctx, group, summary, isOpen) {
+    const rowId = `settings-row-${group.id}`;
+    const row = element('button', 'settings-row');
+    row.type = 'button';
+    row.id = rowId;
+    row.setAttribute('aria-expanded', String(isOpen));
+    row.setAttribute('aria-controls', `settings-body-${group.id}`);
+    row.append(element('span', 'settings-row-title', group.title));
+    if (summary.text !== '') {
+        row.append(element(
+            'span',
+            summary.warn ? 'settings-row-summary is-warning' : 'settings-row-summary',
+            summary.text,
+        ));
+    }
+    const chevron = element('span', 'settings-row-chevron', '›');
+    chevron.setAttribute('aria-hidden', 'true');
+    row.append(chevron);
+    row.addEventListener('click', () => {
+        openGroupId = isOpen ? null : group.id;
+        closeTransientUi();
+        state.focusId = rowId;
+        if (!isOpen) {
+            pendingScrollId = `settings-group-${group.id}`;
+        }
+        ctx.render();
+    });
+    const title = element('h2', 'settings-group-title');
+    title.append(row);
+    return title;
+}
+
+function renderGroupBody(ctx, group, activeIds, plan) {
+    const body = element('div', 'settings-group-body');
+    body.id = `settings-body-${group.id}`;
+    body.setAttribute('role', 'region');
+    body.setAttribute('aria-labelledby', `settings-row-${group.id}`);
+    if (group.id === 'backup') {
+        const reminder = renderBackupReminder(ctx);
+        if (reminder !== null) {
+            convertHeadings(reminder, false);
+            body.append(reminder);
+        }
+    }
+    const visibleIds = visibleTitleIds(group, activeIds);
+    for (const id of activeIds) {
+        const section = SECTION_RENDERERS[id](ctx, plan);
+        convertHeadings(section, visibleIds.includes(id));
+        body.append(section);
+    }
+    return body;
 }
 
 export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
+    const shown = SETTINGS_GROUPS
+        .map((group) => ({ group, activeIds: activeSectionIds(group) }))
+        .filter(({ activeIds }) => activeIds.length > 0);
+    if (!shown.some(({ group }) => group.id === openGroupId)) {
+        openGroupId = null;
+    }
+
+    const groups = element('div', 'settings-groups');
+    for (const { group, activeIds } of shown) {
+        const isOpen = group.id === openGroupId;
+        const wrapper = element('div', 'settings-group');
+        wrapper.id = `settings-group-${group.id}`;
+        wrapper.append(renderGroupHeader(
+            ctx,
+            group,
+            groupSummary(group.id, ctx.data),
+            isOpen,
+        ));
+        if (isOpen) {
+            wrapper.append(renderGroupBody(ctx, group, activeIds, plan));
+        }
+        groups.append(wrapper);
+    }
     const layout = element('div', 'stack more-page');
-
-    const jumps = element('nav', 'more-jumps');
-    jumps.setAttribute('aria-label', 'Settings sections');
-    for (const [id, label] of [
-        ['more-plan', 'Plan'],
-        ['more-income', 'Income'],
-        ['more-subscriptions', 'Subscriptions'],
-        ['more-categories', 'Categories'],
-        ['more-goals', 'Goals'],
-        ['more-import', 'Import'],
-        ['more-rules', 'Rules'],
-        ['more-backup', 'Backup'],
-        ['more-rights', 'Rights'],
-    ]) {
-        const link = element('a', 'more-jump', label);
-        link.href = `#${id}`;
-        jumps.append(link);
-    }
-    layout.append(jumps);
-
-    const reminder = renderBackupReminder(ctx);
-    layout.append(
-        renderPlanSection(ctx),
-        renderProfileSection(ctx),
-        renderIncomeSection(ctx),
-        renderSubscriptionsSection(ctx, plan),
-        renderCategoriesSection(ctx, plan),
-        renderGoalsSection(ctx),
-        renderImportSection(ctx),
-        renderRulesSection(ctx),
-        renderLayoutsSection(ctx),
-    );
-    if (reminder !== null) {
-        layout.append(reminder);
-    }
-    layout.append(
-        renderBackupSection(ctx),
-        renderRightsSection(),
-    );
+    layout.append(groups);
     root.append(layout);
 
     if (pendingScrollId !== null) {
@@ -209,8 +266,9 @@ export function render(root, ctx) {
 
     if (state.focusId !== null) {
         const target = document.getElementById(state.focusId);
+        const isRow = state.focusId.startsWith('settings-row-');
         state.focusId = null;
-        target?.focus();
+        target?.focus(isRow ? { preventScroll: true } : undefined);
         target?.select?.();
     }
 }
