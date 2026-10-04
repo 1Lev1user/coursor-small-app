@@ -1195,6 +1195,25 @@ body.is-setup .tabbar {
     gap: var(--s2);
 }
 
+.category-name-row {
+    margin: 0;
+    font: inherit;
+}
+
+.more-category-toggle {
+    padding-block: var(--s2);
+    padding-inline: 0;
+    background: transparent;
+}
+
+.more-category-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s3);
+    padding-bottom: var(--s2);
+}
+
 .confirm-box {
     display: flex;
     flex-wrap: wrap;
@@ -1257,10 +1276,20 @@ body.is-setup .tabbar {
     border-top: 0;
 }
 
+.subcategory-item {
+    flex-wrap: nowrap;
+}
+
 .subcategory-name {
-    flex: 1 1 8rem;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: 0.9375rem;
     font-weight: 600;
+}
+
+.subcategory-item > .btn {
+    flex: none;
 }
 
 .add-sub-form {

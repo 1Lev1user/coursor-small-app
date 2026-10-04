@@ -18,6 +18,7 @@ export const state = {
     confirmSubKey: null,
     renameCategoryId: null,
     renameSubKey: null,
+    openCategoryId: null,
 
     confirmIncomeCategoryId: null,
     renameIncomeCategoryId: null,
