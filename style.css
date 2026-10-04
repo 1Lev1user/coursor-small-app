@@ -2474,6 +2474,66 @@ body.is-setup .tabbar {
     padding-left: var(--s4);
 }
 
+.imp-panel {
+    gap: var(--s2);
+    min-width: 0;
+    padding: var(--s3);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+}
+
+.imp-panel-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    list-style: none;
+}
+
+.imp-panel-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--s2);
+    font-size: 0.875rem;
+}
+
+.imp-panel-date,
+.imp-panel-amount,
+.imp-panel-total dd {
+    font-variant-numeric: tabular-nums;
+}
+
+.imp-panel-text,
+.imp-panel-counts {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.imp-panel-amount {
+    font-weight: 600;
+    text-align: right;
+}
+
+.imp-panel-totals {
+    display: flex;
+    flex-direction: column;
+}
+
+.imp-panel-total {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding-block: var(--s1);
+}
+
+.imp-panel-total dt {
+    color: var(--muted);
+}
+
+.imp-panel-total dd {
+    font-weight: 600;
+    text-align: right;
+}
+
 .imp-note-row {
     display: flex;
     flex-wrap: wrap;

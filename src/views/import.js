@@ -253,6 +253,60 @@ export function dateQuestion(sample) {
     return `Is ${sample} the ${ordinal(dd)} of ${MONTH_NAMES[dm - 1]} or ${MONTH_NAMES[mm - 1]} ${ordinal(md)}?`;
 }
 
+/** What was actually read, for a person to compare with the bank's own figures. */
+export function checkSummary(rows, skipped, { fileLines = null, tableRows = null } = {}) {
+    let totalInCents = 0;
+    let totalOutCents = 0;
+    let foreignCount = 0;
+    let inCount = 0;
+    for (const row of rows) {
+        if (row.direction === 'in') inCount += 1;
+        if (row.amountCents === null) foreignCount += 1;
+        if (!Number.isInteger(row.amountCents)) continue;
+        if (row.direction === 'in') totalInCents += row.amountCents;
+        else totalOutCents += row.amountCents;
+    }
+    const mismatch = Number.isFinite(fileLines) && Number.isFinite(tableRows) && fileLines !== tableRows;
+    return {
+        read: rows.length,
+        skippedCount: skipped.length,
+        totalInCents,
+        totalOutCents,
+        foreignCount,
+        inCount,
+        sample: rows.length > 4 ? [...rows.slice(0, 3), rows[rows.length - 1]] : rows,
+        mostlyIn: rows.length >= 5 && inCount * 10 >= rows.length * 9,
+        lineMismatch: mismatch ? { fileLines, tableRows } : null,
+    };
+}
+
+/** Where the check panel is drawn: 'columns', 'saved' (layout remembered), 'file' (camt, FiDAViSTA) or null. */
+export function checkPanelPlacement(step, { tabular, savedLayoutName }) {
+    if (step === 'columns') return 'columns';
+    if (step !== 'duplicates') return null;
+    if (!tabular) return 'file';
+    return savedLayoutName !== '' ? 'saved' : null;
+}
+
+export function checkWarnings(summary, placement) {
+    const warnings = [];
+    const counts = `(${summary.inCount} of ${summary.read})`;
+    if (summary.mostlyIn && placement === 'columns') {
+        warnings.push(`Almost every row is money in ${counts}. If your bank shows spending as positive numbers, check the Direction column.`);
+    } else if (summary.mostlyIn && placement === 'saved') {
+        warnings.push(`Almost every row is money in ${counts}. The saved columns may no longer fit this file: use Change columns above and check the Direction column.`);
+    }
+    if (summary.lineMismatch) {
+        const { fileLines, tableRows } = summary.lineMismatch;
+        warnings.push(`The file has ${fileLines} lines but ${tableRows} rows were read. Some lines may have been joined together; look for a stray quote mark.`);
+    }
+    return warnings;
+}
+
+export function stepCountText(index, total, formatKnown) {
+    return !formatKnown && index === 0 ? 'Step 1' : `Step ${index + 1} of ${total}`;
+}
+
 function columnLetter(index) {
     let value = index + 1;
     let letters = '';
@@ -287,6 +341,7 @@ function freshState() {
         fileName: '',
         format: '',
         encoding: '',
+        fileLines: null,
         table: null,
         layout: null,
         askDate: false,
@@ -461,6 +516,10 @@ const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT94
 const OFX_FILE = 'This looks like an OFX/QFX statement. The app cannot read OFX/QFX yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
 
+function countLines(text) {
+    return text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '').length;
+}
+
 export async function readStatementFile(file) {
     if (file.size > MAX_FILE_BYTES) {
         return { ok: false, reason: 'This file is larger than 10 MB. Export a shorter period.' };
@@ -486,7 +545,7 @@ export async function readStatementFile(file) {
     }
     if (format === 'csv') {
         const { delimiter, rows } = parseDelimited(text);
-        return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding };
+        return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding, lineCount: countLines(text) };
     }
     return { ok: false, reason: UNKNOWN_FILE };
 }
@@ -530,13 +589,14 @@ function loadPaste(ctx) {
     }
     state.loadError = '';
     state.fileName = 'Pasted text';
-    acceptLoaded(ctx, { ok: true, kind: 'table', format: 'paste', rows, delimiter, encoding: '' });
+    acceptLoaded(ctx, { ok: true, kind: 'table', format: 'paste', rows, delimiter, encoding: '', lineCount: countLines(text) });
 }
 
 function acceptLoaded(ctx, result) {
     state.format = result.format;
     state.encoding = result.encoding ?? '';
     state.savedLayoutName = '';
+    state.fileLines = result.lineCount ?? null;
     if (result.kind === 'statement') {
         state.table = null;
         state.layout = null;
@@ -565,7 +625,14 @@ function startTable(ctx, result) {
     const columns = { ...guess.columns, eurAmount: -1 };
     const signature = headerSignature(header);
 
-    state.table = { rows, headerRow, header, delimiter: result.delimiter ?? '', signature };
+    state.table = {
+        rows,
+        parsedRows: result.rows.length,
+        headerRow,
+        header,
+        delimiter: result.delimiter ?? '',
+        signature,
+    };
     state.layout = {
         mode: columns.debit >= 0 || columns.credit >= 0 ? 'split' : 'single',
         columns,
@@ -668,7 +735,7 @@ function stepHeader(title) {
     const index = list.indexOf(state.step);
     if (index >= 0) {
         const indicator = element('p', 'imp-steps');
-        indicator.append(element('span', 'imp-steps-count', `Step ${index + 1} of ${list.length}`));
+        indicator.append(element('span', 'imp-steps-count', stepCountText(index, list.length, state.format !== '')));
         const dots = element('span', 'imp-dots');
         dots.setAttribute('aria-hidden', 'true');
         list.forEach((step, dotIndex) => {
@@ -824,6 +891,48 @@ function renderSkipped(skipped) {
     return box;
 }
 
+/** Bank text is untrusted: everything here goes in through textContent. */
+function renderCheckPanel(summary, placement) {
+    const panel = element('section', 'stack imp-panel');
+    panel.setAttribute('aria-labelledby', 'imp-panel-title');
+    const title = element('h3', 'category-name', 'Check what was read');
+    title.id = 'imp-panel-title';
+    panel.append(title);
+
+    const list = element('ul', 'imp-panel-rows');
+    for (const row of summary.sample) {
+        const item = element('li', 'imp-panel-row');
+        item.append(
+            element('span', 'imp-panel-date', row.date),
+            element('span', 'imp-panel-text', describeRow(row)),
+            element('span', 'imp-panel-amount', amountText(row)),
+        );
+        list.append(item);
+    }
+    panel.append(list);
+
+    const totals = element('dl', 'imp-panel-totals');
+    for (const [label, cents] of [['Money in', summary.totalInCents], ['Money out', summary.totalOutCents]]) {
+        const pair = element('div', 'imp-panel-total');
+        pair.append(element('dt', '', label), element('dd', '', formatEuro(cents)));
+        totals.append(pair);
+    }
+    panel.append(totals);
+
+    panel.append(element('p', 'imp-panel-counts', `Rows read: ${summary.read}, skipped: ${summary.skippedCount}`));
+    if (summary.foreignCount > 0) {
+        panel.append(element(
+            'p',
+            'muted',
+            `${plural(summary.foreignCount, 'row is', 'rows are')} in another currency and not in these totals.`,
+        ));
+    }
+    for (const warning of checkWarnings(summary, placement)) {
+        panel.append(element('p', 'imp-strong', warning));
+    }
+    return panel;
+}
+
 function renderColumns(ctx) {
     const card = element('section', 'card stack');
     card.append(stepHeader('Check the columns'));
@@ -921,6 +1030,13 @@ function renderColumns(ctx) {
         if (parsed.skipped.length > 0) status.append(renderSkipped(parsed.skipped));
     }
     card.append(status);
+    if (problem === '' && parsed.rows.length > 0) {
+        const summary = checkSummary(parsed.rows, parsed.skipped, {
+            fileLines: state.fileLines,
+            tableRows: state.table.parsedRows,
+        });
+        card.append(renderCheckPanel(summary, 'columns'));
+    }
 
     if (state.table.signature !== '') {
         const nameInput = document.createElement('input');
@@ -980,6 +1096,14 @@ function renderDuplicates(ctx) {
             button('btn btn-ghost imp-link', 'Change columns', () => goStep(ctx, 'columns')),
         );
         card.append(note);
+    }
+    const placement = checkPanelPlacement('duplicates', { tabular: isTabular(), savedLayoutName: state.savedLayoutName });
+    if (placement !== null && state.rows.length > 0) {
+        const summary = checkSummary(state.rows, state.skipped, {
+            fileLines: state.fileLines,
+            tableRows: state.table?.parsedRows ?? null,
+        });
+        card.append(renderCheckPanel(summary, placement));
     }
     card.append(element('p', '', `${state.fileName}: ${plural(state.rows.length, 'transaction', 'transactions')}.`));
     for (const warning of state.warnings) {
