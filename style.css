@@ -883,7 +883,7 @@ body.is-setup .tabbar {
     font: inherit;
     font-weight: 600;
     color: var(--btn-2-ink);
-    background: var(--btn-2);
+    background: var(--btn-2-on-bg);
     border: 0;
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -922,10 +922,9 @@ body.is-setup .tabbar {
     inset: -4px -2px;
 }
 
-/* A secondary placed straight on the sage page needs the lighter tint to read as a button. */
-.view > .btn:where(:not(.btn-primary):not(.btn-danger):not(.btn-ghost-danger)),
-.home-actions .btn:where(:not(.btn-primary):not(.btn-danger):not(.btn-ghost-danger)) {
-    background: var(--btn-2-on-bg);
+/* The base secondary uses the lighter tint so it reads on the sage page, and inside a card it uses the card tint. */
+.card .btn:where(:not(.btn-primary):not(.btn-danger):not(.btn-ghost-danger)) {
+    background: var(--btn-2);
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -158,3 +158,15 @@ test('every button :hover sits inside the hover media query', () => {
         }
     }
 });
+
+test('secondary: lighter tint on the page, the card tint inside a card', () => {
+    const base = rulesFor('.btn').filter((r) => r.inside.length === 0);
+    assert.ok(base.some((r) => /background:\s*var\(--btn-2-on-bg\)/.test(r.body)), 'base .btn must use --btn-2-on-bg');
+    const inCard = rules.filter((r) => r.selector.startsWith('.card .btn'));
+    assert.ok(inCard.length > 0, '.card .btn rule missing');
+    assert.ok(inCard.some((r) => /background:\s*var\(--btn-2\)/.test(r.body)), '.card .btn must use --btn-2');
+});
+
+test('no selector relies on a .view container class', () => {
+    assert.ok(!rules.some((r) => r.selector.includes('.view >')), 'the page container has no .view class');
+});
