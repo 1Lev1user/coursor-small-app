@@ -5,6 +5,7 @@ import { formatEuro, formatPlain } from '../money.js';
 import {
     addMonths,
     isInMonth,
+    isMonthFinished,
     monthKeyOf,
     monthLabel,
     shortDate,
@@ -988,19 +989,21 @@ function renderEntries(root, ctx, entries, label) {
 
 export function render(root, ctx) {
     const totals = monthTotals(ctx.data, ctx.monthKey);
-    const previousMonthKey = addMonths(ctx.monthKey, -1);
-    const previousTotals = monthTotals(ctx.data, previousMonthKey);
     const label = monthLabel(ctx.monthKey);
     const entries = monthEntries(ctx.data, ctx.monthKey);
 
     const layout = element('div', 'stack');
     renderMonthNav(layout, ctx);
     renderSummary(layout, totals, monthMoneyLines(ctx.data, ctx.monthKey, new Date()));
-    layout.append(element('p', 'muted month-comparison', comparisonText(
-        totals,
-        previousTotals,
-        previousMonthKey,
-    )));
+    if (isMonthFinished(ctx.monthKey, new Date())) {
+        const previousMonthKey = addMonths(ctx.monthKey, -1);
+        const previousTotals = monthTotals(ctx.data, previousMonthKey);
+        layout.append(element('p', 'muted month-comparison', comparisonText(
+            totals,
+            previousTotals,
+            previousMonthKey,
+        )));
+    }
     renderCategories(layout, totals.categories, totals.budgetCents);
     layout.append(renderSearchPanel(ctx));
     renderEntries(layout, ctx, entries, label);
