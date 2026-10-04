@@ -32,7 +32,7 @@
 | Design | C-070 to C-077 (8) | Hints vanish on focus, design bugs fixed, tinted-block buttons, palette fixes, Golos Text + Literata, main and quiet motion |
 | Guide and release | C-013, C-014, C-026 (3) | Screenshots and Word guide of 3.0, release 3.0.0 on v1 |
 
-55 cards (on 2026-10-04 C-041 was split into C-041 and C-078, and C-035 into C-035, C-079 and C-080). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
+57 cards (on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, and C-034 into C-034, C-081 and C-082). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
 
 ## 2. How every card runs (the task procedure)
 
@@ -93,7 +93,9 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W5 | C-044 | Amount fields accept 1,234.50 and say what format they want | Settings/UX | S | P1 | medium | C-041 | sonnet | standard (sonnet) | sonnet | - |
 | W5 | C-072 | Buttons: tinted blocks in the current colours | Design | M | P1 | low | C-071 | sonnet | standard (sonnet) | sonnet | - |
 | W5 | C-037 | No red over-budget for months without a budget or for money put into Savings | Money | M | P1 | medium | C-031 | sonnet | standard (sonnet) | sonnet | - |
-| W6 | C-034 | One-time 3.0 setup: money now and paydays; income wording tells the truth | Money | M | P1 | medium | C-030, C-038, C-040, C-041, C-044 | sonnet | standard (sonnet) | sonnet | - |
+| W6 | C-034 | Money setup logic: applyMoneySetup writes money now and the paydays | Money | M | P1 | medium | C-030, C-038, C-040, C-041, C-044 | sonnet | standard (sonnet) | sonnet | - |
+| W6 | C-081 | Money setup screen shown before Home until money now is set | Money | M | P1 | medium | C-034 | sonnet | standard (sonnet) | sonnet | - |
+| W6 | C-082 | Income wording tells what the app does now | Money | M | P1 | medium | C-081, C-033 | sonnet | standard (sonnet) | sonnet | - |
 | W6 | C-073 | Palette: firmer field outline, amber backup reminder, brighter dark hero block | Design | S | P1 | low | C-072 | sonnet | light (haiku) | sonnet | - |
 | W6 | C-053 | Restoring a backup: show what is in the file, keep a safety copy, keep the backup date | Settings/UX | M | P1 | medium | C-029 | sonnet | standard (sonnet) | sonnet | - |
 | W7 | C-047 | Quick add: Undo in the toast and no second entry from a double tap | Settings/UX | S | P1 | low | - | sonnet | standard (sonnet) | sonnet | - |
