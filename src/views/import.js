@@ -2,6 +2,7 @@ import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
 import { monthKeyOf, monthLabel } from '../months.js';
 import { createId } from '../model.js';
+import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
 import { usesNewCounting } from '../incomeSources.js';
 import { formatMoney } from '../currency.js';
 import { detectFormat } from '../import/detect.js';
@@ -162,6 +163,28 @@ export function suggestSalary(data, row, decision) {
         return {};
     }
     return { incomeCategoryId: SALARY_INCOME_ID };
+}
+
+/**
+ * An expense row whose text names a subscription not yet logged that month:
+ * the import asks whether it is that subscription's payment. Never silent.
+ * takenKeys holds `${subscriptionId}:${monthKey}` already claimed by other rows.
+ */
+export function suggestSubscription(data, row, decision, takenKeys = new Set()) {
+    const monthKey = monthKeyOf(row.date);
+    if (
+        decision.kind !== 'expense'
+        || row.direction !== 'out'
+        || decision.subscriptionId
+        || decision.subscriptionDeclined === true
+        || monthKey === null
+    ) {
+        return null;
+    }
+    const text = [row.counterparty, row.description].join(' ');
+    return (data.subscriptions ?? []).find((sub) => nameAppearsIn(sub.name, text)
+        && !isLoggedThisMonth(data, sub.id, monthKey)
+        && !takenKeys.has(`${sub.id}:${monthKey}`)) ?? null;
 }
 
 export function rememberHint(data, decision) {
@@ -428,6 +451,22 @@ function button(className, label, onClick) {
     node.type = 'button';
     node.addEventListener('click', onClick);
     return node;
+}
+
+/** A question with Yes and No, or its answer with Undo. Ids: `${idPrefix}-yes|no|undo`. */
+function questionLine({ idPrefix, question, answered, onYes, onNo, onUndo }) {
+    const line = element('div', 'imp-note-row');
+    const link = (id, label, onClick) => {
+        const node = button('btn btn-ghost imp-link', label, onClick);
+        node.id = `${idPrefix}-${id}`;
+        return node;
+    };
+    if (typeof answered === 'string') {
+        line.append(element('p', 'muted imp-hint', answered), link('undo', 'Undo', onUndo));
+    } else {
+        line.append(element('p', 'muted imp-hint', question), link('yes', 'Yes', onYes), link('no', 'No', onNo));
+    }
+    return line;
 }
 
 function option(value, text, selected) {
@@ -1316,6 +1355,43 @@ function renderDecisionRow(ctx, index) {
         ));
     }
     item.append(grid);
+
+    if (decision.kind === 'expense') {
+        const idPrefix = `imp-subq-${index}`;
+        const marked = (ctx.data.subscriptions ?? []).find(({ id }) => id === decision.subscriptionId);
+        if (marked) {
+            item.append(questionLine({
+                idPrefix,
+                answered: `Marked as the ${marked.name} subscription for ${monthLabel(monthKeyOf(row.date))}.`,
+                onUndo: () => {
+                    delete decision.subscriptionId;
+                    refresh(ctx, `${idPrefix}-yes`);
+                },
+            }));
+        } else {
+            const takenKeys = new Set();
+            state.decisions.forEach((other, otherIndex) => {
+                if (otherIndex !== index && other.include === true && other.kind === 'expense' && other.subscriptionId) {
+                    takenKeys.add(`${other.subscriptionId}:${monthKeyOf(state.rows[otherIndex].date)}`);
+                }
+            });
+            const sub = suggestSubscription(ctx.data, row, decision, takenKeys);
+            if (sub) {
+                item.append(questionLine({
+                    idPrefix,
+                    question: `Is this the ${sub.name} subscription?`,
+                    onYes: () => {
+                        decision.subscriptionId = sub.id;
+                        refresh(ctx, `${idPrefix}-undo`);
+                    },
+                    onNo: () => {
+                        decision.subscriptionDeclined = true;
+                        refresh(ctx, kindId);
+                    },
+                }));
+            }
+        }
+    }
 
     const hint = element('p', 'muted imp-hint', rememberHint(ctx.data, decision));
     hint.id = `imp-hint-${index}`;

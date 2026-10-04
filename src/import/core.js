@@ -551,6 +551,10 @@ export function buildImport(data, decisions, meta) {
             ...shared,
             refund,
             goalId: '',
+            ...(decision.kind === 'expense' && decision.subscriptionId
+                && (data.subscriptions ?? []).some(({ id }) => id === decision.subscriptionId)
+                ? { subscriptionId: decision.subscriptionId }
+                : {}),
         });
         if (refund) {
             counts.refunds += 1;
