@@ -4,6 +4,7 @@ import {
     contribute,
     deleteGoal,
     goalProgress,
+    reopenGoal,
     updateGoal,
 } from '../../goals.js';
 import { amountProblem, formatEuro, formatPlain, parseAmount } from '../../money.js';
@@ -373,7 +374,12 @@ function renderClosedGoal(ctx, goal) {
         element('p', 'muted', `Closed ${formatDay(goal.closedAt)}.`),
     );
     const actions = element('div', 'more-actions goal-actions');
-    actions.append(goalAction(ctx, goal, 'delete', 'Delete', 'btn btn-ghost-danger'));
+    const reopen = actionButton('btn', 'Reopen', () => {
+        reopenGoal(ctx.data, goal.id);
+        finish(ctx, 'Goal reopened', 'goals-title');
+    });
+    reopen.id = `goal-action-reopen-${goal.id}`;
+    actions.append(reopen, goalAction(ctx, goal, 'delete', 'Delete', 'btn btn-ghost-danger'));
     item.append(actions);
     if (state.goalId === goal.id && state.mode === 'delete') {
         item.append(renderDeleteConfirm(ctx, goal));

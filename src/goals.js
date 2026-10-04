@@ -104,6 +104,26 @@ export function closeGoal(data, id, date = todayISO()) {
 }
 
 /**
+ * Reopens a closed goal. Contributions keep their goalId, so the saved money
+ * is unchanged.
+ * @param {object} data
+ * @param {string} id
+ * @returns {{ ok: true, goal: object } | { ok: false, reason: string }}
+ */
+export function reopenGoal(data, id) {
+    const goal = ensureGoals(data).find((entry) => entry.id === id);
+    if (!goal) {
+        return { ok: false, reason: 'Goal does not exist.' };
+    }
+    if (goal.closedAt === '') {
+        return { ok: false, reason: 'Goal is already open.' };
+    }
+
+    goal.closedAt = '';
+    return { ok: true, goal };
+}
+
+/**
  * Removes the goal and clears goalId on its expenses. The money stays saved
  * (expenses are not touched otherwise).
  * @param {object} data
