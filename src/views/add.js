@@ -11,6 +11,7 @@ import { addTemplate, templateToExpense, isRepeatTap } from '../templates.js';
 import { describeForeign } from '../currency.js';
 import {
     freezeMonthPlan,
+    newNoLimitCategory,
     syncCategoryPlanFields,
     refreshCurrentMonthPlan,
     monthTotals,
@@ -185,22 +186,13 @@ function closeQuickPanels() {
     addIncomeCategoryError = '';
 }
 
-function createFlexibleCategory(ctx, name) {
+function createNoLimitCategory(ctx, name) {
     const allowed = canAddExpenseCategory(ctx.data);
     if (allowed.ok !== true) {
         return null;
     }
     const budget = ctx.data.settings.monthlyBudgetCents;
-    const category = {
-        id: createId('cat'),
-        name,
-        pinned: false,
-        percent: 0,
-        limitMode: 'percent',
-        limitCents: 0,
-        system: false,
-        subcategories: [],
-    };
+    const category = newNoLimitCategory(createId('cat'), name);
     ctx.data.categories.push(category);
     syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
@@ -1373,7 +1365,7 @@ function renderExpenseForm(root, ctx) {
                 return;
             }
 
-            const category = createFlexibleCategory(ctx, name);
+            const category = createNoLimitCategory(ctx, name);
             if (category === null) {
                 addCategoryError = canAddExpenseCategory(ctx.data).reason;
                 setError(nameField, addCategoryError);

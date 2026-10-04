@@ -141,6 +141,46 @@ export function resolvePlan(categories, monthlyBudgetCents) {
     };
 }
 
+export function newNoLimitCategory(id, name) {
+    return {
+        id,
+        name,
+        pinned: false,
+        percent: 0,
+        limitMode: 'none',
+        limitCents: 0,
+        system: false,
+        subcategories: [],
+    };
+}
+
+/**
+ * Which other limits would change if a category with `candidate` were added.
+ * Never mutates `categories` (resolvePlan writes into what it is given).
+ */
+export function previewAddCategory(categories, monthlyBudgetCents, candidate) {
+    if (!(monthlyBudgetCents > 0)) return [];
+    const clone = () => JSON.parse(JSON.stringify(categories));
+    const before = resolvePlan(clone(), monthlyBudgetCents).entries;
+    const after = new Map(resolvePlan([
+        ...clone(),
+        { id: '__new__', name: '', system: false, subcategories: [], ...candidate },
+    ], monthlyBudgetCents).entries.map((entry) => [entry.id, entry]));
+    const changed = [];
+    for (const entry of before) {
+        const next = after.get(entry.id);
+        if (!next || entry.noLimit || next.noLimit) continue;
+        if (entry.limitCents === next.limitCents) continue;
+        changed.push({
+            id: entry.id,
+            name: entry.name,
+            beforeCents: entry.limitCents,
+            afterCents: next.limitCents,
+        });
+    }
+    return changed;
+}
+
 export function canSetPinned(categories, categoryId, percent) {
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
         return {

@@ -1,4 +1,4 @@
-import { parseAmount } from '../../money.js';
+import { parseAmount, formatEuro } from '../../money.js';
 import {
     UNCATEGORISED_ID,
     SAVINGS_ID,
@@ -9,6 +9,7 @@ import {
 } from '../../model.js';
 import {
     canSetPinned,
+    previewAddCategory,
     refreshCurrentMonthPlan,
     syncCategoryPlanFields,
     percentFromEuroCents,
@@ -38,9 +39,11 @@ import {
 } from './shared.js';
 import { renderWarnings } from './plan.js';
 
+export const DEFAULT_NEW_CATEGORY_KIND = 'none';
+
 const addDraft = {
     name: '',
-    kind: 'flexible',
+    kind: DEFAULT_NEW_CATEGORY_KIND,
     amount: '',
     limitUnit: 'percent',
     error: '',
@@ -217,6 +220,11 @@ function addCategory(ctx, nameField, amountField) {
         }
     }
 
+    const changed = previewAddCategory(
+        ctx.data.categories,
+        budget,
+        { pinned, percent, limitMode, limitCents },
+    );
     ctx.data.categories.push({
         id: createId('cat'),
         name,
@@ -230,12 +238,14 @@ function addCategory(ctx, nameField, amountField) {
     syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
     addDraft.name = '';
-    addDraft.kind = 'flexible';
+    addDraft.kind = DEFAULT_NEW_CATEGORY_KIND;
     addDraft.amount = '';
     addDraft.limitUnit = 'percent';
     addDraft.error = '';
     if (persist(ctx)) {
-        ctx.toast('Category added');
+        ctx.toast(changed.length === 0
+            ? 'Category added'
+            : `Category added. Limits changed for ${categoryCount(changed.length)}.`);
     }
 }
 
@@ -455,6 +465,40 @@ function renderCategory(ctx, category, plan) {
     return item;
 }
 
+function categoryCount(count) {
+    return count === 1 ? '1 category' : `${count} categories`;
+}
+
+function addNoticeText(changed) {
+    if (changed.length === 0) return '';
+    const shown = changed.slice(0, 3).map(
+        ({ name, beforeCents, afterCents }) => (
+            `${name} ${formatEuro(beforeCents)} → ${formatEuro(afterCents)}`
+        ),
+    ).join(', ');
+    const more = changed.length > 3 ? ` and ${changed.length - 3} more` : '';
+    return `This changes the limit of ${categoryCount(changed.length)} this month: ${shown}${more}.`;
+}
+
+/** Limits that would move if the category in the form were added now. */
+function addDraftChanges(ctx) {
+    const budget = ctx.data.settings.monthlyBudgetCents;
+    if (addDraft.kind === 'flexible') {
+        return previewAddCategory(ctx.data.categories, budget, {
+            pinned: false, percent: 0, limitMode: 'percent', limitCents: 0,
+        });
+    }
+    if (addDraft.kind !== 'pinned' || !(budget > 0)) return [];
+    const cents = addDraft.limitUnit === 'euro' ? parseAmount(addDraft.amount) : null;
+    const percent = addDraft.limitUnit === 'euro'
+        ? (cents === null ? null : percentFromEuroCents(cents, budget))
+        : parsePercent(addDraft.amount);
+    if (percent === null || !(percent >= 0 && percent <= 100)) return [];
+    return previewAddCategory(ctx.data.categories, budget, {
+        pinned: true, percent, limitMode: 'percent', limitCents: 0,
+    });
+}
+
 function renderKindChoice(amountField, ctx) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
@@ -463,8 +507,8 @@ function renderKindChoice(amountField, ctx) {
 
     const row = element('div', 'choice-row');
     const options = [
-        { value: 'flexible', label: 'Flexible' },
         { value: 'none', label: 'No limit' },
+        { value: 'flexible', label: 'Flexible' },
         { value: 'pinned', label: 'Fixed' },
     ];
 
@@ -492,7 +536,7 @@ function renderKindChoice(amountField, ctx) {
         fieldset.append(element(
             'p',
             'muted',
-            'No planned share. Spending still counts and shows as % of your budget.',
+            'No limit: no other limit changes. Spending still counts and shows as % of your budget.',
         ));
     }
     return fieldset;
@@ -515,6 +559,12 @@ function renderAddCategory(ctx) {
         clearError(nameField);
     });
 
+    const notice = element('p', 'muted category-add-notice');
+    notice.setAttribute('role', 'status');
+    const refreshNotice = () => {
+        notice.textContent = addNoticeText(addDraftChanges(ctx));
+        notice.hidden = notice.textContent === '';
+    };
     const amountField = buildLimitAmountField(
         'add-category-amount',
         'Fixed amount',
@@ -522,8 +572,10 @@ function renderAddCategory(ctx) {
         ctx,
         () => {
             addDraft.error = '';
+            refreshNotice();
         },
     );
+    refreshNotice();
     amountField.wrapper.hidden = addDraft.kind !== 'pinned';
 
     if (addDraft.error !== '') {
@@ -545,6 +597,7 @@ function renderAddCategory(ctx) {
         nameField.wrapper,
         renderKindChoice(amountField, ctx),
         amountField.wrapper,
+        notice,
         submit,
     );
     return form;
