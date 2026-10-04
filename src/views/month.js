@@ -1,4 +1,6 @@
+import { monthBalance } from '../balance.js';
 import { monthTotals, freezeMonthPlan } from '../budget.js';
+import { incomeStatus } from '../incomeSources.js';
 import { formatEuro, formatPlain } from '../money.js';
 import {
     addMonths,
@@ -23,6 +25,7 @@ import {
 } from './currencyFields.js';
 import { entryAmountText, entryTags } from './entryDisplay.js';
 import { renderSearchPanel } from './searchPanel.js';
+import { signedEuro } from './homeMoney.js';
 
 /** @type {{ mode: null | 'edit' | 'confirm-delete', type: null | 'expense' | 'income', id: null | string, draft: object | null, saveError: string, focusError: boolean }} */
 const entryUi = {
@@ -124,7 +127,34 @@ function headline(caption, amountCents, negativeMessage) {
     return wrapper;
 }
 
-function renderSummary(root, totals) {
+/** Lines under the summary: what the month started and ended with, and each regular income. */
+export function monthMoneyLines(data, monthKey, now = new Date()) {
+    const lines = [];
+    const balance = monthBalance(data, monthKey);
+    if (balance !== null) {
+        const from = balance.startsOn === data.settings.balanceStart.date
+            ? ` (from ${shortDate(balance.startsOn)})`
+            : '';
+        lines.push(`Starts with ${formatEuro(balance.openingCents)}${from} \u00b7 Ends with ${formatEuro(balance.closingCents)}`);
+    }
+    for (const item of incomeStatus(data, monthKey, now)) {
+        if (item.state === 'received') {
+            const note = item.receivedCents === item.expectedCents
+                ? ''
+                : ` (expected ${formatEuro(item.expectedCents)}, ${signedEuro(item.receivedCents - item.expectedCents)})`;
+            lines.push(`${item.name}: received ${formatEuro(item.receivedCents)}${note}`);
+        } else if (item.state === 'upcoming') {
+            lines.push(`${item.name}: expected ${formatEuro(item.expectedCents)} on ${shortDate(item.date)}`);
+        } else if (item.state === 'due') {
+            lines.push(`${item.name}: expected since ${shortDate(item.date)}`);
+        } else {
+            lines.push(`${item.name}: skipped this month`);
+        }
+    }
+    return lines;
+}
+
+function renderSummary(root, totals, moneyLines = []) {
     const card = element('section', 'card stack');
     const cashHeadline = { caption: 'Cash left', cents: totals.cashLeftCents, note: 'more spent than came in' };
     const shown = totals.hasBudget
@@ -143,6 +173,7 @@ function renderSummary(root, totals) {
     if (!totals.hasBudget) {
         card.append(element('p', 'muted', 'No budget for this month.'));
     }
+    card.append(...moneyLines.map((line) => element('p', 'muted', line)));
     root.append(card);
 }
 
@@ -964,7 +995,7 @@ export function render(root, ctx) {
 
     const layout = element('div', 'stack');
     renderMonthNav(layout, ctx);
-    renderSummary(layout, totals);
+    renderSummary(layout, totals, monthMoneyLines(ctx.data, ctx.monthKey, new Date()));
     layout.append(element('p', 'muted month-comparison', comparisonText(
         totals,
         previousTotals,

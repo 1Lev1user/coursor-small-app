@@ -10,6 +10,7 @@ import { renderCategoriesSection, userCategories } from './settings/categories.j
 import { renderBackupReminder, renderBackupSection } from './settings/backup.js';
 import { renderRightsSection } from './settings/rights.js';
 import { renderGoalsSection } from './settings/goals.js';
+import { moneySummary, renderBalanceSection } from './settings/balance.js';
 import {
     renderImportSection,
     renderRulesSection,
@@ -39,6 +40,7 @@ export const SETTINGS_GROUPS = [
 ];
 
 export const SECTION_RENDERERS = {
+    'more-balance': (ctx) => renderBalanceSection(ctx),
     'more-plan': (ctx) => renderPlanSection(ctx),
     'more-income-sources': (ctx) => renderIncomeSourcesSection(ctx),
     'more-income': (ctx) => renderIncomeSection(ctx),
@@ -112,6 +114,9 @@ export function groupSummary(groupId, data, now = new Date()) {
     const settings = data.settings;
     let text = '';
     switch (groupId) {
+        case 'money':
+            text = moneySummary(data, now);
+            break;
         case 'budget':
             text = settings.monthlyBudgetCents > 0
                 ? `${formatEuro(settings.monthlyBudgetCents)} a month`

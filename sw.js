@@ -63,6 +63,7 @@ const CORE_ASSETS = [
     './src/views/paydayReminder.js',
     './src/views/homeMoney.js',
     './src/views/settings/goals.js',
+    './src/views/settings/balance.js',
     './src/views/import.js',
     './src/views/settings/importSettings.js',
     './src/views/more.js',
