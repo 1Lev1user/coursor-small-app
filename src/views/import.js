@@ -2,6 +2,7 @@ import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
 import { monthKeyOf, monthLabel } from '../months.js';
 import { createId } from '../model.js';
+import { usesNewCounting } from '../incomeSources.js';
 import { formatMoney } from '../currency.js';
 import { detectFormat } from '../import/detect.js';
 import {
@@ -1284,7 +1285,8 @@ function renderDecisionRow(ctx, index) {
         );
         grid.append(buildField(incomeId, 'Income category', incomeSelect));
         const usual = ctx.data.settings.usualMonthlyIncomeCents ?? 0;
-        if (decision.incomeCategoryId === SALARY_INCOME_ID && usual > 0) {
+        if (decision.incomeCategoryId === SALARY_INCOME_ID && usual > 0
+            && !usesNewCounting(ctx.data, monthKeyOf(row.date))) {
             grid.append(element(
                 'p',
                 'muted imp-hint',
@@ -1567,7 +1569,7 @@ function renderConfirm(ctx) {
         ['Incomes', String(sum.incomes)],
         ['Transfers (not counted)', String(sum.transfers)],
         ['Skipped', String(sum.skipped)],
-        ['Duplicates left out', String(sum.duplicates)],
+        ['Left out as duplicates or possible duplicates', String(sum.duplicates)],
         ['Total out', formatEuro(sum.totalOutCents)],
         ['Total in', formatEuro(sum.totalInCents)],
         ['Period', periodText(sum.periodFrom, sum.periodTo)],

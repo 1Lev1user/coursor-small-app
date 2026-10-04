@@ -699,7 +699,7 @@ function renderHome(root, ctx) {
         element(
             'p',
             'muted home-auto-note',
-            'Salary and subscriptions are added for you. Everything stays on this device.',
+            'Paydays and subscriptions remind you when they are due. Nothing is added until you confirm it. Everything stays on this device.',
         ),
     );
 
