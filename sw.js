@@ -74,6 +74,7 @@ const CORE_ASSETS = [
     './src/views/settings/backup.js',
     './src/views/settings/rights.js',
     './src/views/setup.js',
+    './src/views/moneySetup.js',
 ];
 
 // Versions before 2.0 cannot show the "Update" bar, so replace them at once.
