@@ -137,16 +137,25 @@ function resolveTarget(target) {
     return parts.join('/');
 }
 
-function firstSheetPath(workbook, rels) {
-    const sheet = child(child(workbook, 'sheets'), 'sheet');
-    const relId = sheet?.attrs.id;
-    if (relId && rels) {
-        const rel = children(rels, 'Relationship').find((item) => item.attrs.Id === relId);
-        if (rel?.attrs.Target) {
-            return resolveTarget(rel.attrs.Target);
-        }
-    }
-    return 'xl/worksheets/sheet1.xml';
+function listSheets(workbook, rels) {
+    const sheets = children(child(workbook, 'sheets'), 'sheet').map((sheet, index) => {
+        const rel = rels
+            ? children(rels, 'Relationship').find((item) => item.attrs.Id === sheet.attrs.id)
+            : null;
+        return {
+            path: rel?.attrs.Target ? resolveTarget(rel.attrs.Target) : `xl/worksheets/sheet${index + 1}.xml`,
+            visible: sheet.attrs.state !== 'hidden' && sheet.attrs.state !== 'veryHidden',
+        };
+    });
+    return sheets.length > 0 ? sheets : [{ path: 'xl/worksheets/sheet1.xml', visible: true }];
+}
+
+const MAX_SHEETS = 10;
+// Mirrors isDateLikeValue in text.js; anchored so a period such as "01.09.2026 - 30.09.2026" does not count.
+const DATE_CELL = /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/;
+
+function looksLikeTransactions(rows) {
+    return rows.length >= 3 && rows.some((row) => row.some((cell) => DATE_CELL.test(String(cell).trim())));
 }
 
 function isDate1904(workbook) {
@@ -373,7 +382,9 @@ function toBytes(input) {
 }
 
 /**
- * Reads the first worksheet of an .xlsx file into rows of strings.
+ * Reads one worksheet of an .xlsx file into rows of strings: the first visible
+ * sheet (of the first 10) with at least 3 rows and a date-like cell, else the
+ * first visible sheet, else the first sheet.
  * @param {Uint8Array} input
  * @returns {Promise<{ ok: true, rows: string[][] } | { ok: false, reason: string }>}
  */
@@ -409,17 +420,35 @@ export async function readXlsx(input) {
             return { ok: false, reason: NOT_EXCEL };
         }
         const rels = await readXml('xl/_rels/workbook.xml.rels');
-        const sheetPath = workbook ? firstSheetPath(workbook, rels) : 'xl/worksheets/sheet1.xml';
-        const sheet = await readXml(sheetPath) ?? await readXml('xl/worksheets/sheet1.xml');
-        if (!sheet) {
-            return { ok: false, reason: NOT_EXCEL };
-        }
-
         const context = {
             sharedStrings: readSharedStrings(await readXml('xl/sharedStrings.xml')),
             dateStyles: readDateStyles(await readXml('xl/styles.xml')),
             date1904: workbook ? isDate1904(workbook) : false,
         };
+
+        const sheets = workbook ? listSheets(workbook, rels) : [];
+        const visible = sheets.filter((sheet) => sheet.visible);
+        const candidates = visible.length > 0 ? visible.slice(0, MAX_SHEETS) : sheets.slice(0, 1);
+        let fallback = null;
+        for (const candidate of candidates) {
+            const sheet = await readXml(candidate.path);
+            if (!sheet) {
+                continue;
+            }
+            const rows = readRows(sheet, context);
+            if (looksLikeTransactions(rows)) {
+                return { ok: true, rows };
+            }
+            fallback ??= rows;
+        }
+        if (fallback) {
+            return { ok: true, rows: fallback };
+        }
+
+        const sheet = await readXml('xl/worksheets/sheet1.xml');
+        if (!sheet) {
+            return { ok: false, reason: NOT_EXCEL };
+        }
         return { ok: true, rows: readRows(sheet, context) };
     } catch (error) {
         if (error instanceof NoUnzipError) {
