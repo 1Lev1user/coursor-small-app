@@ -74,7 +74,8 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 | C-073 | 27: palette fixes, light and dark. |
 | C-074 | 28: Golos Text + Literata, self-hosted, CORE_ASSETS in sw.js updated. |
 | C-075 | 29: main motion moment (amount roll-over and budget bar). |
-| C-076 | 29: quiet motion (press, toast, rows, add sheet, tabs, months), Reduce Motion off. |
+| C-076 | 29: quiet motion, part 1: toast, new row highlight, row collapse. Button press is in C-072. |
+| C-077 | 29: quiet motion, part 2: Add screen as a sheet, tab fade, month slide. Reduce Motion off in both. |
 
 ## Still open
 - The owner's bank sample file (real format, made-up data): needed for C-064, C-065, C-066, C-067, C-069.

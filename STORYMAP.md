@@ -20,7 +20,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S1.1 | Owner | Sets up | Enters name, monthly budget, savings, usual income on first run | Plan exists | P1 | exists |
 | S1.2 | Owner | Sets up | Changes the plan under Settings > Plan | Plan stays current | P2 | exists |
 | S1.3 | Owner | Sets up | Learns the app from the PDF guide, including import | Uses every feature without help | P2 | planned |
-| S1.4 | Owner | Sets up | Lists regular income with payday, usual amount and weekend rule | Knows when each income arrives | P1 | planned |
+| S1.4 | Owner | Sets up | Lists regular income sources with name, expected amount and payday | Knows when each income arrives | P1 | planned |
 | S1.5 | Owner | Sets up | Enters the money on hand once and corrects it to the bank figure | Starts from the real figure | P1 | planned |
 | S1.10 | Owner | Sets up | Finds and changes any setting in a short grouped Settings list, in one set of words | Settings found fast | P1 | planned |
 | S2.1 | Owner | Records entries | Adds an expense, with currency choice and euro amount | Spending recorded | P1 | exists |
@@ -30,6 +30,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S2.5 | Owner | Records entries | Confirms income on its payday with the real amount, skips or postpones it | Actual income recorded, forecast stays a forecast | P1 | planned |
 | S2.6 | Owner | Records entries | Skips or postpones a subscription reminder; a paid bank row counts as paid | No double entries | P1 | planned |
 | S2.10 | Owner | Records entries | Renames, re-prices or deletes a quick-add template | Quick add stays tidy | P2 | planned |
+| S2.11 | Owner | Records entries | Types an amount without first clearing an example hint or an old value | No accidental wrong amounts | P1 | planned |
 | S3.1 | Owner | Reviews money | Sees what is left to spend this month on Home | Daily decision | P1 | exists |
 | S3.2 | Owner | Reviews money | Lists and searches entries in Month | Finds any entry | P2 | exists |
 | S3.3 | Owner | Reviews money | Views Chart: Spending, Income, Trends, Year (with yearly CSV) | Sees patterns | P2 | exists |
@@ -40,6 +41,8 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S3.8 | Owner | Reviews money | Reads each month's income as received on its date; months he never had show nothing | Numbers can be trusted | P1 | planned |
 | S3.10 | Owner | Reviews money | Each screen opens at its top; Add forms start in the first field and close on Escape | Orientation and keyboard use | P2 | planned |
 | S3.11 | Owner | Reviews money | Reads every screen from 320 px to desktop width, faded rows included | Readable | P2 | planned |
+| S3.12 | Owner | Reviews money | Uses one clear family of buttons, firm fields and calm type in light and dark | The app feels finished and is easy to read | P1 | planned |
+| S3.13 | Owner | Reviews money | Sees what changed after an action through short motion, none under Reduce Motion | Changes are noticed | P2 | planned |
 | S4.1 | Owner | Imports bank statement | Imports CSV, pasted text, .xlsx, camt XML or FiDAViSTA XML | Entries without typing | P1 | exists |
 | S4.2 | Owner | Imports bank statement | Reviews duplicates and row kinds, remembers rules | No double entries | P1 | exists |
 | S4.3 | Owner | Imports bank statement | Chooses a plan once for a past month without a plan | Past months stay correct | P1 | exists |
@@ -61,7 +64,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 ## Slices
 - Slice 1 (done): S4.4 and S3.5, cards C-001 to C-003. Import stays trustworthy: import tests are date-independent and the past-month plan rule and CSV quoting are guarded by tests.
 - Slice 2 (release 2.1.0 postponed, merged into 3.0): cards C-004 to C-028; open: C-006, C-010, C-013, C-014, C-026.
-- Slice 3 (planned, release 3.0): money model C-029 to C-039, Settings and usability C-040 to C-054, bank import C-055 to C-069. Research behind them: research/3.0/.
+- Slice 3 (planned, release 3.0): money model C-029 to C-039, Settings and usability C-040 to C-054, bank import C-055 to C-069, input fields C-070, visual design and motion C-071 to C-077. Owner decisions: research/3.0/decisions-3.0.md; execution plan: research/3.0/plan-3.0.md.
 
 ## Rules
 - Every card references one step ID.
