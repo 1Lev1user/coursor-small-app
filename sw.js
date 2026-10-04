@@ -42,6 +42,7 @@ const CORE_ASSETS = [
     './src/search.js',
     './src/goals.js',
     './src/analytics.js',
+    './src/incomeSources.js',
     './src/import/types.js',
     './src/import/text.js',
     './src/import/detect.js',

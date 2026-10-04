@@ -1,6 +1,7 @@
 /** Soft caps so lists and charts stay usable on a phone. */
 export const MAX_EXPENSE_CATEGORIES = 50;
 export const MAX_INCOME_CATEGORIES = 50;
+export const MAX_INCOME_SOURCES = 10;
 export const MAX_SUBCATEGORIES = 500;
 
 export function userExpenseCategoryCount(data) {
@@ -33,6 +34,16 @@ export function canAddIncomeCategory(data) {
         return {
             ok: false,
             reason: `You can have at most ${MAX_INCOME_CATEGORIES} income categories.`,
+        };
+    }
+    return { ok: true };
+}
+
+export function canAddIncomeSource(data) {
+    if (data.incomeSources.length >= MAX_INCOME_SOURCES) {
+        return {
+            ok: false,
+            reason: `You can have at most ${MAX_INCOME_SOURCES} income sources.`,
         };
     }
     return { ok: true };
