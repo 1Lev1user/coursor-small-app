@@ -258,7 +258,7 @@ const KEYWORDS = {
     debit: ['debit', 'debets', 'дебет', 'deebet', 'исходящ'],
     credit: ['credit', 'kredit', 'кредит', 'kreedit'],
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
-    direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'тип', 'type'],
+    direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'zime', 'sign', 'тип', 'type'],
     currency: ['currency', 'valuta', 'валюта', 'valuuta', 'valiuta'],
     // Only the bank's own unique id: a payer 'reference' repeats every month (rent).
     bankRef: [
@@ -288,8 +288,8 @@ function isDateLikeValue(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(value);
 }
 
-const OUT_VALUES = ['D', 'DR', 'DB', 'DBIT', 'DEBIT', 'DEBET', 'DEBETS', 'DEEBET', 'Д', 'ДЕБЕТ'];
-const IN_VALUES = ['C', 'K', 'CR', 'CRDT', 'CREDIT', 'KREDIT', 'KREDITS', 'KREEDIT', 'К', 'КРЕДИТ'];
+const OUT_VALUES = ['D', 'DR', 'DB', 'DBIT', 'DEBIT', 'DEBET', 'DEBETS', 'DEEBET', 'Д', 'ДЕБЕТ', 'OUT', '-', 'IZDEVUMI', 'IZMAKSA', 'EXPENSE', 'РАСХОД'];
+const IN_VALUES = ['C', 'K', 'CR', 'CRDT', 'CREDIT', 'KREDIT', 'KREDITS', 'KREEDIT', 'К', 'КРЕДИТ', 'IN', '+', 'IENAKUMI', 'IEMAKSA', 'INCOME', 'ПРИХОД'];
 const DIRECTION_BY_VALUE = new Map([
     ...OUT_VALUES.map((value) => [value, 'out']),
     ...IN_VALUES.map((value) => [value, 'in']),
@@ -454,7 +454,9 @@ export function guessColumns(header, sampleRows) {
         const width = sampleRows[0] ? sampleRows[0].length : 0;
         for (let i = 0; i < width; i += 1) {
             const samples = columnSamples(sampleRows, i);
-            if (!used.has(i) && samples.length > 0 && samples.every(isDirectionValue)) {
+            // One repeated '-' or '+' is a placeholder column, not a direction.
+            const onlyOneSign = samples.every((value) => value === samples[0]) && /^[+-]$/.test(samples[0]);
+            if (!used.has(i) && samples.length > 0 && !onlyOneSign && samples.every(isDirectionValue)) {
                 columns.direction = i;
                 break;
             }
@@ -622,7 +624,7 @@ export function stripAmountDecoration(value) {
     let negative = false;
 
     text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
-    const trailingMark = text.match(/\s+(DR|CR|D|C|K)$/i);
+    const trailingMark = text.match(/(?:(?<=\d)\s*|\s+)(DR|CR|D|C|K)$/i);
     if (trailingMark) {
         negative = /^D/i.test(trailingMark[1]);
         text = text.slice(0, trailingMark.index).trim();
@@ -811,6 +813,7 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         let amountCents = null;
         let direction = null;
+        let unknownDirection = false;
 
         const hasSplitColumns = columns.debit >= 0 || columns.credit >= 0;
         if (hasSplitColumns) {
@@ -833,7 +836,10 @@ export function rowsToStatement(rows, headerRow, layout) {
                 amountCents = Math.abs(parsed);
 
                 if (columns.direction >= 0) {
-                    direction = directionOfValue(cellAt(row, columns.direction));
+                    const directionValue = cellAt(row, columns.direction);
+                    direction = directionOfValue(directionValue);
+                    // A word we do not know is not a reason to guess money in: only an explicit minus decides.
+                    unknownDirection = !direction && directionValue.trim() !== '' && parsed >= 0;
                 }
 
                 if (!direction) {
@@ -844,6 +850,10 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         if (amountCents === 0) {
             skipped.push({ line, reason: 'zero amount' });
+            continue;
+        }
+        if (unknownDirection) {
+            skipped.push({ line, reason: 'unknown direction' });
             continue;
         }
         if (amountCents === null || !direction) {

@@ -48,6 +48,7 @@ const SKIP_REASONS = {
     'summary row': 'Summary or balance line',
     'unparsable date': 'Date not recognised',
     'unparsable amount': 'Amount not recognised',
+    'unknown direction': 'Direction not recognised',
 };
 
 const DUPLICATE_GROUPS = [

@@ -56,10 +56,10 @@ test('mostlyIn needs at least 5 rows and at least 90 percent money in', () => {
     assert.equal(checkSummary(rowsOf(6, 'in'), []).inCount, 6);
 });
 
-test('unsigned amounts with an unknown direction value are read as money in', () => {
+test('unsigned amounts with an empty direction cell are read as money in', () => {
     const text = 'Date;Description;Amount;Type\n'
         + ['RIMI', 'MAXIMA', 'LIDL', 'NARVESEN', 'ELVI', 'DEPO']
-            .map((name, index) => `0${index + 1}.03.2026;${name};12,50;XX`)
+            .map((name, index) => `0${index + 1}.03.2026;${name};12,50;`)
             .join('\n');
     const result = statement(text, ',', { ...COLUMNS, direction: 3 });
     assert.equal(result.rows.length, 6);
