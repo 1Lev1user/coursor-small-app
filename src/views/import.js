@@ -3,7 +3,7 @@ import { SALARY_INCOME_ID } from '../budget.js';
 import { monthKeyOf, monthLabel } from '../months.js';
 import { createId } from '../model.js';
 import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
-import { usesNewCounting } from '../incomeSources.js';
+import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
 import { formatMoney } from '../currency.js';
 import { detectFormat } from '../import/detect.js';
 import {
@@ -1386,6 +1386,43 @@ function renderDecisionRow(ctx, index) {
                     },
                     onNo: () => {
                         decision.subscriptionDeclined = true;
+                        refresh(ctx, kindId);
+                    },
+                }));
+            }
+        }
+    }
+
+    if (decision.kind === 'income') {
+        const idPrefix = `imp-incq-${index}`;
+        const tied = (ctx.data.incomeSources ?? []).find(({ id }) => id === decision.sourceId);
+        if (tied) {
+            item.append(questionLine({
+                idPrefix,
+                answered: `Tied to ${tied.name} for ${monthLabel(monthKeyOf(row.date))}.`,
+                onUndo: () => {
+                    delete decision.sourceId;
+                    refresh(ctx, `${idPrefix}-yes`);
+                },
+            }));
+        } else if (!decision.sourceId && decision.sourceDeclined !== true) {
+            const takenIncomeKeys = new Set();
+            state.decisions.forEach((other, otherIndex) => {
+                if (otherIndex !== index && other.include === true && other.kind === 'income' && other.sourceId) {
+                    takenIncomeKeys.add(`${other.sourceId}:${monthKeyOf(state.rows[otherIndex].date)}`);
+                }
+            });
+            const found = suggestIncomeSource(ctx.data, row, takenIncomeKeys);
+            if (found) {
+                item.append(questionLine({
+                    idPrefix,
+                    question: `Is this the ${found.name}?`,
+                    onYes: () => {
+                        decision.sourceId = found.id;
+                        refresh(ctx, `${idPrefix}-undo`);
+                    },
+                    onNo: () => {
+                        decision.sourceDeclined = true;
                         refresh(ctx, kindId);
                     },
                 }));
