@@ -13,9 +13,9 @@ Half-page design brief. Drafted from style.css comments and tokens; every statem
 > Design tokens. Direction C "Colour blocks": sage ground, quiet tinted surfaces, one solid pine block for the number that matters. No borders or shadows on surfaces; elevation comes from tint.
 
 ## Type
-- Body: Onest (`--font-body`) [inferred].
-- Figures (amounts, key numbers): Unbounded (`--font-figure`) [inferred].
-- Fonts are self-hosted in fonts/, SIL OFL 1.1.
+- Body: Golos Text (`--font-body`) [inferred].
+- Figures (amounts, key numbers): Literata (`--font-figure`), lining and tabular figures [inferred].
+- Both fonts are self-hosted in fonts/, SIL OFL 1.1 (licences in fonts/LICENSE-*.txt).
 
 ## Tokens
 - Location: `:root` at the top of style.css [inferred].
