@@ -216,9 +216,11 @@ export function refreshCurrentMonthPlan(data, now = new Date()) {
 }
 
 /**
- * Freezes every month that is over: from the first tracked month up to the month
- * before the current one, each month without a snapshot gets today's plan, which is
- * what it was showing. Returns how many snapshots it created.
+ * Freezes the months that are over: from the first tracked month up to the month
+ * before the current one, each month that has no snapshot and has an expense or an
+ * income gets today's plan, which is what it was showing. Empty months stay as they
+ * are (freezing them would change the history and the import's plan choice).
+ * Returns how many snapshots it created.
  * Known gap: this runs on render, so a form submitted at the month turnover without
  * a render in between can still rewrite the month that just ended.
  */
@@ -227,7 +229,9 @@ export function freezeElapsedMonths(data, now = new Date()) {
     let created = 0;
     let key = firstTrackedMonth(data, now);
     while (compareMonthKeys(key, current) < 0) {
-        if (!Object.hasOwn(data.monthPlans, key)) {
+        const hasEntries = data.expenses.some(({ date }) => isInMonth(date, key))
+            || data.incomes.some(({ date }) => isInMonth(date, key));
+        if (hasEntries && !Object.hasOwn(data.monthPlans, key)) {
             freezeMonthPlan(data, key);
             created += 1;
         }

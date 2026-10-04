@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultData } from '../src/model.js';
 import { freezeElapsedMonths, freezeMonthPlan, monthTotals } from '../src/budget.js';
+import { monthsNeedingPlanChoice } from '../src/import/core.js';
 
 const NOW = new Date(2026, 9, 4);
 
@@ -13,7 +14,7 @@ function augustData() {
     const data = defaultData();
     data.settings.monthlyBudgetCents = 100000;
     data.settings.usualMonthlyIncomeCents = 200000;
-    data.expenses.push(expense('e1', 1500, '2026-08-12'));
+    data.expenses.push(expense('e1', 1500, '2026-08-12'), expense('e0', 700, '2026-09-03'));
     return data;
 }
 
@@ -27,10 +28,26 @@ function view(data, monthKey) {
     };
 }
 
-test('freezes every elapsed month from the first tracked month, not the current one', () => {
+test('freezes the elapsed months that have entries, not the current one', () => {
     const data = augustData();
     assert.equal(freezeElapsedMonths(data, NOW), 2);
     assert.deepEqual(Object.keys(data.monthPlans), ['2026-08', '2026-09']);
+});
+
+test('an elapsed month without entries between two months with entries stays unfrozen', () => {
+    const data = defaultData();
+    data.expenses.push(expense('e1', 1500, '2026-05-12'));
+    data.incomes.push({ id: 'i1', categoryId: 'income-other', amountCents: 9000, note: '', date: '2026-09-25' });
+    assert.equal(freezeElapsedMonths(data, NOW), 2);
+    assert.deepEqual(Object.keys(data.monthPlans).sort(), ['2026-05', '2026-09']);
+});
+
+test('an empty past month still gets the import plan choice after the freeze', () => {
+    const data = defaultData();
+    data.expenses.push(expense('e1', 1500, '2026-05-12'), expense('e2', 900, '2026-09-12'));
+    freezeElapsedMonths(data, NOW);
+    const rows = [{ date: '2026-07-10' }, { date: '2026-05-20' }, { date: '2026-09-02' }];
+    assert.deepEqual(monthsNeedingPlanChoice(data, rows, NOW), ['2026-07']);
 });
 
 test('a later plan change leaves elapsed months alone and applies to the current month', () => {
@@ -66,7 +83,8 @@ test('never freezes a month before the first tracked month', () => {
 
     const older = defaultData();
     older.settings.balanceStart = { date: '2026-08-04', cents: 100000 };
-    assert.equal(freezeElapsedMonths(older, NOW), 2);
+    assert.equal(freezeElapsedMonths(older, NOW), 0);
+    assert.deepEqual(older.monthPlans, {});
 });
 
 test('an already frozen month is not overwritten', () => {
