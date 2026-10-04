@@ -21,7 +21,7 @@ Steps:
 
 For UI cards also check from code what process/design-review.md allows: tokens only, contrast of token pairs if computable.
 
-Do not run commands that modify the repository, install packages or touch the network (read-only commands and the acceptance commands only).
+Do not run commands that modify the repository, install packages or touch the network (read-only commands and the acceptance commands only). Run commands only in the worktree you were given; never run `git checkout`, `git switch` or `git reset` in any other checkout.
 
 Final message: facts only, in this format. No narration, no recap.
 VERDICT: PASS | FAIL

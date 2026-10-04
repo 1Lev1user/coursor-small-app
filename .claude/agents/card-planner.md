@@ -20,7 +20,7 @@ Steps:
    - the acceptance commands and what output proves each;
    - risks and the cases most likely to be missed;
    - recommended worker tier: light (haiku: size S, low risk, automatic check exists), standard (sonnet: M or L, or S without an automatic check), heavy (opus: risk high, architecture, or ambiguity).
-4. Bounded commands only: read-only git and file commands; no filesystem-wide searches; no network; no package installs.
+4. Bounded commands only: read-only git and file commands; no filesystem-wide searches; no network; no package installs. Never run `git checkout`, `git switch` or `git reset` in the repository you were given: it is the orchestrator's planning checkout. Read another ref with `git show <ref>:<path>` or `git diff <ref>`.
 
 Do not flag style. Do not widen the card: anything outside it goes under OUT OF SCOPE as a suggestion.
 
