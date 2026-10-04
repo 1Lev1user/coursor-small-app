@@ -1,6 +1,6 @@
 import { fullDate } from '../months.js';
-import { searchEntries } from '../search.js';
-import { parseAmount } from '../money.js';
+import { searchEntries, searchTotals } from '../search.js';
+import { parseAmount, formatEuro } from '../money.js';
 import { describeForeign } from '../currency.js';
 import { entryAmountText, entryTagLabels } from './entryDisplay.js';
 
@@ -155,6 +155,19 @@ function resultCountText(count) {
     return count === 1 ? '1 result' : `${count} results`;
 }
 
+/** The result count, then what the results add up to (all of them, not only the listed ones). */
+export function searchSummaryText(results) {
+    const { expenseCount, incomeCount, expenseCents, incomeCents } = searchTotals(results);
+    const parts = [resultCountText(results.length)];
+    if (expenseCount > 0) {
+        parts.push(`Spent ${formatEuro(expenseCents)}`);
+    }
+    if (incomeCount > 0) {
+        parts.push(`Income ${formatEuro(incomeCents)}`);
+    }
+    return parts.join(' · ');
+}
+
 function renderClosed(ctx) {
     const wrap = element('div', 'search-toggle');
     const button = element('button', 'btn', 'Search');
@@ -267,7 +280,7 @@ export function renderSearchPanel(ctx) {
             return;
         }
         const results = searchEntries(ctx.data, filters);
-        count.textContent = resultCountText(results.length);
+        count.textContent = searchSummaryText(results);
         count.classList.remove('muted');
         list.replaceChildren(
             ...results.slice(0, RESULT_LIMIT).map((item) => renderResult(ctx.data, item)),
