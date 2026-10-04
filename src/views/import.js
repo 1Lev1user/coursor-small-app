@@ -208,7 +208,7 @@ export function layoutRecord({ name, signature, delimiter, encoding, headerRow, 
         columns.debit = -1;
         columns.credit = -1;
     }
-    return {
+    const record = {
         id: createId('layout'),
         name,
         signature,
@@ -219,6 +219,8 @@ export function layoutRecord({ name, signature, delimiter, encoding, headerRow, 
         headerRow,
         columns,
     };
+    if (layout.mode !== 'split' && layout.reverse === true) record.reverse = true;
+    return record;
 }
 
 /** Same signature replaces the stored layout and keeps its id. */
@@ -293,9 +295,9 @@ export function checkWarnings(summary, placement) {
     const warnings = [];
     const counts = `(${summary.inCount} of ${summary.read})`;
     if (summary.mostlyIn && placement === 'columns') {
-        warnings.push(`Almost every row is money in ${counts}. If your bank shows spending as positive numbers, check the Direction column.`);
+        warnings.push(`Almost every row is money in ${counts}. If your bank shows spending as positive numbers, check the Direction column. Try Reverse money in and out below.`);
     } else if (summary.mostlyIn && placement === 'saved') {
-        warnings.push(`Almost every row is money in ${counts}. The saved columns may no longer fit this file: use Change columns above and check the Direction column.`);
+        warnings.push(`Almost every row is money in ${counts}. The saved columns may no longer fit this file: use Change columns above, check the Direction column and try Reverse money in and out.`);
     }
     if (summary.lineMismatch) {
         const { fileLines, tableRows } = summary.lineMismatch;
@@ -639,6 +641,7 @@ function startTable(ctx, result) {
         columns,
         decimalSeparator: guess.decimalSeparator,
         dateFormat: guess.dateFormat,
+        reverse: false,
     };
     state.askDate = guess.dateFormat === null;
     state.dateSample = samplesAt(sample, columns.date)[0] ?? '';
@@ -657,6 +660,7 @@ function startTable(ctx, result) {
             columns: savedColumns,
             decimalSeparator: saved.decimalSeparator,
             dateFormat: saved.dateFormat,
+            reverse: saved.reverse === true,
         };
         state.askDate = false;
         state.bankName = saved.name;
@@ -670,8 +674,9 @@ function startTable(ctx, result) {
     goStep(ctx, 'columns');
 }
 
-function parseLayout() {
-    const { columns, mode } = state.layout;
+/** The layout rowsToStatement reads: unused amount columns cleared, reverse only for one amount column. */
+export function parseLayoutFor(layout) {
+    const { columns, mode } = layout;
     const effective = { ...columns };
     if (mode === 'split') {
         effective.amount = -1;
@@ -680,11 +685,17 @@ function parseLayout() {
         effective.debit = -1;
         effective.credit = -1;
     }
-    return {
+    const result = {
         columns: effective,
-        decimalSeparator: state.layout.decimalSeparator,
-        dateFormat: state.layout.dateFormat,
+        decimalSeparator: layout.decimalSeparator,
+        dateFormat: layout.dateFormat,
     };
+    if (mode !== 'split' && layout.reverse === true) result.reverse = true;
+    return result;
+}
+
+function parseLayout() {
+    return parseLayoutFor(state.layout);
 }
 
 function layoutProblem() {
@@ -985,6 +996,16 @@ function renderColumns(ctx) {
     );
     if (state.layout.mode === 'single') {
         grid.append(columnSelect(ctx, 'direction', 'Direction column (optional)', true, 'A column with D or K, debit or credit.'));
+        const reverse = element('div', 'stack');
+        const reverseHint = element('p', 'muted', 'Use this if your bank shows spending as positive numbers.');
+        reverseHint.id = 'imp-reverse-hint';
+        const reverseCheck = checkRow('imp-reverse', 'Reverse money in and out', state.layout.reverse === true, (checked) => {
+            state.layout.reverse = checked;
+            refresh(ctx, 'imp-reverse');
+        });
+        reverseCheck.querySelector('input').setAttribute('aria-describedby', reverseHint.id);
+        reverse.append(reverseCheck, reverseHint);
+        grid.append(reverse);
     }
     if (state.layout.columns.currency >= 0) {
         grid.append(columnSelect(ctx, 'eurAmount', 'Amount in EUR (optional)', true, 'For rows in another currency.'));
