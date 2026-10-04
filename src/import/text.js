@@ -727,8 +727,9 @@ const SUMMARY_CORE_WORDS = [
 const SUMMARY_QUALIFIERS = [
     'opening', 'closing', 'beginning', 'starting', 'ending', 'final', 'initial', 'account', 'period',
     'available', 'booked', 'of', 'the', 'for', 'and', 'on', 'un', 'ja', 'ir',
-    'sakuma', 'beigu', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
+    'sakuma', 'beigu', 'beigas', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
     'debit', 'credit', 'algus', 'lopp', 'pradinis', 'galutinis', 'laikotarpio',
+    'brought', 'forward', 'carried',
     'начальное', 'конечное', 'входящий', 'исходящий', 'за', 'период', 'на', 'по', 'счету',
 ].map(normalizeText);
 
@@ -754,12 +755,11 @@ function hasSummaryKeyword(row) {
 }
 
 /**
- * A summary row has a description that is only a summary label, or mentions a
- * summary word and has no valid date. 'TotalEnergies' with a date stays a transaction.
+ * A summary row has any cell that consists only of summary words and includes at least one core word,
+ * or mentions a summary keyword and has no valid date. 'TotalEnergies' with a date stays a transaction.
  */
 function isSummaryRow(row, descriptionIndex, hasDate) {
-    const labelCells = descriptionIndex >= 0 ? [cellAt(row, descriptionIndex)] : row;
-    if (labelCells.some(isSummaryCell)) {
+    if (row.some(isSummaryCell)) {
         return true;
     }
     return !hasDate && hasSummaryKeyword(row);
