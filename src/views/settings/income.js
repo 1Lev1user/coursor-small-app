@@ -1,10 +1,8 @@
 import { parseAmount, formatEuro, formatPlain } from '../../money.js';
-import { todayISO, monthKeyOf } from '../../months.js';
-import { createId } from '../../model.js';
+import { monthKeyOf, fullDate } from '../../months.js';
 import { freezeMonthPlan } from '../../budget.js';
 import {
     element,
-    persist,
     buildField,
     setError,
     clearError,
@@ -20,15 +18,6 @@ import {
     addIncomeCategoryDraft,
     renderIncomeCategoryRow,
 } from './income-categories.js';
-
-const incomeDraft = {
-    incomeCategoryId: '',
-    amount: '',
-    date: '',
-    note: '',
-    errorField: '',
-    error: '',
-};
 
 function openEditIncomeEntry(ctx, income) {
     closeTransientUi();
@@ -263,7 +252,9 @@ function renderIncomeEntryRow(ctx, income) {
         description.append(element('p', 'muted', income.note));
     }
     const values = element('div', 'entry-values');
-    values.append(element('time', 'muted', income.date));
+    const dateText = element('time', 'muted', fullDate(income.date));
+    dateText.dateTime = income.date;
+    values.append(dateText);
     values.append(element('p', 'entry-amount is-ok', `+${formatEuro(income.amountCents)}`));
     row.append(description, values);
     wrap.append(row);
@@ -311,75 +302,15 @@ function renderIncomeEntryRow(ctx, income) {
     return wrap;
 }
 
-function addExtraIncome(ctx, categoryField, amountField, dateField) {
-    clearError(categoryField);
-    clearError(amountField);
-    clearError(dateField);
-    incomeDraft.error = '';
-    incomeDraft.errorField = '';
-
-    incomeDraft.incomeCategoryId = categoryField.control.value;
-    incomeDraft.amount = amountField.control.value;
-    incomeDraft.date = dateField.control.value;
-
-    if (incomeDraft.incomeCategoryId === '') {
-        incomeDraft.errorField = 'category';
-        incomeDraft.error = 'Choose an income category.';
-        setError(categoryField, incomeDraft.error);
-        categoryField.control.focus();
-        return;
-    }
-
-    const amountCents = parseAmount(incomeDraft.amount);
-    if (amountCents === null) {
-        incomeDraft.errorField = 'amount';
-        incomeDraft.error = 'Enter a valid amount greater than zero.';
-        setError(amountField, incomeDraft.error);
-        amountField.control.focus();
-        return;
-    }
-
-    if (incomeDraft.date === '' || monthKeyOf(incomeDraft.date) === null) {
-        incomeDraft.errorField = 'date';
-        incomeDraft.error = 'Enter a valid date.';
-        setError(dateField, incomeDraft.error);
-        dateField.control.focus();
-        return;
-    }
-
-    const noteInput = document.getElementById('extra-income-note');
-    const note = noteInput?.value.trim() ?? '';
-
-    ctx.data.incomes.push({
-        id: createId('inc'),
-        incomeCategoryId: incomeDraft.incomeCategoryId,
-        amountCents,
-        note,
-        date: incomeDraft.date,
-    });
-    freezeMonthPlan(ctx.data, monthKeyOf(incomeDraft.date));
-
-    incomeDraft.incomeCategoryId = '';
-    incomeDraft.amount = '';
-    incomeDraft.date = '';
-    incomeDraft.note = '';
-    incomeDraft.error = '';
-    incomeDraft.errorField = '';
-
-    if (persist(ctx)) {
-        ctx.toast('Extra income added');
-    }
-}
-
 export function renderIncomeSection(ctx) {
     const section = element('section', 'card stack');
     section.id = 'more-income';
     section.append(element('h2', 'section-title', 'Income'));
 
-    section.append(element('h3', 'category-name', 'Extra income'));
+    section.append(element('h3', 'category-name', 'Income entries'));
     const list = element('div', 'entry-list income-entry-list');
     if (ctx.data.incomes.length === 0) {
-        list.append(element('p', 'muted', 'No extra income yet.'));
+        list.append(element('p', 'muted', 'No income entries yet.'));
     } else {
         const sorted = [...ctx.data.incomes].sort((first, second) => {
             if (first.date !== second.date) {
@@ -392,93 +323,6 @@ export function renderIncomeSection(ctx) {
         }
     }
     section.append(list);
-
-    if (incomeDraft.date === '') {
-        incomeDraft.date = todayISO();
-    }
-
-    const addForm = element('form', 'stack add-extra-income-form');
-    addForm.noValidate = true;
-    addForm.append(element('h3', 'category-name', 'Add extra income'));
-    addForm.append(element(
-        'p',
-        'muted',
-        'Extra income only, such as a bonus or a gift. Your salary is added automatically each month.',
-    ));
-
-    const categorySelect = document.createElement('select');
-    categorySelect.required = true;
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = 'Choose a category';
-    categorySelect.append(placeholder);
-    for (const category of ctx.data.incomeCategories) {
-        const opt = document.createElement('option');
-        opt.value = category.id;
-        opt.textContent = category.name;
-        categorySelect.append(opt);
-    }
-    categorySelect.value = incomeDraft.incomeCategoryId;
-    const categoryField = buildField('extra-income-category', 'Income category', categorySelect);
-    categorySelect.addEventListener('change', () => {
-        incomeDraft.incomeCategoryId = categorySelect.value;
-        clearError(categoryField);
-    });
-
-    const amountInput = document.createElement('input');
-    amountInput.type = 'text';
-    amountInput.inputMode = 'decimal';
-    amountInput.autocomplete = 'off';
-    amountInput.placeholder = '100';
-    amountInput.value = incomeDraft.amount;
-    const amountField = buildField('extra-income-amount', 'Amount (EUR)', amountInput);
-    amountInput.addEventListener('input', () => {
-        incomeDraft.amount = amountInput.value;
-        clearError(amountField);
-    });
-
-    const dateInput = document.createElement('input');
-    dateInput.type = 'date';
-    dateInput.value = incomeDraft.date;
-    const dateField = buildField('extra-income-date', 'Date', dateInput);
-    dateInput.addEventListener('input', () => {
-        incomeDraft.date = dateInput.value;
-        clearError(dateField);
-    });
-
-    const noteInput = document.createElement('input');
-    noteInput.type = 'text';
-    noteInput.autocomplete = 'off';
-    noteInput.value = incomeDraft.note;
-    const noteField = buildField('extra-income-note', 'Note (optional)', noteInput);
-    noteInput.addEventListener('input', () => {
-        incomeDraft.note = noteInput.value;
-    });
-
-    if (incomeDraft.error !== '') {
-        if (incomeDraft.errorField === 'category') {
-            setError(categoryField, incomeDraft.error);
-        } else if (incomeDraft.errorField === 'amount') {
-            setError(amountField, incomeDraft.error);
-        } else if (incomeDraft.errorField === 'date') {
-            setError(dateField, incomeDraft.error);
-        }
-    }
-
-    const addSubmit = element('button', 'btn btn-primary', 'Add extra income');
-    addSubmit.type = 'submit';
-    addForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        addExtraIncome(ctx, categoryField, amountField, dateField);
-    });
-    addForm.append(
-        categoryField.wrapper,
-        amountField.wrapper,
-        dateField.wrapper,
-        noteField.wrapper,
-        addSubmit,
-    );
-    section.append(addForm);
 
     section.append(element('h3', 'category-name', 'Income categories'));
     const categories = element('div', 'category-list');

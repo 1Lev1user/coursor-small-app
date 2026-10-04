@@ -335,18 +335,18 @@ export function renderSubscriptionsSection(ctx, plan) {
         const budgetCents = ctx.data.settings.monthlyBudgetCents;
         const planBlock = element('div', 'stack subscription-plan');
         planBlock.append(
-            element('h3', 'category-name', 'Budget share'),
+            element('h3', 'category-name', 'Category limit'),
             element('p', 'muted', shareLabel(category, plan, budgetCents)),
         );
 
         if (state.editPlanCategoryId === category.id) {
             planBlock.append(renderCategoryPlanEditor(ctx, category));
         } else {
-            planBlock.append(
-                actionButton('btn btn-ghost', 'Edit plan', () => {
-                    openCategoryPlanEditor(ctx, category);
-                }),
-            );
+            const limitButton = actionButton('btn btn-ghost', 'Limit', () => {
+                openCategoryPlanEditor(ctx, category);
+            });
+            limitButton.setAttribute('aria-label', `Edit limit for ${category.name}`);
+            planBlock.append(limitButton);
         }
         section.append(planBlock);
     }

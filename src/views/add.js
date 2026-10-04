@@ -113,10 +113,10 @@ export function addScreenTitle() {
         return 'Add expense';
     }
     if (panel === 'income') {
-        return 'Add extra income';
+        return 'Add income';
     }
     if (panel === 'added') {
-        return lastAdded?.kind === 'income' ? 'Extra income added' : 'Expense added';
+        return lastAdded?.kind === 'income' ? 'Income added' : 'Expense added';
     }
     return 'Home';
 }
@@ -271,7 +271,7 @@ function renderAddedConfirm(root, ctx) {
         element(
             'h2',
             'section-title',
-            lastAdded.kind === 'income' ? 'Extra income added' : 'Expense added',
+            lastAdded.kind === 'income' ? 'Income added' : 'Expense added',
         ),
         element('p', 'big-number', formatEuro(lastAdded.amountCents)),
         element('p', 'muted', lastAdded.label),
@@ -906,7 +906,7 @@ function renderIncomeForm(root, ctx) {
     const submit = document.createElement('button');
     submit.type = 'submit';
     submit.className = 'btn btn-primary';
-    submit.textContent = 'Add extra income';
+    submit.textContent = 'Add income';
 
     form.addEventListener('submit', (event) => {
         event.preventDefault();

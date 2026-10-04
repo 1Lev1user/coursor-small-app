@@ -93,7 +93,7 @@ function renderSpendingOverview(layout, ctx, totals) {
     section.append(element(
         'p',
         'muted',
-        'Spend budget stays fixed from Plan for this month. Extra income does not raise it.',
+        'The monthly budget stays fixed for this month. Extra income does not raise it.',
     ));
 
     if (totals.spentCents === 0) {
@@ -173,7 +173,7 @@ function renderIncomeOverview(layout, ctx, income) {
             '',
             `No income for ${monthLabel(ctx.monthKey)}. Set usual salary in Settings → Plan or add extra income from Home.`,
         ));
-        const add = element('button', 'btn btn-primary', 'Add extra income');
+        const add = element('button', 'btn btn-primary', 'Add income');
         add.type = 'button';
         add.addEventListener('click', () => ctx.goTo('add', { panel: 'income' }));
         empty.append(add);

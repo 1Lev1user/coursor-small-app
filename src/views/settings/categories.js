@@ -36,6 +36,7 @@ import {
     openCategoryPlanEditor,
     renderCategoryPlanEditor,
 } from './shared.js';
+import { renderWarnings } from './plan.js';
 
 const addDraft = {
     name: '',
@@ -178,7 +179,7 @@ function addCategory(ctx, nameField, amountField) {
         pinned = true;
         if (addDraft.limitUnit === 'euro') {
             if (budget <= 0) {
-                addDraft.error = 'Save a monthly spend budget first.';
+                addDraft.error = 'Save a monthly budget first.';
                 setError(amountField, addDraft.error);
                 amountField.control.focus();
                 return;
@@ -368,10 +369,12 @@ function renderCategory(ctx, category, plan) {
         );
     } else {
         const actions = element('div', 'more-actions');
+        const limitButton = actionButton('btn btn-ghost', 'Limit', () => {
+            openCategoryPlanEditor(ctx, category);
+        });
+        limitButton.setAttribute('aria-label', `Edit limit for ${category.name}`);
         actions.append(
-            actionButton('btn btn-ghost', 'Edit plan', () => {
-                openCategoryPlanEditor(ctx, category);
-            }),
+            limitButton,
             actionButton('btn btn-ghost', 'Rename', () => {
                 closeTransientUi();
                 state.renameCategoryId = category.id;
@@ -409,7 +412,7 @@ function renderCategory(ctx, category, plan) {
 function renderKindChoice(amountField, ctx) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
-    legend.textContent = 'Share';
+    legend.textContent = 'Limit';
     fieldset.append(legend);
 
     const row = element('div', 'choice-row');
@@ -505,6 +508,7 @@ export function renderCategoriesSection(ctx, plan) {
     const section = element('section', 'card stack');
     section.id = 'more-categories';
     section.append(element('h2', 'section-title', 'Categories'));
+    renderWarnings(section, plan);
 
     const list = element('div', 'category-list');
     for (const category of userCategories(ctx.data)) {

@@ -149,7 +149,7 @@ export function renderPlanSection(ctx) {
     budgetInput.autocomplete = 'off';
     budgetInput.placeholder = '1000';
     budgetInput.value = centsInputValue(settings.monthlyBudgetCents, planDraft.budget);
-    const budgetField = buildField('plan-budget', 'Monthly spend budget (EUR)', budgetInput);
+    const budgetField = buildField('plan-budget', 'Monthly budget (EUR)', budgetInput);
     budgetInput.addEventListener('input', () => {
         planDraft.budget = budgetInput.value;
         clearError(budgetField);

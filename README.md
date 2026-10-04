@@ -8,7 +8,7 @@ User guide (PDF): https://github.com/1Lev1user/coursor-small-app/releases/latest
 ## First-run setup
 
 1. Your name, used on Home
-2. Monthly spend budget (EUR)
+2. Monthly budget (EUR)
 3. Savings, in euro or as a % of that budget
 4. Usual monthly income (EUR)
 
