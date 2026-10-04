@@ -4,6 +4,7 @@ import { todayISO } from '../months.js';
 import { closeTransientUi, element, state } from './settings/shared.js';
 import { renderPlanSection, renderProfileSection } from './settings/plan.js';
 import { renderIncomeSection } from './settings/income.js';
+import { renderIncomeSourcesSection } from './settings/incomeSources.js';
 import { renderSubscriptionsSection } from './settings/subscriptions.js';
 import { renderCategoriesSection, userCategories } from './settings/categories.js';
 import { renderBackupReminder, renderBackupSection } from './settings/backup.js';
@@ -39,6 +40,7 @@ export const SETTINGS_GROUPS = [
 
 export const SECTION_RENDERERS = {
     'more-plan': (ctx) => renderPlanSection(ctx),
+    'more-income-sources': (ctx) => renderIncomeSourcesSection(ctx),
     'more-income': (ctx) => renderIncomeSection(ctx),
     'more-subscriptions': (ctx, plan) => renderSubscriptionsSection(ctx, plan),
     'more-categories': (ctx, plan) => renderCategoriesSection(ctx, plan),
@@ -115,11 +117,16 @@ export function groupSummary(groupId, data, now = new Date()) {
                 ? `${formatEuro(settings.monthlyBudgetCents)} a month`
                 : 'No budget set';
             break;
-        case 'income':
-            text = data.incomes.length === 0
+        case 'income': {
+            const sources = data.incomeSources.length;
+            const entries = data.incomes.length === 0
                 ? 'No income entries yet'
                 : plural(data.incomes.length, 'income entry', 'income entries');
+            text = sources === 0
+                ? entries
+                : `${plural(sources, 'regular income', 'regular incomes')} · ${entries.toLowerCase()}`;
             break;
+        }
         case 'backup':
             return backupSummary(data, now);
         case 'categories':
