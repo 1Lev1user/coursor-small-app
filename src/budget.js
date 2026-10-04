@@ -1,5 +1,6 @@
 import { splitShares } from './money.js';
-import { currentMonthKey, isInMonth } from './months.js';
+import { compareMonthKeys, currentMonthKey, isInMonth } from './months.js';
+import { firstTrackedMonth, incomeStatus, monthIncomeSplit, usesNewCounting } from './incomeSources.js';
 
 export function percentFromEuroCents(limitCents, monthlyBudgetCents) {
     if (!Number.isFinite(limitCents) || !Number.isFinite(monthlyBudgetCents) || monthlyBudgetCents <= 0) {
@@ -33,6 +34,23 @@ export function hasImportedSalary(data, monthKey) {
 /** The plan's usual income, unless the real salary was imported for that month. */
 function plannedIncomeCents(data, plan, monthKey) {
     return hasImportedSalary(data, monthKey) ? 0 : plan.usualMonthlyIncomeCents;
+}
+
+/**
+ * Usual income of a month: none on the new counting and none for a month the owner
+ * never had (no data, before the first month); otherwise the plan's, as before.
+ */
+function usualIncomeFor(data, plan, monthKey, now) {
+    if (usesNewCounting(data, monthKey)) {
+        return 0;
+    }
+    const hasData = data.expenses.some(({ date }) => isInMonth(date, monthKey))
+        || data.incomes.some(({ date }) => isInMonth(date, monthKey))
+        || Object.hasOwn(data.monthPlans, monthKey);
+    if (!hasData && compareMonthKeys(monthKey, firstTrackedMonth(data, now)) < 0) {
+        return 0;
+    }
+    return plannedIncomeCents(data, plan, monthKey);
 }
 
 export function isNoLimitCategory(category) {
@@ -197,7 +215,7 @@ export function refreshCurrentMonthPlan(data, now = new Date()) {
     return copyPlanSnapshot(data.monthPlans[monthKey]);
 }
 
-export function monthTotals(data, monthKey) {
+export function monthTotals(data, monthKey, now = new Date()) {
     const plan = getMonthPlan(data, monthKey);
     const monthExpenses = data.expenses.filter(({ date }) => isInMonth(date, monthKey));
     const spendingByCategory = new Map();
@@ -231,11 +249,15 @@ export function monthTotals(data, monthKey) {
         (total, expense) => total + spendCents(expense),
         0,
     );
-    const extraIncomeCents = data.incomes
-        .filter(({ date }) => isInMonth(date, monthKey))
-        .reduce((total, entry) => total + entry.amountCents, 0);
-    const usualIncomeCents = plannedIncomeCents(data, plan, monthKey);
-    const incomeCents = usualIncomeCents + extraIncomeCents;
+    const newCounting = usesNewCounting(data, monthKey);
+    const split = monthIncomeSplit(data, monthKey);
+    const sourceIncomeCents = newCounting ? split.sourceIncomeCents : 0;
+    const extraIncomeCents = newCounting ? split.extraIncomeCents : split.totalCents;
+    const usualIncomeCents = usualIncomeFor(data, plan, monthKey, now);
+    const expectedIncomeCents = incomeStatus(data, monthKey, now)
+        .filter(({ state }) => state === 'upcoming' || state === 'due')
+        .reduce((total, item) => total + item.expectedCents, 0);
+    const incomeCents = usualIncomeCents + sourceIncomeCents + extraIncomeCents;
     const budgetCents = plan.monthlyBudgetCents;
 
     return {
@@ -243,7 +265,9 @@ export function monthTotals(data, monthKey) {
         budgetCents,
         spentCents,
         usualIncomeCents,
+        sourceIncomeCents,
         extraIncomeCents,
+        expectedIncomeCents,
         incomeCents,
         budgetLeftCents: budgetCents - spentCents,
         cashLeftCents: incomeCents - spentCents,
@@ -306,7 +330,7 @@ export function subcategoryTotals(data, monthKey, categoryId) {
 /**
  * Income analytics: usual Plan salary plus extra income by category.
  */
-export function incomeBreakdown(data, monthKey) {
+export function incomeBreakdown(data, monthKey, now = new Date()) {
     const plan = getMonthPlan(data, monthKey);
     const knownIds = new Set(data.incomeCategories.map(({ id }) => id));
     const amountsByCategory = new Map();
@@ -323,7 +347,7 @@ export function incomeBreakdown(data, monthKey) {
     }
 
     const entries = [];
-    const usualIncomeCents = plannedIncomeCents(data, plan, monthKey);
+    const usualIncomeCents = usualIncomeFor(data, plan, monthKey, now);
     if (usualIncomeCents > 0) {
         entries.push({
             id: 'usual-plan',
@@ -362,7 +386,9 @@ export function incomeBreakdown(data, monthKey) {
     return {
         monthKey,
         usualIncomeCents,
-        extraIncomeCents: Math.max(0, totalCents - usualIncomeCents),
+        extraIncomeCents: usesNewCounting(data, monthKey)
+            ? monthIncomeSplit(data, monthKey).extraIncomeCents
+            : Math.max(0, totalCents - usualIncomeCents),
         totalCents,
         entries,
     };

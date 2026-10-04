@@ -15,7 +15,7 @@ import {
  * not future months and not months before the app was used.
  */
 function actualTotals(data, monthKey, now) {
-    const totals = monthTotals(data, monthKey);
+    const totals = monthTotals(data, monthKey, now);
     const inUse = Object.hasOwn(data.monthPlans ?? {}, monthKey)
         || data.expenses.some(({ date }) => isInMonth(date, monthKey))
         || data.incomes.some(({ date }) => isInMonth(date, monthKey));

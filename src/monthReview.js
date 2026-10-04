@@ -1,4 +1,5 @@
-import { currentMonthKey, addMonths, monthLabel } from './months.js';
+import { currentMonthKey, addMonths, compareMonthKeys, monthLabel } from './months.js';
+import { firstTrackedMonth } from './incomeSources.js';
 import {
     monthTotals,
     syncCategoryPlanFields,
@@ -15,11 +16,14 @@ export function getMonthReviewSuggestion(data, now = new Date()) {
     }
 
     const previousKey = addMonths(currentMonthKey(now), -1);
+    if (compareMonthKeys(previousKey, firstTrackedMonth(data, now)) < 0) {
+        return null;
+    }
     if (data.settings.monthReviewDismissedFor === previousKey) {
         return null;
     }
 
-    const totals = monthTotals(data, previousKey);
+    const totals = monthTotals(data, previousKey, now);
     if (totals.spentCents <= 0 && totals.incomeCents <= 0) {
         return null;
     }
