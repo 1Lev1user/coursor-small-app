@@ -1,4 +1,4 @@
-import { parseAmount, formatEuro } from '../money.js';
+import { parseAmount, formatEuro, formatPlain } from '../money.js';
 import {
     currentMonthKey,
     monthKeyOf,
@@ -30,6 +30,7 @@ import {
 import { openSettingsSection } from './more.js';
 import { doExportBackup } from './settings/backup.js';
 import { renderGoalCard } from './goalCard.js';
+import { renderPaydayReminders } from './paydayReminder.js';
 import { entryAmountText } from './entryDisplay.js';
 import {
     amountErrorText,
@@ -60,6 +61,7 @@ const OVERDUE_BACKUP_DAYS = 60;
 const SNOOZE_DAYS = 7;
 
 const incomeDraft = {
+    sourceId: '',
     incomeCategoryId: '',
     amount: '',
     note: '',
@@ -668,11 +670,14 @@ function renderHome(root, ctx) {
     const actions = element('div', 'home-actions');
     actions.append(expenseBtn, incomeBtn);
 
-    layout.append(
-        element('h2', 'home-title', heading),
-        figure,
-        actions,
-    );
+    layout.append(element('h2', 'home-title', heading), figure);
+
+    const paydayReminders = renderPaydayReminders(ctx);
+    if (paydayReminders !== null) {
+        layout.append(paydayReminders);
+    }
+
+    layout.append(actions);
 
     const templates = renderTemplates(ctx);
     if (templates !== null) {
@@ -710,9 +715,19 @@ function renderHome(root, ctx) {
     root.append(layout);
 }
 
+/** The line above the Add income form. */
+export function incomeFormNote(data) {
+    return data.incomeSources.length > 0
+        ? 'Pick the regular income this is, so it counts as received for that month. Choose Other income for a bonus or a gift.'
+        : 'Add any income here, such as a bonus or a gift.';
+}
+
 function renderIncomeForm(root, ctx) {
     if (incomeDraft.date === '') {
         incomeDraft.date = todayISO();
+    }
+    if (!ctx.data.incomeSources.some(({ id }) => id === incomeDraft.sourceId)) {
+        incomeDraft.sourceId = '';
     }
     if (!ctx.data.incomeCategories.some(({ id }) => id === incomeDraft.incomeCategoryId)) {
         incomeDraft.incomeCategoryId = '';
@@ -723,13 +738,26 @@ function renderIncomeForm(root, ctx) {
     form.className = 'card stack';
     form.noValidate = true;
 
-    form.append(
-        element(
-            'p',
-            'muted home-auto-note',
-            'Extra income only, such as a bonus or a gift. Your salary is added automatically each month.',
-        ),
-    );
+    form.append(element('p', 'muted home-auto-note', incomeFormNote(ctx.data)));
+
+    const sourceSelect = document.createElement('select');
+    sourceSelect.append(option('', 'Other income (bonus, gift, ...)'));
+    for (const incomeSource of ctx.data.incomeSources) {
+        sourceSelect.append(option(incomeSource.id, incomeSource.name));
+    }
+    sourceSelect.value = incomeDraft.sourceId;
+    const sourceField = buildField('home-income-source', 'Income from', sourceSelect);
+    sourceSelect.addEventListener('change', () => {
+        incomeDraft.sourceId = sourceSelect.value;
+        const picked = ctx.data.incomeSources.find(({ id }) => id === sourceSelect.value);
+        if (picked !== undefined) {
+            incomeDraft.incomeCategoryId = picked.incomeCategoryId;
+            if (incomeDraft.amount.trim() === '') {
+                incomeDraft.amount = formatPlain(picked.expectedCents, '.');
+            }
+        }
+        ctx.render();
+    });
 
     const categorySelect = document.createElement('select');
     categorySelect.required = true;
@@ -947,15 +975,20 @@ function renderIncomeForm(root, ctx) {
         }
 
         const incomeCategoryId = incomeDraft.incomeCategoryId;
+        const sourceId = ctx.data.incomeSources.some(({ id }) => id === incomeDraft.sourceId)
+            ? incomeDraft.sourceId
+            : '';
         ctx.data.incomes.push({
             id: createId('inc'),
             incomeCategoryId,
             amountCents,
             note: incomeDraft.note.trim(),
             date: incomeDraft.date,
+            sourceId,
         });
         freezeMonthPlan(ctx.data, monthKeyOf(incomeDraft.date));
 
+        incomeDraft.sourceId = '';
         incomeDraft.incomeCategoryId = '';
         incomeDraft.amount = '';
         incomeDraft.date = todayISO();
@@ -982,6 +1015,9 @@ function renderIncomeForm(root, ctx) {
         }
     });
 
+    if (ctx.data.incomeSources.length > 0) {
+        form.append(sourceField.wrapper);
+    }
     form.append(
         categoryField.wrapper,
         categoryPanelHost,

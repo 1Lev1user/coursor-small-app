@@ -60,6 +60,7 @@ const CORE_ASSETS = [
     './src/views/trends.js',
     './src/views/year.js',
     './src/views/goalCard.js',
+    './src/views/paydayReminder.js',
     './src/views/settings/goals.js',
     './src/views/import.js',
     './src/views/settings/importSettings.js',
