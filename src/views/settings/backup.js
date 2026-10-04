@@ -273,11 +273,11 @@ export function renderBackupSection(ctx) {
     const preUpdate = readPreUpdateCopy();
     if (preUpdate !== null) {
         section.append(
-            element('h3', 'category-name', 'Data from before version 2.0'),
+            element('h3', 'category-name', 'Data from before the last update'),
             element(
                 'p',
                 'muted',
-                'This device kept a copy of your data as it was before the 2.0 update.'
+                'This device kept a copy of your data as it was before the last update.'
                     + ' If something looks wrong, use Restore pre-update copy to go back to it, or download it first.',
             ),
         );
@@ -317,7 +317,7 @@ export function renderBackupSection(ctx) {
             const preUpdateActions = element('div', 'backup-actions');
             preUpdateActions.append(
                 actionButton('btn', 'Download pre-update copy', () => {
-                    downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
+                    downloadText(`my-expenses-before-update-${todayISO()}.json`, preUpdate, 'application/json');
                 }),
                 actionButton('btn', 'Restore pre-update copy', () => {
                     state.confirmDeletePreUpdate = false;

@@ -1,4 +1,6 @@
-export const SCHEMA_VERSION = 2;
+import { monthKeyOf } from './months.js';
+
+export const SCHEMA_VERSION = 3;
 export const UNCATEGORISED_ID = 'uncategorised';
 export const SAVINGS_ID = 'savings';
 export const SUBSCRIPTIONS_ID = 'subscriptions';
@@ -78,6 +80,9 @@ export function defaultData() {
             othersSeeded: true,
             monthReviewDismissedFor: null,
             backupSnoozedUntil: '',
+            balanceStart: null,
+            perDayMode: 'auto',
+            perDayFixedCents: 0,
         },
         categories: [
             {
@@ -138,6 +143,7 @@ export function defaultData() {
         imports: [],
         templates: [],
         goals: [],
+        incomeSources: [],
     };
 }
 
@@ -151,7 +157,36 @@ function stringOr(value, fallback = '') {
     return typeof value === 'string' ? value : fallback;
 }
 
-/** Fills the v2 fields of one expense or income; `isExpense` adds refund and goalId. */
+function isObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isMonthKey(key) {
+    return typeof key === 'string' && monthKeyOf(`${key}-01`) === key;
+}
+
+function monthKeyList(value) {
+    return Array.isArray(value) ? [...new Set(value.filter(isMonthKey))] : [];
+}
+
+/** A clean income source, or null when it has no usable id. */
+export function normaliseIncomeSource(raw) {
+    if (!isObject(raw) || typeof raw.id !== 'string' || raw.id === '') {
+        return null;
+    }
+    const { expectedCents, dayOfMonth, startDate } = raw;
+    return {
+        id: raw.id,
+        name: stringOr(raw.name).trim().slice(0, 40).trim(),
+        incomeCategoryId: stringOr(raw.incomeCategoryId),
+        expectedCents: Number.isInteger(expectedCents) && expectedCents >= 0 ? expectedCents : 0,
+        dayOfMonth: Number.isInteger(dayOfMonth) && dayOfMonth >= 1 && dayOfMonth <= 31 ? dayOfMonth : 1,
+        startDate: monthKeyOf(startDate) === null ? '' : startDate,
+        skippedMonths: monthKeyList(raw.skippedMonths),
+    };
+}
+
+/** Fills the v2 fields of one expense or income; `isExpense` adds refund and goalId, an income gets sourceId. */
 export function normaliseEntry(entry, isExpense) {
     entry.currency = isCurrencyCode(entry.currency) ? entry.currency : 'EUR';
     if (!Number.isInteger(entry.originalAmountCents) || entry.originalAmountCents < 0) {
@@ -167,6 +202,8 @@ export function normaliseEntry(entry, isExpense) {
     if (isExpense) {
         entry.refund = entry.refund === true;
         entry.goalId = stringOr(entry.goalId);
+    } else {
+        entry.sourceId = stringOr(entry.sourceId);
     }
     return entry;
 }
@@ -185,6 +222,27 @@ const MIGRATIONS = {
         next.settings = { ...next.settings, backupSnoozedUntil: '' };
         next.expenses = (next.expenses ?? []).map((entry) => normaliseEntry({ ...entry }, true));
         next.incomes = (next.incomes ?? []).map((entry) => normaliseEntry({ ...entry }, false));
+        return next;
+    },
+    2(data) {
+        const next = JSON.parse(JSON.stringify(data));
+        next.version = 3;
+        // Broken settings, lists and incomes stay as they are, so normalise still rejects them.
+        if (isObject(next.settings)) {
+            next.settings = { ...next.settings, balanceStart: null, perDayMode: 'auto', perDayFixedCents: 0 };
+        }
+        next.incomeSources = [];
+        if (Array.isArray(next.incomes)) {
+            next.incomes = next.incomes.map((entry) => (
+                isObject(entry) ? { ...entry, sourceId: stringOr(entry.sourceId) } : entry
+            ));
+        }
+        // A subscription that is not an object carries no data and is dropped.
+        if (Array.isArray(next.subscriptions)) {
+            next.subscriptions = next.subscriptions
+                .filter(isObject)
+                .map((subscription) => ({ ...subscription, skippedMonths: [] }));
+        }
         return next;
     },
 };
@@ -279,6 +337,26 @@ export function normalise(raw) {
             && typeof data.settings.monthReviewDismissedFor !== 'string'
         ) {
             data.settings.monthReviewDismissedFor = null;
+        }
+        const { balanceStart, perDayFixedCents } = data.settings;
+        if (
+            !isObject(balanceStart)
+            || !Number.isInteger(balanceStart.cents)
+            || monthKeyOf(balanceStart.date) === null
+        ) {
+            data.settings.balanceStart = null;
+        }
+        if (data.settings.perDayMode !== 'auto' && data.settings.perDayMode !== 'fixed') {
+            data.settings.perDayMode = 'auto';
+        }
+        if (!Number.isInteger(perDayFixedCents) || perDayFixedCents < 0) {
+            data.settings.perDayFixedCents = 0;
+        }
+        data.incomeSources = Array.isArray(data.incomeSources)
+            ? data.incomeSources.map(normaliseIncomeSource).filter((source) => source !== null)
+            : [];
+        for (const subscription of data.subscriptions) {
+            subscription.skippedMonths = monthKeyList(subscription.skippedMonths);
         }
 
         const budget = data.settings.monthlyBudgetCents;

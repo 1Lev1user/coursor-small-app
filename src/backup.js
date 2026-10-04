@@ -33,7 +33,7 @@ export function importBackup(rawText) {
     return { ok: true, data: result.data };
 }
 
-const LOCAL_SETTINGS = ['userName', 'lastBackupISO', 'backupSnoozedUntil', 'monthReviewDismissedFor'];
+const LOCAL_SETTINGS = ['userName', 'lastBackupISO', 'backupSnoozedUntil', 'monthReviewDismissedFor', 'balanceStart'];
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -103,6 +103,18 @@ export function mergeSettingsOnly(current, backup) {
         }
     }
 
+    // Pitfall: income sources no local income uses are replaced by the
+    // backup's list, which may be empty.
+    next.incomeSources = incoming.incomeSources ?? [];
+    for (const income of current.incomes) {
+        if (income.sourceId && !next.incomeSources.some(({ id }) => id === income.sourceId)) {
+            const local = (current.incomeSources ?? []).find(({ id }) => id === income.sourceId);
+            if (local !== undefined) {
+                next.incomeSources.push(clone(local));
+            }
+        }
+    }
+
     next.subscriptions = incoming.subscriptions;
     next.rules = incoming.rules ?? [];
     next.templates = incoming.templates ?? [];
@@ -119,5 +131,6 @@ export function countSettings(data) {
         rules: (data.rules ?? []).length,
         templates: (data.templates ?? []).length,
         goals: (data.goals ?? []).length,
+        incomeSources: (data.incomeSources ?? []).length,
     };
 }
