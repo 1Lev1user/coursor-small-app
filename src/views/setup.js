@@ -135,7 +135,7 @@ function buildSavingsField(ctx) {
         const budgetCents = draftBudgetCents();
         const nextUnit = draft.savingsUnit === 'euro' ? 'percent' : 'euro';
         if (nextUnit === 'euro' && draft.budget.trim() !== '' && parseAmount(draft.budget, { allowZero: true }) === null) {
-            setError(field, 'Enter a valid monthly spend budget first.');
+            setError(field, 'Enter a valid monthly budget first.');
             return;
         }
 
@@ -205,7 +205,7 @@ function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
             return;
         }
         if (cents > budgetCents) {
-            setError(savingsField, 'Savings cannot exceed the monthly spend budget.');
+            setError(savingsField, 'Savings cannot exceed the monthly budget.');
             savingsField.control.focus();
             return;
         }
@@ -291,7 +291,7 @@ export function render(root, ctx) {
         element(
             'p',
             'muted',
-            'Tell us your name and set your monthly plan once. You can change these later in Settings.',
+            'Tell us your name and set your monthly budget once. You can change these later in Settings.',
         ),
     );
 
@@ -318,7 +318,7 @@ export function render(root, ctx) {
     budgetInput.placeholder = '1000';
     budgetInput.required = true;
     budgetInput.value = draft.budget;
-    const budgetField = buildField('setup-budget', 'Monthly spend budget (EUR)', budgetInput);
+    const budgetField = buildField('setup-budget', 'Monthly budget (EUR)', budgetInput);
 
     const savingsField = buildSavingsField(ctx);
 

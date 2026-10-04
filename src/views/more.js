@@ -1,6 +1,6 @@
 import { resolvePlan } from '../budget.js';
 import { element, state } from './settings/shared.js';
-import { renderWarnings, renderPlanSection } from './settings/plan.js';
+import { renderPlanSection } from './settings/plan.js';
 import { renderIncomeSection } from './settings/income.js';
 import { renderSubscriptionsSection } from './settings/subscriptions.js';
 import { renderCategoriesSection } from './settings/categories.js';
@@ -22,7 +22,6 @@ export function openSettingsSection(sectionId) {
 export function render(root, ctx) {
     const plan = resolvePlan(ctx.data.categories, ctx.data.settings.monthlyBudgetCents);
     const layout = element('div', 'stack more-page');
-    layout.append(element('h2', 'section-title', 'Settings'));
 
     const jumps = element('nav', 'more-jumps');
     jumps.setAttribute('aria-label', 'Settings sections');
@@ -44,7 +43,6 @@ export function render(root, ctx) {
     layout.append(jumps);
 
     const reminder = renderBackupReminder(ctx);
-    renderWarnings(layout, plan);
     layout.append(
         renderPlanSection(ctx),
         renderIncomeSection(ctx),
