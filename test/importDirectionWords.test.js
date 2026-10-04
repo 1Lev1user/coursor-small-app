@@ -91,6 +91,35 @@ test('a D/C mark glued to the amount is read, currency codes are not marks', () 
     }
 });
 
+test('D/C mark shapes that were read before still are (values taken from main)', () => {
+    const expected = {
+        '(12,50) D': -1250,
+        '12,50- D': -1250,
+        '12,50 EUR D': -1250,
+        '12,50 € D': -1250,
+        '(12,50) CR': -1250,
+        '12,50- CR': -1250,
+    };
+    for (const [text, cents] of Object.entries(expected)) {
+        assert.equal(parseAmountWith(text, ','), cents, text);
+    }
+});
+
+test('a column of one repeated sign is not a direction column by content', () => {
+    const { guess, result } = read(
+        'Date;Description;Amount;Reference\n01.09.2026;A;-10,00;-\n02.09.2026;B;2000,00;-',
+    );
+    assert.equal(guess.columns.direction, -1);
+    assert.deepEqual(signed(result), ['out:1000', 'in:200000']);
+    const plus = read('Date;Description;Amount;Reference\n01.09.2026;A;10,00;+\n02.09.2026;B;20,00;+');
+    assert.equal(plus.guess.columns.direction, -1);
+});
+
+test('an unnamed column with both + and - is still a direction column', () => {
+    const { guess } = read('Date;Description;Amount;Reference\n01.09.2026;A;10,00;-\n02.09.2026;B;20,00;+');
+    assert.equal(guess.columns.direction, 3);
+});
+
 test('a transaction type column is still not a direction column', () => {
     const { guess } = read(
         'Type,Product,Started Date,Description,Amount,Currency\n'

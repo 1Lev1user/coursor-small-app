@@ -454,7 +454,9 @@ export function guessColumns(header, sampleRows) {
         const width = sampleRows[0] ? sampleRows[0].length : 0;
         for (let i = 0; i < width; i += 1) {
             const samples = columnSamples(sampleRows, i);
-            if (!used.has(i) && samples.length > 0 && samples.every(isDirectionValue)) {
+            // One repeated '-' or '+' is a placeholder column, not a direction.
+            const onlyOneSign = samples.every((value) => value === samples[0]) && /^[+-]$/.test(samples[0]);
+            if (!used.has(i) && samples.length > 0 && !onlyOneSign && samples.every(isDirectionValue)) {
                 columns.direction = i;
                 break;
             }
@@ -622,7 +624,7 @@ export function stripAmountDecoration(value) {
     let negative = false;
 
     text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
-    const trailingMark = text.match(/(?<=\d)\s*(DR|CR|D|C|K)$/i);
+    const trailingMark = text.match(/(?:(?<=\d)\s*|\s+)(DR|CR|D|C|K)$/i);
     if (trailingMark) {
         negative = /^D/i.test(trailingMark[1]);
         text = text.slice(0, trailingMark.index).trim();
