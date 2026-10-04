@@ -576,7 +576,7 @@ function renderBackupReminder(ctx, reminder) {
 }
 
 function templateButtonText(template) {
-    return `${template.name} · ${formatEuro(template.amountCents)}`;
+    return `${template.name} \u00b7 ${formatEuro(template.amountCents)}`;
 }
 
 function addFromTemplate(ctx, template) {
@@ -629,6 +629,21 @@ function renderTemplates(ctx) {
     return section;
 }
 
+/** The Home figure: what is left to spend, with savings kept outside the spend budget. */
+export function homeFigureModel(totals) {
+    const over = totals.budgetLeftCents < 0;
+    let sub = `${formatEuro(totals.budgetSpentCents)} spent of ${formatEuro(totals.budgetCents)}`;
+    if (totals.outsideBudgetCents > 0) {
+        sub += ` \u00b7 ${formatEuro(totals.outsideBudgetCents)} saved`;
+    }
+    return {
+        over,
+        label: over ? 'over budget by' : 'left to spend',
+        valueCents: Math.abs(totals.budgetLeftCents),
+        sub,
+    };
+}
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const monthKey = currentMonthKey();
@@ -637,20 +652,16 @@ function renderHome(root, ctx) {
     const monthName = monthLabel(monthKey).split(' ')[0];
     const heading = userName === '' ? monthLabel(monthKey) : `${userName}\u2019s ${monthName}`;
 
-    const over = totals.budgetLeftCents < 0;
-    const figureText = formatEuro(Math.abs(totals.budgetLeftCents));
+    const { over, label, valueCents, sub } = homeFigureModel(totals);
+    const figureText = formatEuro(valueCents);
     const figure = element('section', over ? 'home-figure is-over' : 'home-figure');
     figure.setAttribute('aria-labelledby', 'home-figure-label');
-    const figureLabel = element('p', 'home-figure-label', over ? 'over budget by' : 'left to spend');
+    const figureLabel = element('p', 'home-figure-label', label);
     figureLabel.id = 'home-figure-label';
     figure.append(
         figureLabel,
         element('p', figureText.length > 9 ? 'home-figure-value is-long' : 'home-figure-value', figureText),
-        element(
-            'p',
-            'home-figure-sub',
-            `${formatEuro(totals.spentCents)} spent of ${formatEuro(totals.budgetCents)}`,
-        ),
+        element('p', 'home-figure-sub', sub),
     );
 
     const expenseBtn = element('button', 'btn btn-primary', 'Add expense');

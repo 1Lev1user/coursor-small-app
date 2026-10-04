@@ -126,24 +126,23 @@ function headline(caption, amountCents, negativeMessage) {
 
 function renderSummary(root, totals) {
     const card = element('section', 'card stack');
-    const longest = Math.max(
-        formatEuro(totals.budgetLeftCents).length,
-        formatEuro(totals.cashLeftCents).length,
-    );
+    const cashHeadline = { caption: 'Cash left', cents: totals.cashLeftCents, note: 'more spent than came in' };
+    const shown = totals.hasBudget
+        ? [{ caption: 'Budget left', cents: totals.budgetLeftCents, note: 'over budget' }, cashHeadline]
+        : [cashHeadline];
+    const longest = Math.max(...shown.map(({ cents }) => formatEuro(cents).length));
     const headlines = element('div', longest > 8 ? 'month-headlines is-long' : 'month-headlines');
-    headlines.append(
-        headline('Budget left', totals.budgetLeftCents, 'over budget'),
-        headline('Cash left', totals.cashLeftCents, 'more spent than came in'),
-    );
+    headlines.append(...shown.map(({ caption, cents, note }) => headline(caption, cents, note)));
+    const spentText = totals.hasBudget
+        ? `Spent ${formatEuro(totals.spentCents)} of ${formatEuro(totals.budgetCents)}`
+        : `Spent ${formatEuro(totals.spentCents)}`;
     card.append(
         headlines,
-        element(
-            'p',
-            'muted',
-            `Spent ${formatEuro(totals.spentCents)} of ${formatEuro(totals.budgetCents)}`
-                + ` \u00b7 Income ${formatEuro(totals.incomeCents)}`,
-        ),
+        element('p', 'muted', `${spentText} \u00b7 Income ${formatEuro(totals.incomeCents)}`),
     );
+    if (!totals.hasBudget) {
+        card.append(element('p', 'muted', 'No budget for this month.'));
+    }
     root.append(card);
 }
 
@@ -174,10 +173,14 @@ function renderCategories(root, categories, budgetCents) {
         const ofBudgetPercent = budgetCents > 0
             ? (category.spentCents * 100) / budgetCents
             : 0;
-        const amountText = noLimit
+        const noBudgetAtAll = noLimit && budgetCents === 0;
+        let amountText = noLimit
             ? `${formatEuro(category.spentCents)} \u00b7 ${displayPercent(ofBudgetPercent)} of budget`
             : `${formatEuro(category.spentCents)} of `
                 + (category.limitCents === 0 ? 'no budget' : formatEuro(category.limitCents));
+        if (noBudgetAtAll) {
+            amountText = formatEuro(category.spentCents);
+        }
         heading.append(
             element('h3', 'category-name', category.name),
             element('p', 'category-amount', amountText),
@@ -206,7 +209,9 @@ function renderCategories(root, categories, budgetCents) {
         track.setAttribute('aria-valuemin', '0');
         track.setAttribute('aria-valuemax', '100');
         track.setAttribute('aria-valuenow', String(Math.round(width)));
-        if (noLimit) {
+        if (noBudgetAtAll) {
+            track.setAttribute('aria-valuetext', formatEuro(category.spentCents));
+        } else if (noLimit) {
             track.setAttribute(
                 'aria-valuetext',
                 `${displayPercent(ofBudgetPercent)} of monthly budget`,
@@ -217,9 +222,13 @@ function renderCategories(root, categories, budgetCents) {
         track.append(fill);
 
         item.append(heading, track);
-        if (noLimit) {
+        if (noLimit && !noBudgetAtAll) {
             const details = element('div', 'row category-details');
-            details.append(element('span', 'muted', 'No limit'));
+            details.append(element(
+                'span',
+                'muted',
+                category.id === SAVINGS_ID ? 'Saved, not part of the spend budget' : 'No limit',
+            ));
             item.append(details);
         }
         if (category.over) {

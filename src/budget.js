@@ -1,4 +1,5 @@
 import { splitShares } from './money.js';
+import { SAVINGS_ID } from './model.js';
 import { addMonths, compareMonthKeys, currentMonthKey, isInMonth } from './months.js';
 import { firstTrackedMonth, incomeStatus, monthIncomeSplit, usesNewCounting } from './incomeSources.js';
 
@@ -255,14 +256,19 @@ export function monthTotals(data, monthKey, now = new Date()) {
     const categoriesById = new Map(
         data.categories.map((category) => [category.id, category]),
     );
+    const hasBudget = plan.actualOnly !== true;
+    const rowFor = (entry, spentCents) => {
+        const noLimit = !hasBudget || isSavingsWithoutShare(entry);
+        return categoryTotal(noLimit ? { ...entry, noLimit } : entry, spentCents);
+    };
     const categoryTotals = plan.entries.map((entry) => {
         const spentCents = spendingByCategory.get(entry.id) ?? 0;
         spendingByCategory.delete(entry.id);
-        return categoryTotal(entry, spentCents);
+        return rowFor(entry, spentCents);
     });
 
     for (const [id, spentCents] of spendingByCategory) {
-        categoryTotals.push(categoryTotal({
+        categoryTotals.push(rowFor({
             id,
             name: categoriesById.get(id)?.name ?? id,
             percent: 0,
@@ -284,20 +290,31 @@ export function monthTotals(data, monthKey, now = new Date()) {
         .reduce((total, item) => total + item.expectedCents, 0);
     const incomeCents = usualIncomeCents + sourceIncomeCents + extraIncomeCents;
     const budgetCents = plan.monthlyBudgetCents;
+    const outsideBudgetCents = categoryTotals
+        .find(({ id, noLimit }) => id === SAVINGS_ID && noLimit)?.spentCents ?? 0;
+    const budgetSpentCents = spentCents - outsideBudgetCents;
 
     return {
         monthKey,
+        hasBudget,
         budgetCents,
         spentCents,
+        budgetSpentCents,
+        outsideBudgetCents,
         usualIncomeCents,
         sourceIncomeCents,
         extraIncomeCents,
         expectedIncomeCents,
         incomeCents,
-        budgetLeftCents: budgetCents - spentCents,
+        budgetLeftCents: budgetCents - budgetSpentCents,
         cashLeftCents: incomeCents - spentCents,
         categories: categoryTotals,
     };
+}
+
+/** Savings with no share of the budget (or missing from the snapshot) is money set aside, not spending. */
+function isSavingsWithoutShare(entry) {
+    return entry.id === SAVINGS_ID && entry.limitCents === 0;
 }
 
 function categoryTotal(entry, spentCents) {
