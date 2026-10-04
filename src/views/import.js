@@ -11,6 +11,7 @@ import {
     guessColumns,
     parseDateWith,
     rowsToStatement,
+    stripAmountDecoration,
 } from '../import/text.js';
 import { parseCamt, parseFidavista } from '../import/xml.js';
 import { readXlsx } from '../import/xlsx.js';
@@ -86,8 +87,9 @@ export function layoutFitsSample(saved, sampleRows) {
     let foreign = 0;
     for (const key of ['amount', 'debit', 'credit']) {
         for (const value of samplesAt(sampleRows, columns[key] ?? -1)) {
-            const match = DECIMAL_TAIL.exec(value);
-            if (match?.[1] === other && !value.includes(saved.decimalSeparator)) foreign += 1;
+            const text = stripAmountDecoration(value).text;
+            const match = DECIMAL_TAIL.exec(text);
+            if (match?.[1] === other && !text.includes(saved.decimalSeparator)) foreign += 1;
             else if (match) own += 1;
         }
     }
