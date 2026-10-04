@@ -32,7 +32,7 @@
 | Design | C-070 to C-077 (8) | Hints vanish on focus, design bugs fixed, tinted-block buttons, palette fixes, Golos Text + Literata, main and quiet motion |
 | Guide and release | C-013, C-014, C-026 (3) | Screenshots and Word guide of 3.0, release 3.0.0 on v1 |
 
-52 cards. C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
+53 cards (C-041 was split into C-041 and C-078 on 2026-10-04). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
 
 ## 2. How every card runs (the task procedure)
 
@@ -86,7 +86,8 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W3 | C-031 | Month income counts only entries from the 3.0 setup on, never a month the owner never had | Money | M | P0 | medium | C-029, C-030 | sonnet | standard (sonnet) | sonnet | - |
 | W3 | C-040 | Settings: say each thing once, in one set of words | Settings/UX | M | P1 | low | - | sonnet | standard (sonnet) | sonnet | - |
 | W3 | C-038 | Money now, bank check, savings and the per-day amount (logic only) | Money | M | P1 | medium | C-029, C-030 | sonnet | standard (sonnet) | sonnet | - |
-| W4 | C-041 | Settings is one page of collapsing groups, one summary line each | Settings/UX | M | P1 | low | C-040 | sonnet | standard (sonnet) | sonnet | - |
+| W4 | C-041 | Settings groups: the group list, one-line summaries and the Profile split | Settings/UX | M | P1 | low | C-040 | sonnet | standard (sonnet) | sonnet | - |
+| W4 | C-078 | Settings page renders as collapsing groups, one open at a time | Settings/UX | M | P1 | low | C-041 | sonnet | standard (sonnet) | sonnet | - |
 | W4 | C-036 | Payday reminder on Home (Received, Later, Skip this month) and the income source in Add income | Money | M | P1 | medium | C-030, C-040 | sonnet | standard (sonnet) | sonnet | - |
 | W4 | C-032 | Plan changes apply from the current month on; past months keep their plan | Money | S | P1 | medium | C-030, C-031 | sonnet | standard (sonnet) | sonnet | - |
 | W5 | C-044 | Amount fields accept 1,234.50 and say what format they want | Settings/UX | S | P1 | medium | C-041 | sonnet | standard (sonnet) | sonnet | - |
