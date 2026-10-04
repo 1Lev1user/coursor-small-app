@@ -8,7 +8,7 @@ import { downloadText } from './files.js';
 import { currentMonthKey, monthKeyOf, todayISO } from './months.js';
 import { parseAmount, formatEuro, formatPlain } from './money.js';
 import { createId } from './model.js';
-import { freezeMonthPlan, freezeElapsedMonths } from './budget.js';
+import { freezeMonthPlan } from './budget.js';
 import { dueSubscriptions } from './subscriptions.js';
 import { render as renderAdd, openAddPanel, addScreenTitle } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
@@ -487,11 +487,6 @@ function render() {
         document.title = 'Setup - My Expenses';
         renderSetup(viewElement, context());
         return;
-    }
-
-    // A failed write is ignored: the freeze is repeated on the next start.
-    if (freezeElapsedMonths(app.data) > 0) {
-        saveToStorage(app.data);
     }
 
     const view = views[app.tab];
