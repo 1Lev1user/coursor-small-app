@@ -65,4 +65,4 @@ Open the link in Safari (iPhone) or Chrome (Android), then Add to Home Screen / 
 
 © Ļevs Krilovs. All rights reserved. The code is public to read, but sharing, copying, distributing or republishing it needs his permission.
 
-The fonts in `fonts/` (Onest and Unbounded) are under the SIL Open Font License 1.1; see `fonts/LICENSE-*.txt`.
+The fonts in `fonts/` (Golos Text and Literata) are under the SIL Open Font License 1.1; see `fonts/LICENSE-*.txt`.
