@@ -9,7 +9,7 @@ import { currentMonthKey, monthKeyOf, todayISO } from './months.js';
 import { parseAmount, formatEuro, formatPlain } from './money.js';
 import { createId } from './model.js';
 import { freezeMonthPlan, freezeElapsedMonths } from './budget.js';
-import { dueSubscriptions } from './subscriptions.js';
+import { dueSubscriptions, skipSubscriptionMonth } from './subscriptions.js';
 import { render as renderAdd, openAddPanel, addScreenTitle } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
@@ -50,6 +50,9 @@ const duePrompt = {
     error: '',
     deleting: false,
 };
+
+// "subscriptionId:monthKey" of reminders the owner chose Later for; cleared by a reload.
+const postponedDue = new Set();
 
 function toast(message, action) {
     let node = document.getElementById('toast');
@@ -193,6 +196,33 @@ function confirmDueSubscription(subscription, amountField) {
     }
 
     toast('Subscription logged');
+}
+
+function postponeDueSubscription(subscription) {
+    postponedDue.add(`${subscription.id}:${currentMonthKey()}`);
+    render();
+}
+
+function skipDueSubscription(subscription, typedAmount) {
+    const monthKey = currentMonthKey();
+    const had = (subscription.skippedMonths ?? []).includes(monthKey);
+
+    skipSubscriptionMonth(app.data, subscription.id, monthKey);
+
+    if (save() === false) {
+        if (!had) {
+            const skipped = subscription.skippedMonths;
+            skipped.splice(skipped.indexOf(monthKey), 1);
+        }
+        duePrompt.subscriptionId = subscription.id;
+        duePrompt.amount = typedAmount;
+        duePrompt.error = '';
+        duePrompt.deleting = false;
+        render();
+        return;
+    }
+
+    toast('Skipped for this month');
 }
 
 function deleteDueSubscription(subscription) {
@@ -371,9 +401,21 @@ function renderDuePrompt(subscription) {
     confirmButton.className = 'btn btn-primary';
     confirmButton.textContent = 'Confirm';
 
+    const laterButton = document.createElement('button');
+    laterButton.type = 'button';
+    laterButton.className = 'btn btn-ghost';
+    laterButton.textContent = 'Later';
+    laterButton.addEventListener('click', () => postponeDueSubscription(subscription));
+
+    const skipButton = document.createElement('button');
+    skipButton.type = 'button';
+    skipButton.className = 'btn btn-ghost';
+    skipButton.textContent = 'Skip this month';
+    skipButton.addEventListener('click', () => skipDueSubscription(subscription, amountInput.value));
+
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
-    deleteButton.className = 'btn btn-danger';
+    deleteButton.className = 'btn btn-ghost-danger';
     deleteButton.textContent = 'Delete subscription';
     deleteButton.addEventListener('click', () => {
         duePrompt.amount = amountInput.value;
@@ -388,16 +430,15 @@ function renderDuePrompt(subscription) {
         confirmDueSubscription(subscription, amountField);
     });
 
-    actions.append(confirmButton, deleteButton);
+    actions.append(confirmButton, laterButton, skipButton, deleteButton);
     form.append(amountField.wrapper, actions);
     card.append(title, name, meta, form);
     overlay.append(card);
     document.body.append(overlay);
-    attachDueTrap(overlay, () => {
-        if (!duePrompt.deleting) return;
-        duePrompt.deleting = false;
-        render();
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) postponeDueSubscription(subscription);
     });
+    attachDueTrap(overlay, () => postponeDueSubscription(subscription));
     amountInput.focus();
     amountInput.select();
 }
@@ -511,12 +552,19 @@ function render() {
 
     view.render(viewElement, context());
 
-    const due = dueSubscriptions(app.data);
+    const monthKey = currentMonthKey();
+    const due = dueSubscriptions(app.data)
+        .filter(({ id }) => !postponedDue.has(`${id}:${monthKey}`));
     if (due.length > 0) {
         renderDuePrompt(due[0]);
     } else {
+        const overlay = document.getElementById('due-subscription-overlay');
+        const hadFocus = overlay?.contains(document.activeElement) === true;
         removeDueOverlay();
         resetDuePrompt();
+        if (hadFocus) {
+            viewElement.focus();
+        }
     }
 }
 
