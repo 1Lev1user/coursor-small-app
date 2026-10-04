@@ -42,6 +42,15 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 29. Motion: the main moment (after saving an entry the amount rolls from the old to the new value and the budget bar grows, about 600 ms) plus quiet motion: button press, toast slide in and out, new row highlight, row removal collapse, add sheet from the bottom, quick fade on tab switch, slide on month change. Everything off under "Reduce Motion".
 30. Bugs found by the design review, fixed in 3.0: the Savings progress colour lost by a broken CSS rule (and the track-only rule after it); the toast overlapping the tab bar; the near-invisible secondary button; sticky hover on iPhone; no disabled style; the focus ring invisible on pine; the dark-mode hierarchy (mint button brighter than the hero number).
 
+## Answers while planning (2026-10-04)
+31. A bank check difference is an ordinary dated entry of the month: bank lower = expense in Uncategorised, bank higher = income in Other, note "Bank difference". It counts in that month like any entry and is edited or deleted in Month (refines 8).
+32. A money-in row in a bank import near an expected payday gets the question "Is this the <source>?"; Yes ties it to the source and closes the payday reminder; nothing is tied without Yes (extends 4 and 11 to income).
+33. Months before the owner's first entry show no income; every month with data stays as it is (refines 2).
+34. The one-time 3.0 setup cannot be skipped; the paydays list may stay empty (refines 9).
+35. In an unfinished month Trends shows no comparison card at all (refines 19).
+36. "Replace everything" downloads the current data and replaces in one tap after the preview (refines 18).
+37. Approved test edits: test/model.test.js (C-029), test/importCore.test.js:575-587 (C-068). Font download approved after the licence check (SIL OFL 1.1, free of charge).
+
 ## What this changes in the drafted cards
 | Card | Change |
 |---|---|

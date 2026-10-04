@@ -77,7 +77,7 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 
 | Wave | Card | Title | Lane | Size | Prio | Risk | Depends on | Planner | Worker | Reviewer | Gate |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| W1 | C-029 | Data format 3: fields for income sources, money now and bank checks | Money | M | P0 | high | - | opus | heavy (opus) | opus | test edit |
+| W1 | C-029 | Data format 3: fields for income sources, money now and the per-day amount | Money | M | P0 | high | - | opus | heavy (opus) | opus | test edit (cleared) |
 | W1 | C-071 | Fix the design bugs: Savings bar colour, toast over the tab bar, sticky hover, disabled and focus styles | Design | S | P0 | low | - | sonnet | standard (sonnet) | sonnet | - |
 | W1 | C-055 | Guess the decimal separator when the currency follows the amount | Bank | S | P0 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W2 | C-030 | Income sources: payday dates, expected and received income (logic only) | Money | M | P0 | medium | C-029 | sonnet | standard (sonnet) | sonnet | - |
@@ -96,8 +96,8 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W6 | C-073 | Palette: firmer field outline, amber backup reminder, brighter dark hero block | Design | S | P1 | low | C-072 | sonnet | light (haiku) | sonnet | - |
 | W6 | C-053 | Restoring a backup: show what is in the file, keep a safety copy, keep the backup date | Settings/UX | M | P1 | medium | C-029 | sonnet | standard (sonnet) | sonnet | - |
 | W7 | C-047 | Quick add: Undo in the toast and no second entry from a double tap | Settings/UX | S | P1 | low | - | sonnet | standard (sonnet) | sonnet | - |
-| W7 | C-074 | Fonts: Golos Text for text, Literata for figures | Design | M | P1 | medium | C-073 | sonnet | standard (sonnet) | sonnet | font download |
-| W7 | C-035 | Subscriptions: the bank import asks which subscription a row is; the reminder can be postponed or skipped | Money | M | P1 | medium | C-029 | sonnet | standard (sonnet) | sonnet | - |
+| W7 | C-074 | Fonts: Golos Text for text, Literata for figures | Design | M | P1 | medium | C-073 | sonnet | standard (sonnet) | sonnet | font download (cleared) |
+| W7 | C-035 | Bank import asks which subscription or income source a row is; the subscription reminder can be postponed or skipped | Money | M | P1 | medium | C-029, C-030 | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-039 | Home shows Money now, the per-day amount and the month budget; check against the bank; Settings > Money | Money | M | P1 | medium | C-034, C-036, C-037, C-038, C-041 | sonnet | heavy (opus) | opus | - |
 | W8 | C-056 | Read money direction from more words and from a D/C mark without a space | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-063 | Excel import: read the sheet that holds the transactions | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
@@ -106,7 +106,7 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W9 | C-058 | Add a Reverse money in and out switch to the Columns step | Bank | S | P1 | medium | C-057 | sonnet | standard (sonnet) | sonnet | - |
 | W10 | C-043 | New categories start with no limit; a limit that would move others says so first | Settings/UX | S | P1 | low | C-042 | sonnet | standard (sonnet) | sonnet | - |
 | W10 | C-059 | Skip dated balance lines wherever the label sits in the row | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
-| W10 | C-068 | Duplicates: a reused reference is not Exact, and possible duplicates start unticked | Bank | M | P1 | medium | - | sonnet | standard (sonnet) | sonnet | test edit |
+| W10 | C-068 | Duplicates: a reused reference is not Exact, and possible duplicates start unticked | Bank | M | P1 | medium | - | sonnet | standard (sonnet) | sonnet | test edit (cleared) |
 | W11 | C-061 | Find the header row when the header and data rows differ in width | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W11 | C-070 | Number fields: example hint goes on focus, an existing value is selected | Design | S | P1 | low | - | sonnet | standard (sonnet) | sonnet | - |
 | W11 | C-048 | Add expense: mark it as a refund when you add it | Settings/UX | S | P2 | low | C-040, C-047 | sonnet | standard (sonnet) | sonnet | - |
@@ -136,24 +136,24 @@ Waves 14 to 17 run one card at a time because they all edit style.css; the free 
 
 | Gate | Needed before | What the owner does |
 |---|---|---|
-| G1 Test edits | C-029 (wave 1), C-068 (wave 10) | Approve two changes to existing tests: test/model.test.js in C-029 (the data format test for version 3) and test/importCore.test.js:575-587 in C-068 (weak duplicates start unticked, decision 22) |
-| G2 Answers to section 6 | Q1 before C-030 (wave 2), Q2 and Q4 before C-031 and C-038 (wave 3), Q3 before C-034 (wave 6) | Pick an answer; defaults are given |
-| G3 Font download | C-074 (wave 7) | Go for two npm packages (about 0.5 MB, OFL fonts), outside package.json |
+| G1 Test edits | C-029 (wave 1), C-068 (wave 10) | Cleared 2026-10-04: test/model.test.js in C-029 and test/importCore.test.js:575-587 in C-068 approved |
+| G2 Answers to section 6 | C-030, C-031, C-034, C-038 | Cleared 2026-10-04 (section 6) |
+| G3 Font download | C-074 (wave 7) | Cleared 2026-10-04 after the licence check: Golos Text and Literata are SIL OFL 1.1 (google/fonts OFL.txt, npm licence field OFL-1.1), free of charge, bundling allowed with the licence file |
 | G4 Bank sample file | C-064 to C-067, C-069 | A real export from the owner's bank with made-up data (CSV or Excel, and camt XML if the bank offers it) |
 | G5 Guide tools | C-013, C-014 | Playwright is approved (2026-10-04); go for a temporary .docx generator for C-014 |
 | G6 Manual checks | release | Tick the Manual items of each merged card on the iPhone (listed in each pull request); they gate the release, not the merge |
 | G7 Publish | C-026 | Explicit go to publish 3.0.0 to v1, and whether 3.0 waits for the G4 cards |
 
-## 6. Questions for the owner (from writing the cards)
+## 6. Owner answers (2026-10-04)
 
-| # | Card | Question | Default if no answer |
+| # | Card | Question | Answer |
 |---|---|---|---|
-| Q1 | C-030, C-035, C-036 | A salary that arrives through a bank import is not tied to an income source (decision 4 allows only Add income and the payday reminder), so the payday reminder stays open until the owner taps Skip. Should the import ask "Is this the Salary?" the same way it asks about subscriptions (decision 11)? | Yes: the import asks, as for subscriptions |
-| Q2 | C-031 | Months before the owner's first entry show the usual salary today (the audit: "income in months I never had"). The card hides income only in those empty months; every month with data stays as it is. Keep this? | Keep |
-| Q3 | C-034 | The one-time 3.0 setup cannot be skipped and needs a Money now figure; the paydays list may stay empty. Allow "Later"? | No skip |
-| Q4 | C-038 | A bank check difference changes Money now only, never the month's spending or income, and can be deleted in Settings > Money. | As written |
-| Q5 | C-052 | In the current month Trends shows one short line ("Comparison appears when the month ends") instead of hiding the card. | One line |
-| Q6 | C-053 | "Replace everything" downloads the current data and replaces in the same tap, after the preview. Add a second confirmation between the two? | No second confirmation |
+| Q1 | C-030, C-035 | A salary that arrives through a bank import: should the import ask "Is this the <source>?" as for subscriptions? | Yes. The import asks for a money-in row near an expected payday; Yes ties it to the source and closes the payday reminder; nothing is tied without Yes |
+| Q2 | C-031 | Hide income in empty months before the first entry; months with data unchanged? | Yes, keep the guard |
+| Q3 | C-034 | Can the one-time 3.0 setup be skipped? | No skip |
+| Q4 | C-029, C-038, C-039 | How does a bank check difference count? | As an ordinary dated entry of the month: bank lower = expense in Uncategorised, bank higher = income in Other, note "Bank difference"; it counts in the month like any entry and is edited or deleted in Month |
+| Q5 | C-052 | What does Trends show in an unfinished month instead of the comparison? | Nothing |
+| Q6 | C-053 | Second confirmation between the safety download and Replace? | No, one tap after the preview |
 
 ## 7. Risks
 
