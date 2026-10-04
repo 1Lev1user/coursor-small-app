@@ -83,13 +83,14 @@ export function setMoneyNow(data, enteredCents, now = new Date()) {
 
 /** Adds one ordinary dated entry for the difference between the bank and Money now. */
 export function checkAgainstBank(data, enteredCents, now = new Date()) {
-    if (!data.settings.balanceStart) {
+    const currentCents = moneyNow(data, now);
+    if (currentCents === null) {
         return { ok: false, reason: 'Set up Money now first.' };
     }
     if (!Number.isSafeInteger(enteredCents)) {
         return { ok: false, reason: 'Enter a valid amount.' };
     }
-    const differenceCents = enteredCents - moneyNow(data, now);
+    const differenceCents = enteredCents - currentCents;
     if (differenceCents === 0) {
         return { ok: true, differenceCents: 0, entry: null };
     }

@@ -203,6 +203,16 @@ test('checkAgainstBank refuses without setup or with a bad number', () => {
     assert.equal(data.expenses.length, 1);
 });
 
+test('checkAgainstBank adds nothing when today is before the Money now date', () => {
+    const data = defaultData();
+    data.settings.balanceStart = { cents: 100000, date: '2026-10-15' };
+    const result = checkAgainstBank(data, 230000, new Date(2026, 9, 10));
+    assert.deepEqual(result, { ok: false, reason: 'Set up Money now first.' });
+    assert.equal(data.expenses.length, 0);
+    assert.equal(data.incomes.length, 0);
+    assert.deepEqual(data.monthPlans, {});
+});
+
 test('checkAgainstBank reports whether the month plan was already frozen', () => {
     const data = fixture();
     assert.equal(checkAgainstBank(data, 230000, NOW).planWasAlreadyFrozen, false);
