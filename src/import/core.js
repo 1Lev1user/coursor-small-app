@@ -537,6 +537,10 @@ export function buildImport(data, decisions, meta) {
                 id: createId('inc'),
                 incomeCategoryId: decision.incomeCategoryId,
                 ...shared,
+                ...(decision.sourceId
+                    && (data.incomeSources ?? []).some(({ id }) => id === decision.sourceId)
+                    ? { sourceId: decision.sourceId }
+                    : {}),
             });
             counts.incomes += 1;
             totalInCents += amountCents;
