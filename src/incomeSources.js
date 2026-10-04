@@ -234,6 +234,27 @@ export function deleteIncomeSource(data, id) {
     return true;
 }
 
+/**
+ * Records the payday income the owner confirmed, dated the payday itself so it sits in the
+ * month it pays for. It never freezes a plan; the caller does (budget.js imports this file).
+ */
+export function confirmIncome(data, source, monthKey, { amountText }) {
+    const amountCents = parseAmount(String(amountText ?? ''));
+    if (amountCents === null) {
+        return { ok: false, field: 'amount', reason: 'Enter a valid amount greater than zero.' };
+    }
+    const entry = {
+        id: createId('inc'),
+        incomeCategoryId: source.incomeCategoryId,
+        amountCents,
+        note: source.name,
+        date: paydayDate(monthKey, source),
+        sourceId: source.id,
+    };
+    data.incomes.push(entry);
+    return { ok: true, entry };
+}
+
 export function skipIncomeMonth(data, id, monthKey) {
     const source = findSource(data, id);
     if (source === undefined || !isMonthKey(monthKey)) {
