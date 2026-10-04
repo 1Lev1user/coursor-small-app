@@ -123,9 +123,18 @@ function tokenize(text, delimiter, lenient = false) {
 
 function scoreDelimiter(text, delimiter) {
     const rows = tokenize(text, delimiter).filter((row) => !isBlankRow(row));
-    const sample = rows.slice(0, 20);
+    const firstDate = rows.findIndex((row) => row.some((cell) => isDateLikeValue(String(cell ?? '').trim())));
+    const start = firstDate > 0 ? firstDate - 1 : 0;
+    const sample = rows.slice(start, start + 20);
     if (sample.length === 0) {
-        return { rows, score: -1 };
+        return { rows, score: -1, strayQuotes: 0 };
+    }
+
+    let strayQuotes = 0;
+    for (const row of sample) {
+        for (const cell of row) {
+            strayQuotes += String(cell ?? '').split('"').length - 1;
+        }
     }
 
     const counts = new Map();
@@ -143,16 +152,19 @@ function scoreDelimiter(text, delimiter) {
     }
 
     if (dominantCount < 2) {
-        return { rows, score: 0 };
+        return { rows, score: 0, strayQuotes };
     }
 
     const consistency = dominantFreq / sample.length;
-    return { rows, score: consistency + dominantCount / 1000 };
+    return { rows, score: consistency + dominantCount / 1000, strayQuotes };
 }
 
 /**
  * Detects the delimiter among , ; TAB | by consistency of field counts over
- * the first 20 non-empty lines, and tokenizes the whole text with it.
+ * over a window of 20 non-empty lines that starts one line above the first
+ * line holding a date-like cell (so a long preamble does not hide the table),
+ * and tokenizes the whole text with it. On an equal score above 0 the
+ * candidate with fewer quote characters left in its fields wins.
  * Full RFC 4180 quoting: "" escapes a quote, delimiters and newlines may
  * appear inside quoted fields, CRLF and LF both work. A quote opens a quoted
  * field only at the start of a field, and an unterminated quote falls back to
@@ -168,7 +180,11 @@ export function parseDelimited(text) {
 
     for (const delimiter of DELIMITER_CANDIDATES) {
         const result = scoreDelimiter(normalized, delimiter);
-        if (!best || result.score > best.score) {
+        const tiedWithFewerQuotes = best
+            && result.score === best.score
+            && result.score > 0
+            && result.strayQuotes < best.strayQuotes;
+        if (!best || result.score > best.score || tiedWithFewerQuotes) {
             best = result;
             bestDelimiter = delimiter;
         }
