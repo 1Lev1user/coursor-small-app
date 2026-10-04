@@ -121,7 +121,7 @@ test('checkPanelPlacement names where the panel is drawn', () => {
 test('checkWarnings words the money-in and line-count warnings per placement', () => {
     const summary = checkSummary([...rowsOf(28, 'in'), ...rowsOf(2, 'out')], []);
     assert.deepEqual(checkWarnings(summary, 'columns'), [
-        'Almost every row is money in (28 of 30). If your bank shows spending as positive numbers, check the Direction column.',
+        'Almost every row is money in (28 of 30). If your bank shows spending as positive numbers, check the Direction column. Try Reverse money in and out below.',
     ]);
     const saved = checkWarnings(summary, 'saved');
     assert.equal(saved.length, 1);

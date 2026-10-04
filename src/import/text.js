@@ -776,6 +776,7 @@ function cellAt(row, index) {
  * not parse are skipped and reported, as are obvious summary rows.
  * A row in another currency gets amountCents null (the UI asks for the EUR
  * charged) unless layout.columns.eurAmount points at a EUR amount column.
+ * layout.reverse === true flips every row's direction (a bank that shows spending as positive).
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
@@ -860,6 +861,8 @@ export function rowsToStatement(rows, headerRow, layout) {
             skipped.push({ line, reason: 'unparsable amount' });
             continue;
         }
+
+        if (layout.reverse === true) direction = direction === 'in' ? 'out' : 'in';
 
         let currency = 'EUR';
         if (columns.currency >= 0) {
