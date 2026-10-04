@@ -17,6 +17,7 @@ import { render as renderMore } from './views/more.js';
 import { render as renderSetup } from './views/setup.js';
 import { render as renderMoneySetup } from './views/moneySetup.js';
 import { render as renderImport } from './views/import.js';
+import { selectOnFocus } from './inputFocus.js';
 
 const TOAST_MS = 2000;
 const UNDO_TOAST_MS = 8000;
@@ -586,6 +587,8 @@ tabbarElement.addEventListener('click', (event) => {
         goTo(button.dataset.tab);
     }
 });
+
+document.addEventListener('focusin', selectOnFocus);
 
 requestPersistence();
 

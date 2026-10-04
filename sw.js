@@ -25,6 +25,7 @@ const CORE_ASSETS = [
     './fonts/literata-cyrillic-wght-normal.woff2',
     './fonts/literata-cyrillic-ext-wght-normal.woff2',
     './src/app.js',
+    './src/inputFocus.js',
     './src/storage.js',
     './src/months.js',
     './src/money.js',
