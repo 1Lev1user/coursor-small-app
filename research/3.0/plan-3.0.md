@@ -32,7 +32,7 @@
 | Design | C-070 to C-077 (8) | Hints vanish on focus, design bugs fixed, tinted-block buttons, palette fixes, Golos Text + Literata, main and quiet motion |
 | Guide and release | C-013, C-014, C-026 (3) | Screenshots and Word guide of 3.0, release 3.0.0 on v1 |
 
-57 cards (on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, and C-034 into C-034, C-081 and C-082). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
+58 cards (on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, C-034 into C-034, C-081 and C-082, and C-039 into C-039 and C-083). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
 
 ## 2. How every card runs (the task procedure)
 
@@ -103,7 +103,8 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W7 | C-035 | The subscription reminder can be postponed or skipped | Money | M | P1 | medium | C-029, C-030 | sonnet | standard (sonnet) | sonnet | - |
 | W7 | C-079 | Bank import asks whether a row is a subscription's payment | Money | M | P1 | medium | C-035 | sonnet | standard (sonnet) | sonnet | - |
 | W7 | C-080 | Bank import asks whether a money-in row is a regular income | Money | M | P1 | medium | C-079 | sonnet | standard (sonnet) | sonnet | - |
-| W8 | C-039 | Home shows Money now, the per-day amount and the month budget; check against the bank; Settings > Money | Money | M | P1 | medium | C-034, C-036, C-037, C-038, C-041 | sonnet | heavy (opus) | opus | - |
+| W8 | C-039 | Home shows Money now, the per-day amount and the month budget; check against the bank | Money | M | P1 | medium | C-034, C-036, C-037, C-038, C-081, C-082 | sonnet | standard (sonnet) | sonnet | - |
+| W8 | C-083 | Settings > Money and the Month lines: what the month started and ended with, and each regular income | Money | M | P1 | medium | C-039, C-041, C-078 | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-056 | Read money direction from more words and from a D/C mark without a space | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-063 | Excel import: read the sheet that holds the transactions | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W9 | C-042 | Categories and limits: collapsed rows, one category open at a time | Settings/UX | M | P1 | low | C-041 | sonnet | standard (sonnet) | sonnet | - |
