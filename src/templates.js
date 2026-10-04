@@ -3,6 +3,24 @@ import { todayISO } from './months.js';
 
 const MAX_NAME_LENGTH = 40;
 
+export const QUICK_ADD_REPEAT_MS = 1500;
+
+/**
+ * True when the same template is tapped again inside the repeat window.
+ * @param {{ id: string, at: number } | null} last
+ * @param {string} templateId
+ * @param {number} nowMs
+ * @param {number} [windowMs]
+ * @returns {boolean}
+ */
+export function isRepeatTap(last, templateId, nowMs, windowMs = QUICK_ADD_REPEAT_MS) {
+    if (last === null || last.id !== templateId) {
+        return false;
+    }
+    const gap = nowMs - last.at;
+    return gap >= 0 && gap < windowMs;
+}
+
 function validateTemplate({ name, amountCents }) {
     const trimmedName = typeof name === 'string' ? name.trim() : '';
     if (trimmedName === '') {
