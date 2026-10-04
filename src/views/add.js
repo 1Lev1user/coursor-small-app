@@ -6,8 +6,8 @@ import {
     shortDate,
     todayISO,
 } from '../months.js';
-import { UNCATEGORISED_ID, createId } from '../model.js';
-import { addTemplate, templateToExpense } from '../templates.js';
+import { UNCATEGORISED_ID, createId, removeEntry, restoreEntry } from '../model.js';
+import { addTemplate, templateToExpense, isRepeatTap } from '../templates.js';
 import { describeForeign } from '../currency.js';
 import {
     freezeMonthPlan,
@@ -579,7 +579,15 @@ function templateButtonText(template) {
     return `${template.name} \u00b7 ${formatEuro(template.amountCents)}`;
 }
 
+let lastQuickAdd = null;
+
 function addFromTemplate(ctx, template) {
+    const nowMs = Date.now();
+    if (isRepeatTap(lastQuickAdd, template.id, nowMs)) {
+        return;
+    }
+    lastQuickAdd = { id: template.id, at: nowMs };
+
     const date = todayISO();
     const monthKey = monthKeyOf(date);
     const expense = { id: createId('exp'), ...templateToExpense(template, date) };
@@ -603,7 +611,22 @@ function addFromTemplate(ctx, template) {
         ctx.render();
         return;
     }
-    ctx.toast(`Added ${template.name}`);
+    ctx.toast(`Added ${template.name}`, {
+        label: 'Undo',
+        onClick: () => {
+            const removed = removeEntry(ctx.data, 'expense', expense.id);
+            if (removed === null) {
+                return;
+            }
+            if (ctx.save() === false) {
+                restoreEntry(ctx.data, 'expense', removed.entry, removed.index);
+                ctx.render();
+                return;
+            }
+            ctx.render();
+            ctx.toast(`Removed ${template.name}`);
+        },
+    });
 }
 
 function renderTemplates(ctx) {
