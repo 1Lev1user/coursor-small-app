@@ -53,7 +53,7 @@ function isBlankRow(row) {
     return row.length === 0 || (row.length === 1 && row[0].trim() === '');
 }
 
-function tokenize(text, delimiter) {
+function tokenize(text, delimiter, lenient = false) {
     const rows = [];
     let row = [];
     let field = '';
@@ -80,7 +80,7 @@ function tokenize(text, delimiter) {
             continue;
         }
 
-        if (ch === '"') {
+        if (ch === '"' && !lenient && field.trim() === '') {
             inQuotes = true;
             i += 1;
             continue;
@@ -107,6 +107,10 @@ function tokenize(text, delimiter) {
 
         field += ch;
         i += 1;
+    }
+
+    if (inQuotes) {
+        return tokenize(text, delimiter, true);
     }
 
     if (field !== '' || row.length > 0) {
@@ -150,8 +154,10 @@ function scoreDelimiter(text, delimiter) {
  * Detects the delimiter among , ; TAB | by consistency of field counts over
  * the first 20 non-empty lines, and tokenizes the whole text with it.
  * Full RFC 4180 quoting: "" escapes a quote, delimiters and newlines may
- * appear inside quoted fields, CRLF and LF both work. Empty lines (including
- * a trailing one) are dropped.
+ * appear inside quoted fields, CRLF and LF both work. A quote opens a quoted
+ * field only at the start of a field, and an unterminated quote falls back to
+ * treating every quote as an ordinary character. Empty lines (including a
+ * trailing one) are dropped.
  * @param {string} text
  * @returns {{ delimiter: string, rows: string[][] }}
  */
