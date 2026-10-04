@@ -323,21 +323,69 @@ function renderAddSubcategory(ctx, category) {
     return form;
 }
 
-function renderCategory(ctx, category, plan) {
-    const budgetCents = ctx.data.settings.monthlyBudgetCents;
-    const item = element('article', 'category-item more-category');
-    const head = element('div', 'more-category-head');
-    const titles = element('div', 'more-category-titles');
-    titles.append(
-        element('h3', 'category-name', category.name),
-        element('p', 'muted', shareLabel(category, plan, budgetCents)),
+export function subcategoryCountText(count) {
+    if (count === 0) {
+        return 'No subcategories';
+    }
+    return count === 1 ? '1 subcategory' : `${count} subcategories`;
+}
+
+export function isCategoryOpen(category) {
+    const prefix = `${category.id}:`;
+    return state.openCategoryId === category.id
+        || state.renameCategoryId === category.id
+        || state.editPlanCategoryId === category.id
+        || state.confirmCategoryId === category.id
+        || (typeof state.renameSubKey === 'string' && state.renameSubKey.startsWith(prefix))
+        || (typeof state.confirmSubKey === 'string' && state.confirmSubKey.startsWith(prefix));
+}
+
+function renderCategoryHead(ctx, category, plan, isOpen, bodyId) {
+    const toggleId = `more-category-toggle-${category.id}`;
+    const toggle = element('button', 'settings-row more-category-toggle');
+    toggle.type = 'button';
+    toggle.id = toggleId;
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    toggle.setAttribute('aria-controls', bodyId);
+    const chevron = element('span', 'settings-row-chevron', '›');
+    chevron.setAttribute('aria-hidden', 'true');
+    toggle.append(
+        element('span', 'settings-row-title category-name', category.name),
+        element(
+            'span',
+            'settings-row-summary',
+            `${shareLabel(category, plan, ctx.data.settings.monthlyBudgetCents)} · ${subcategoryCountText(category.subcategories.length)}`,
+        ),
+        chevron,
     );
-    head.append(titles);
+    toggle.addEventListener('click', () => {
+        closeTransientUi();
+        state.openCategoryId = isOpen ? null : category.id;
+        state.focusId = toggleId;
+        ctx.render();
+    });
+
+    const head = element('h3', 'category-name-row');
+    head.append(toggle);
+    return head;
+}
+
+function renderCategory(ctx, category, plan) {
+    const item = element('article', 'category-item more-category');
+    const isOpen = isCategoryOpen(category);
+    const bodyId = `more-category-body-${category.id}`;
+    item.append(renderCategoryHead(ctx, category, plan, isOpen, bodyId));
+    if (!isOpen) {
+        return item;
+    }
+
+    const body = element('div', 'more-category-body');
+    body.id = bodyId;
+    item.append(body);
 
     if (state.renameCategoryId === category.id) {
         const draft = state.renameDrafts.get(category.id) ?? { value: category.name, error: '' };
-        item.append(
-            head,
+        body.append(
             renderRenameForm(
                 `rename-cat-${category.id}`,
                 draft.value,
@@ -354,10 +402,9 @@ function renderCategory(ctx, category, plan) {
             ),
         );
     } else if (state.editPlanCategoryId === category.id) {
-        item.append(head, renderCategoryPlanEditor(ctx, category));
+        body.append(renderCategoryPlanEditor(ctx, category));
     } else if (state.confirmCategoryId === category.id) {
-        item.append(
-            head,
+        body.append(
             renderConfirm(
                 `Delete ${category.name}? Its expenses will move to Uncategorised.`,
                 () => confirmDeleteCategory(ctx, category),
@@ -392,8 +439,7 @@ function renderCategory(ctx, category, plan) {
                 }),
             );
         }
-        head.append(actions);
-        item.append(head);
+        body.append(actions);
     }
 
     const subs = element('ul', 'subcategory-list');
@@ -405,7 +451,7 @@ function renderCategory(ctx, category, plan) {
             subs.append(renderSubcategory(ctx, category, subcategory));
         }
     }
-    item.append(subs, renderAddSubcategory(ctx, category));
+    body.append(subs, renderAddSubcategory(ctx, category));
     return item;
 }
 
