@@ -17,6 +17,31 @@ export function exportBackup(data, now) {
     };
 }
 
+/** Sets today as the last backup day and returns the previous value (null when absent). */
+export function markBackedUp(data, now = new Date()) {
+    const previous = data.settings.lastBackupISO ?? null;
+    data.settings.lastBackupISO = todayISO(now);
+    return previous;
+}
+
+/** Entry counts and the earliest and latest entry date ('' when there are none). */
+export function describeBackup(data) {
+    const dates = [...data.expenses, ...data.incomes]
+        .map(({ date }) => date)
+        .filter((date) => typeof date === 'string' && date !== '')
+        .sort();
+    return {
+        ...countRecords(data),
+        firstDate: dates[0] ?? '',
+        lastDate: dates.at(-1) ?? '',
+    };
+}
+
+/** A restored file keeps its own backup day; a file without one counts as backed up today. */
+export function restoredLastBackup(incomingISO, today) {
+    return typeof incomingISO === 'string' && incomingISO !== '' ? incomingISO : today;
+}
+
 export function importBackup(rawText) {
     let parsed;
     try {

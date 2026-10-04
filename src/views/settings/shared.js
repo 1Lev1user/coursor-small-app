@@ -35,6 +35,7 @@ export const state = {
 
     pendingImportText: null,
     pendingImportCounts: null,
+    pendingImportIncoming: null,
     importError: '',
 
     confirmDeletePreUpdate: false,
@@ -61,6 +62,7 @@ export function closeTransientUi() {
     state.focusIncomeEntryError = false;
     state.pendingImportText = null;
     state.pendingImportCounts = null;
+    state.pendingImportIncoming = null;
     state.importError = '';
     state.confirmDeletePreUpdate = false;
     state.confirmRestorePreUpdate = false;
