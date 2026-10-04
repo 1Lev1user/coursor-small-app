@@ -3,6 +3,8 @@ import { SCHEMA_VERSION, defaultData, normalise } from './model.js';
 export const STORAGE_KEY = 'my-expenses-v1';
 export const RESCUE_KEY = 'my-expenses-rescue';
 export const PRE_UPDATE_KEY = `my-expenses-before-v${SCHEMA_VERSION}`;
+const OLDER_PRE_UPDATE_KEYS = ['my-expenses-before-v2'];
+const PRE_UPDATE_KEYS = [PRE_UPDATE_KEY, ...OLDER_PRE_UPDATE_KEYS];
 
 function parseStored(raw) {
     try {
@@ -48,21 +50,30 @@ function finishMigration(raw, from, data, storage) {
     return { status: 'ok', data, migratedFrom: from, migrationSaved: true };
 }
 
+/** The newest pre-update copy on this device, or null. */
 export function readPreUpdateCopy(storage = globalThis.localStorage) {
     try {
-        return storage?.getItem(PRE_UPDATE_KEY) ?? null;
+        for (const key of PRE_UPDATE_KEYS) {
+            const raw = storage?.getItem(key) ?? null;
+            if (raw !== null) {
+                return raw;
+            }
+        }
+        return null;
     } catch {
         return null;
     }
 }
 
-/** Removes the pre-update copy from this device only; current data is untouched. */
+/** Removes every pre-update copy from this device only; current data is untouched. */
 export function deletePreUpdateCopy(storage = globalThis.localStorage) {
     if (storage === undefined || storage === null) {
         return false;
     }
     try {
-        storage.removeItem(PRE_UPDATE_KEY);
+        for (const key of PRE_UPDATE_KEYS) {
+            storage.removeItem(key);
+        }
         return true;
     } catch {
         return false;

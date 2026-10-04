@@ -83,7 +83,7 @@ const expectedCategories = [
 ];
 
 test('constants and createId use the contractual values', () => {
-    assert.equal(SCHEMA_VERSION, 2);
+    assert.equal(SCHEMA_VERSION, 3);
     assert.equal(UNCATEGORISED_ID, 'uncategorised');
     assert.equal(createId('expense', () => 0), 'expense_00000000');
     assert.match(createId('x', () => 0.999999), /^x_[0-9a-z]{8}$/);
@@ -91,7 +91,7 @@ test('constants and createId use the contractual values', () => {
 
 test('defaultData returns the exact initial data shape and seeds', () => {
     assert.deepEqual(defaultData(), {
-        version: 2,
+        version: 3,
         settings: {
             userName: '',
             monthlyBudgetCents: 0,
@@ -101,6 +101,9 @@ test('defaultData returns the exact initial data shape and seeds', () => {
             othersSeeded: true,
             monthReviewDismissedFor: null,
             backupSnoozedUntil: '',
+            balanceStart: null,
+            perDayMode: 'auto',
+            perDayFixedCents: 0,
         },
         categories: expectedCategories,
         incomeCategories: [
@@ -116,6 +119,7 @@ test('defaultData returns the exact initial data shape and seeds', () => {
         imports: [],
         templates: [],
         goals: [],
+        incomeSources: [],
     });
 });
 
@@ -140,7 +144,7 @@ test('normalise rejects non-object roots without throwing', () => {
 });
 
 test('normalise rejects missing, non-numeric, and unsupported versions', () => {
-    for (const raw of [{}, { version: '1' }, { version: 0 }, { version: 3 }]) {
+    for (const raw of [{}, { version: '1' }, { version: 0 }, { version: 4 }]) {
         const result = normalise(raw);
         assert.equal(result.ok, false);
         assert.match(result.reason, /version/i);
