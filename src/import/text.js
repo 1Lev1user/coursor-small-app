@@ -199,20 +199,78 @@ function isNumericOrDateCell(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(trimmed);
 }
 
+/** Index of the last non-blank cell plus one (trailing blank cells do not count). */
+function trimmedLength(row) {
+    let length = row.length;
+    while (length > 0 && String(row[length - 1] ?? '').trim() === '') {
+        length -= 1;
+    }
+    return length;
+}
+
 /**
- * Finds the header row, skipping preamble lines (account number, period,
- * bank name): the first row whose non-empty cell count equals the dominant
- * count across all rows and whose cells are entirely non numeric/date-like.
- * Returns -1 when nothing looks like a header (e.g. pasted data with no
- * header row at all).
- * @param {string[][]} rows
- * @returns {number}
+ * A header row names at least half of the columns (a title line like
+ * 'Konta izraksts;;;;' has only one filled cell) and holds no numeric or
+ * date-like cell.
  */
-export function findHeaderRow(rows) {
-    if (rows.length === 0) {
+function isTextHeaderCandidate(row, width) {
+    const nonEmpty = row.filter((cell) => String(cell ?? '').trim() !== '');
+    if (nonEmpty.length < Math.max(2, Math.ceil(width / 2))) {
+        return false;
+    }
+    return !nonEmpty.some(isNumericOrDateCell);
+}
+
+/** Most frequent trimmed row length among rows of 2+ cells; ties go to the larger. */
+function dominantWidth(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        const length = trimmedLength(row);
+        if (length >= 2) {
+            counts.set(length, (counts.get(length) || 0) + 1);
+        }
+    }
+    let dominant = 0;
+    let dominantFreq = 0;
+    for (const [length, freq] of counts) {
+        if (freq > dominantFreq || (freq === dominantFreq && length > dominant)) {
+            dominantFreq = freq;
+            dominant = length;
+        }
+    }
+    return dominant;
+}
+
+/**
+ * Index of the first row whose cell in the date column is date-like, or -1.
+ * The date column is the one with the most date-like cells (ties go to the
+ * lower index), so a date inside a preamble line does not count as data.
+ */
+function firstDataRow(rows) {
+    const hits = [];
+    for (const row of rows) {
+        row.forEach((cell, index) => {
+            if (isDateLikeValue(String(cell ?? '').trim())) {
+                hits[index] = (hits[index] || 0) + 1;
+            }
+        });
+    }
+    let dateColumn = -1;
+    let best = 0;
+    hits.forEach((count, index) => {
+        if (count > best) {
+            best = count;
+            dateColumn = index;
+        }
+    });
+    if (dateColumn < 0) {
         return -1;
     }
+    return rows.findIndex((row) => isDateLikeValue(String(row[dateColumn] ?? '').trim()));
+}
 
+/** The earlier rule, kept for files where no row has a date (e.g. '17 Sep 2026'): equal row width. */
+function findHeaderRowSameWidth(rows) {
     const counts = new Map();
     for (const row of rows) {
         if (row.length === 0) {
@@ -234,23 +292,37 @@ export function findHeaderRow(rows) {
     }
 
     for (let i = 0; i < rows.length; i += 1) {
-        const row = rows[i];
-        if (row.length !== dominant) {
-            continue;
-        }
-        const nonEmpty = row.filter((cell) => cell.trim() !== '');
-        // A title line like 'Konta izraksts;;;;' has the right width but
-        // only one filled cell; a header names at least half the columns.
-        if (nonEmpty.length < Math.max(2, Math.ceil(dominant / 2))) {
-            continue;
-        }
-        const numericCount = nonEmpty.filter(isNumericOrDateCell).length;
-        if (numericCount === 0) {
+        if (rows[i].length === dominant && isTextHeaderCandidate(rows[i], dominant)) {
             return i;
         }
     }
 
     return -1;
+}
+
+/**
+ * Finds the header row, skipping preamble lines (account number, period,
+ * bank name): the nearest all-text row above the first data row (the first
+ * row with a date in the date column) that names at least half of the
+ * columns. Widths are compared after trimming trailing blank cells and are
+ * not required to be equal, so a header and data rows may differ in width.
+ * When that finds nothing it falls back to the first all-text row of the
+ * dominant width. Returns -1 when nothing looks like a header (e.g. pasted
+ * data with no header row at all).
+ * @param {string[][]} rows
+ * @returns {number}
+ */
+export function findHeaderRow(rows) {
+    const dominant = dominantWidth(rows);
+    if (dominant >= 2) {
+        for (let i = firstDataRow(rows) - 1; i >= 0; i -= 1) {
+            if (isTextHeaderCandidate(rows[i], dominant)) {
+                return i;
+            }
+        }
+    }
+
+    return findHeaderRowSameWidth(rows);
 }
 
 const KEYWORDS = {
