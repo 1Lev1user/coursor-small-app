@@ -8,13 +8,27 @@ import {
     setError,
     clearError,
     centsInputValue,
+    actionButton,
 } from './shared.js';
 
 const planDraft = {
     budget: null,
+    confirmZero: false,
     errorField: '',
     error: '',
 };
+
+export function needsZeroBudgetConfirm(savedCents, newCents) {
+    return savedCents > 0 && newCents === 0;
+}
+
+export function planDraftDirty(settings, draft) {
+    if (draft?.budget === null || draft?.budget === undefined) {
+        return false;
+    }
+    const cents = parseAmount(draft.budget, { allowZero: true });
+    return cents === null ? true : cents !== settings.monthlyBudgetCents;
+}
 
 const profileDraft = {
     userName: null,
@@ -70,7 +84,7 @@ export function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, budgetField) {
+function savePlan(ctx, budgetField, confirmed = false) {
     clearError(budgetField);
     planDraft.error = '';
     planDraft.errorField = '';
@@ -79,10 +93,17 @@ function savePlan(ctx, budgetField) {
 
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
+        planDraft.confirmZero = false;
         planDraft.errorField = 'budget';
         planDraft.error = amountProblem(planDraft.budget, { allowZero: true });
         setError(budgetField, planDraft.error);
         budgetField.control.focus();
+        return;
+    }
+
+    if (!confirmed && needsZeroBudgetConfirm(ctx.data.settings.monthlyBudgetCents, budgetCents)) {
+        planDraft.confirmZero = true;
+        ctx.render();
         return;
     }
 
@@ -91,6 +112,7 @@ function savePlan(ctx, budgetField) {
     refreshCurrentMonthPlan(ctx.data);
 
     planDraft.budget = null;
+    planDraft.confirmZero = false;
     planDraft.error = '';
     planDraft.errorField = '';
 
@@ -137,15 +159,55 @@ export function renderPlanSection(ctx) {
     budgetInput.placeholder = '1000';
     budgetInput.value = centsInputValue(settings.monthlyBudgetCents, planDraft.budget);
     const budgetField = buildField('plan-budget', 'Monthly budget (EUR)', budgetInput);
+
+    const marker = element('p', 'plan-unsaved', 'Unsaved changes');
+    marker.setAttribute('role', 'status');
+    const discard = actionButton('btn btn-ghost', 'Discard', () => {
+        planDraft.budget = null;
+        planDraft.confirmZero = false;
+        planDraft.error = '';
+        planDraft.errorField = '';
+        ctx.render();
+    });
+    const syncDirty = () => {
+        const dirty = planDraftDirty(settings, planDraft);
+        marker.hidden = !dirty;
+        discard.hidden = !dirty;
+    };
+
+    let confirmBox = null;
     budgetInput.addEventListener('input', () => {
         planDraft.budget = budgetInput.value;
+        planDraft.confirmZero = false;
+        confirmBox?.remove();
+        confirmBox = null;
         clearError(budgetField);
+        syncDirty();
     });
+    syncDirty();
 
     if (planDraft.error !== '') {
         if (planDraft.errorField === 'budget') {
             setError(budgetField, planDraft.error);
         }
+    }
+
+    const draftCents = parseAmount(planDraft.budget ?? '', { allowZero: true });
+    if (planDraft.confirmZero && needsZeroBudgetConfirm(settings.monthlyBudgetCents, draftCents)) {
+        confirmBox = element('div', 'confirm-box');
+        confirmBox.setAttribute('role', 'group');
+        confirmBox.append(
+            element(
+                'p',
+                'confirm-copy',
+                'Are you sure? A budget of 0 makes every expense show as over budget.',
+            ),
+            actionButton('btn', 'Cancel', () => {
+                planDraft.confirmZero = false;
+                ctx.render();
+            }),
+            actionButton('btn btn-danger', 'Save budget 0', () => savePlan(ctx, budgetField, true)),
+        );
     }
 
     const submit = element('button', 'btn btn-primary', 'Save budget');
@@ -163,6 +225,9 @@ export function renderPlanSection(ctx) {
             'Income is counted when it arrives: add regular incomes under Settings > Income, '
                 + 'and anything else with Add income on Home.',
         ),
+        marker,
+        discard,
+        ...(confirmBox ? [confirmBox] : []),
         submit,
     );
     section.append(form);

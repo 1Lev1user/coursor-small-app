@@ -886,6 +886,11 @@ textarea:focus::placeholder {
     font-weight: 600;
 }
 
+.plan-unsaved {
+    color: var(--muted);
+    font-weight: 600;
+}
+
 /* Buttons: tinted blocks. Primary is solid pine, secondary a pine tint, red only in a confirm step. */
 
 .btn {
