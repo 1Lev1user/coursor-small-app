@@ -240,6 +240,25 @@ test('normaliseIncomeSource rejects records without an id and cleans the fields'
     assert.equal(normaliseIncomeSource({ id: 'src_c', expectedCents: -1 }).expectedCents, 0);
 });
 
+test('the version 2 step rejects a non-object income and drops non-object subscriptions', () => {
+    const badIncome = v2Fixture();
+    badIncome.incomes = ['x'];
+    assert.equal(normalise(badIncome).ok, false);
+
+    const junkSubscriptions = v2Fixture();
+    const validSub = junkSubscriptions.subscriptions[0];
+    junkSubscriptions.subscriptions = [null, 'x', validSub];
+    const result = normalise(junkSubscriptions);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.subscriptions, [{ ...validSub, skippedMonths: [] }]);
+
+    const fixture = v2Fixture();
+    const data = normalise(fixture).data;
+    assert.deepEqual(data.expenses, fixture.expenses);
+    assert.deepEqual(data.incomes, [{ ...fixture.incomes[0], sourceId: '' }]);
+    assert.deepEqual(data.subscriptions, [{ ...fixture.subscriptions[0], skippedMonths: [] }]);
+});
+
 test('normalise is idempotent on version 2 data and on repaired data', () => {
     for (const fixture of [v2Fixture(), repairFixture()]) {
         const once = normalise(fixture).data;

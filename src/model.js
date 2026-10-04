@@ -227,16 +227,21 @@ const MIGRATIONS = {
     2(data) {
         const next = JSON.parse(JSON.stringify(data));
         next.version = 3;
-        // Broken settings or lists stay as they are, so normalise still rejects them.
+        // Broken settings, lists and incomes stay as they are, so normalise still rejects them.
         if (isObject(next.settings)) {
             next.settings = { ...next.settings, balanceStart: null, perDayMode: 'auto', perDayFixedCents: 0 };
         }
         next.incomeSources = [];
         if (Array.isArray(next.incomes)) {
-            next.incomes = next.incomes.map((entry) => ({ ...entry, sourceId: stringOr(entry.sourceId) }));
+            next.incomes = next.incomes.map((entry) => (
+                isObject(entry) ? { ...entry, sourceId: stringOr(entry.sourceId) } : entry
+            ));
         }
+        // A subscription that is not an object carries no data and is dropped.
         if (Array.isArray(next.subscriptions)) {
-            next.subscriptions = next.subscriptions.map((subscription) => ({ ...subscription, skippedMonths: [] }));
+            next.subscriptions = next.subscriptions
+                .filter(isObject)
+                .map((subscription) => ({ ...subscription, skippedMonths: [] }));
         }
         return next;
     },
