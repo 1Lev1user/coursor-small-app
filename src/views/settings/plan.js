@@ -11,10 +11,14 @@ import {
 } from './shared.js';
 
 const planDraft = {
-    userName: null,
     budget: null,
     income: null,
     errorField: '',
+    error: '',
+};
+
+const profileDraft = {
+    userName: null,
     error: '',
 };
 
@@ -67,25 +71,14 @@ export function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, nameField, budgetField, incomeField) {
-    clearError(nameField);
+function savePlan(ctx, budgetField, incomeField) {
     clearError(budgetField);
     clearError(incomeField);
     planDraft.error = '';
     planDraft.errorField = '';
 
-    planDraft.userName = nameField.control.value;
     planDraft.budget = budgetField.control.value;
     planDraft.income = incomeField.control.value;
-
-    const userName = String(planDraft.userName ?? '').trim();
-    if (userName === '') {
-        planDraft.errorField = 'name';
-        planDraft.error = 'Enter your name.';
-        setError(nameField, planDraft.error);
-        nameField.control.focus();
-        return;
-    }
 
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
@@ -105,20 +98,40 @@ function savePlan(ctx, nameField, budgetField, incomeField) {
         return;
     }
 
-    ctx.data.settings.userName = userName;
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     syncCategoryPlanFields(ctx.data.categories, budgetCents);
     ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
-    planDraft.userName = null;
     planDraft.budget = null;
     planDraft.income = null;
     planDraft.error = '';
     planDraft.errorField = '';
 
     if (persist(ctx)) {
-        ctx.toast('Plan saved');
+        ctx.toast('Budget saved');
+    }
+}
+
+function saveProfile(ctx, nameField) {
+    clearError(nameField);
+    profileDraft.error = '';
+    profileDraft.userName = nameField.control.value;
+
+    const userName = String(profileDraft.userName ?? '').trim();
+    if (userName === '') {
+        profileDraft.error = 'Enter your name.';
+        setError(nameField, profileDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    ctx.data.settings.userName = userName;
+    profileDraft.userName = null;
+    profileDraft.error = '';
+
+    if (persist(ctx)) {
+        ctx.toast('Name saved');
     }
 }
 
@@ -126,22 +139,10 @@ export function renderPlanSection(ctx) {
     const settings = ctx.data.settings;
     const section = element('section', 'card stack');
     section.id = 'more-plan';
-    section.append(element('h2', 'section-title', 'Plan'));
+    section.append(element('h2', 'section-title', 'Monthly budget'));
 
     const form = element('form', 'stack plan-form');
     form.noValidate = true;
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.autocomplete = 'given-name';
-    nameInput.placeholder = 'Your first name';
-    nameInput.maxLength = 40;
-    nameInput.value = planDraft.userName ?? settings.userName ?? '';
-    const nameField = buildField('plan-name', 'Your name', nameInput);
-    nameInput.addEventListener('input', () => {
-        planDraft.userName = nameInput.value;
-        clearError(nameField);
-    });
 
     const budgetInput = document.createElement('input');
     budgetInput.type = 'text';
@@ -168,24 +169,21 @@ export function renderPlanSection(ctx) {
     });
 
     if (planDraft.error !== '') {
-        if (planDraft.errorField === 'name') {
-            setError(nameField, planDraft.error);
-        } else if (planDraft.errorField === 'budget') {
+        if (planDraft.errorField === 'budget') {
             setError(budgetField, planDraft.error);
         } else if (planDraft.errorField === 'income') {
             setError(incomeField, planDraft.error);
         }
     }
 
-    const submit = element('button', 'btn btn-primary', 'Save plan');
+    const submit = element('button', 'btn btn-primary', 'Save budget');
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        savePlan(ctx, nameField, budgetField, incomeField);
+        savePlan(ctx, budgetField, incomeField);
     });
 
     form.append(
-        nameField.wrapper,
         budgetField.wrapper,
         incomeField.wrapper,
         element(
@@ -196,6 +194,42 @@ export function renderPlanSection(ctx) {
         ),
         submit,
     );
+    section.append(form);
+    return section;
+}
+
+export function renderProfileSection(ctx) {
+    const section = element('section', 'card stack');
+    section.id = 'more-profile';
+    section.append(element('h2', 'section-title', 'Your name'));
+
+    const form = element('form', 'stack plan-form');
+    form.noValidate = true;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.autocomplete = 'given-name';
+    nameInput.placeholder = 'Your first name';
+    nameInput.maxLength = 40;
+    nameInput.value = profileDraft.userName ?? ctx.data.settings.userName ?? '';
+    const nameField = buildField('profile-name', 'Your name', nameInput);
+    nameInput.addEventListener('input', () => {
+        profileDraft.userName = nameInput.value;
+        clearError(nameField);
+    });
+
+    if (profileDraft.error !== '') {
+        setError(nameField, profileDraft.error);
+    }
+
+    const submit = element('button', 'btn btn-primary', 'Save name');
+    submit.type = 'submit';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveProfile(ctx, nameField);
+    });
+
+    form.append(nameField.wrapper, submit);
     section.append(form);
     return section;
 }

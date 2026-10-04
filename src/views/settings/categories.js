@@ -48,7 +48,7 @@ const addDraft = {
 
 const addSubDrafts = new Map();
 
-function userCategories(data) {
+export function userCategories(data) {
     return data.categories.filter(
         (category) => (
             category.system !== true
