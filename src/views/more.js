@@ -6,6 +6,7 @@ import { renderPlanSection, renderProfileSection } from './settings/plan.js';
 import { renderIncomeSection } from './settings/income.js';
 import { renderIncomeSourcesSection } from './settings/incomeSources.js';
 import { renderSubscriptionsSection } from './settings/subscriptions.js';
+import { renderTemplatesSection } from './settings/templates.js';
 import { renderCategoriesSection, userCategories } from './settings/categories.js';
 import { renderBackupReminder, renderBackupSection } from './settings/backup.js';
 import { renderRightsSection } from './settings/rights.js';
@@ -45,6 +46,7 @@ export const SECTION_RENDERERS = {
     'more-income-sources': (ctx) => renderIncomeSourcesSection(ctx),
     'more-income': (ctx) => renderIncomeSection(ctx),
     'more-subscriptions': (ctx, plan) => renderSubscriptionsSection(ctx, plan),
+    'more-templates': (ctx) => renderTemplatesSection(ctx),
     'more-categories': (ctx, plan) => renderCategoriesSection(ctx, plan),
     'more-goals': (ctx) => renderGoalsSection(ctx),
     'more-import': (ctx) => renderImportSection(ctx),
@@ -142,6 +144,11 @@ export function groupSummary(groupId, data, now = new Date()) {
                 ? 'None yet'
                 : `${data.subscriptions.length} recurring`;
             break;
+        case 'templates': {
+            const count = (data.templates ?? []).length;
+            text = count === 0 ? 'None yet' : plural(count, 'template', 'templates');
+            break;
+        }
         case 'goals': {
             const closed = data.goals.filter((goal) => goal.closedAt !== '').length;
             text = `${data.goals.length - closed} open · ${closed} closed`;

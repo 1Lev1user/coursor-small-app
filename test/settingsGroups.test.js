@@ -192,7 +192,6 @@ test('unknown and slot groups give an empty summary', () => {
     const empty = { text: '', warn: false };
     assert.deepEqual(groupSummary('nope', defaultData(), NOW), empty);
     assert.deepEqual(groupSummary('money', defaultData(), NOW), empty);
-    assert.deepEqual(groupSummary('templates', defaultData(), NOW), empty);
 });
 
 test('renderProfileSection is exported', () => {

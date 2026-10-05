@@ -65,6 +65,35 @@ export function addTemplate(data, template) {
 }
 
 /**
+ * Renames and/or re-prices a template. Category and note are not editable here.
+ * @param {object} data
+ * @param {string} id
+ * @param {{ name?: string, amountCents?: number }} patch
+ * @returns {{ ok: true, template: object } | { ok: false, reason: string }}
+ */
+export function updateTemplate(data, id, patch) {
+    const record = Array.isArray(data.templates)
+        ? data.templates.find((template) => template.id === id)
+        : undefined;
+    if (record === undefined) {
+        return { ok: false, reason: 'Template does not exist.' };
+    }
+
+    const candidate = {
+        name: patch.name ?? record.name,
+        amountCents: patch.amountCents ?? record.amountCents,
+    };
+    const validated = validateTemplate(candidate);
+    if (!validated.ok) {
+        return validated;
+    }
+
+    record.name = validated.name;
+    record.amountCents = candidate.amountCents;
+    return { ok: true, template: record };
+}
+
+/**
  * @param {object} data
  * @param {string} id
  * @returns {{ ok: true } | { ok: false, reason: string }}

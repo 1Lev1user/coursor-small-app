@@ -34,6 +34,11 @@ export const state = {
     subscriptionEditError: '',
     focusSubscriptionEditError: false,
 
+    editTemplateId: null,
+    confirmTemplateId: null,
+    templateEditDraft: null,
+    templateEditError: '',
+
     pendingImportText: null,
     pendingImportCounts: null,
     pendingImportIncoming: null,
@@ -56,6 +61,10 @@ export function closeTransientUi() {
     state.subscriptionEditDraft = null;
     state.subscriptionEditError = '';
     state.focusSubscriptionEditError = false;
+    state.editTemplateId = null;
+    state.confirmTemplateId = null;
+    state.templateEditDraft = null;
+    state.templateEditError = '';
     state.editIncomeId = null;
     state.confirmIncomeEntryId = null;
     state.incomeEntryDraft = null;
