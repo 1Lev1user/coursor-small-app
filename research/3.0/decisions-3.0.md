@@ -51,6 +51,7 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 36. "Replace everything" downloads the current data and replaces in one tap after the preview (refines 18).
 37. Approved test edits: test/model.test.js (C-029), test/importCore.test.js:575-587 (C-068), test/importCheckPanel.test.js:124 (C-058), test/settingsGroups.test.js:195 (C-046, 2026-10-05). Font download approved after the licence check (SIL OFL 1.1, free of charge).
 38. Motion after saving (C-075, 2026-10-05): only the Money now figure rolls; no budget bar is added to Home.
+39. Bank sample cards (2026-10-05): build everything else for 3.0 now; C-064, C-065, C-066, C-067 and C-069 wait until the owner sends the anonymised bank export later.
 
 ## What this changes in the drafted cards
 | Card | Change |
