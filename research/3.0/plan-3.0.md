@@ -13,7 +13,7 @@
 - Owner decisions 1-30 in research/3.0/decisions-3.0.md override anything else, including the research files.
 - Interface text stays English (decision 17). Files, code, comments and commit messages in English.
 - Data stays on the device: no network calls, no accounts, no analytics (AGENTS.md).
-- No new dependencies in package.json. One-time downloads (fonts for C-074, Playwright for C-013, a .docx generator for C-014) only with the owner's go and outside package.json.
+- No new dependencies in package.json. One-time downloads (fonts for C-074, Playwright for C-013) only with the owner's go and outside package.json.
 - Data format change only through `SCHEMA_VERSION` + one `MIGRATIONS` step with a test (AGENTS.md); the update keeps the pre-update copy (`PRE_UPDATE_KEY`).
 - Past months never change: the new counting starts at the 3.0 update (decisions 2, 9, 12).
 - Colours, fonts, radii and motion only as tokens in style.css; every movement inside `@media (prefers-reduced-motion: no-preference)` (decision 29).
@@ -30,7 +30,7 @@
 | Settings/UX | C-040 to C-054 (15) | One Settings page of collapsing groups in the decided order, one set of words, no-limit default, safer backup restore, small usability fixes |
 | Bank | C-055 to C-069 (15) | Import reads more files correctly, a check panel on every import, possible duplicates unticked, reversals as refunds, batches split |
 | Design | C-070 to C-077 (8) | Hints vanish on focus, design bugs fixed, tinted-block buttons, palette fixes, Golos Text + Literata, main and quiet motion |
-| Guide and release | C-013, C-014, C-026 (3) | Screenshots and Word guide of 3.0, release 3.0.0 on v1 |
+| Guide and release | C-013, C-014, C-026 (3) | Screenshots and PDF guide of 3.0, release 3.0.0 on v1 |
 
 59 cards (C-084 added on 2026-10-05 from the C-046 review; on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, C-034 into C-034, C-081 and C-082, and C-039 into C-039 and C-083). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
 
@@ -134,7 +134,7 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | G-bank | C-066 | camt: import reversal entries as a refund, not as a new payment | Bank | M | P1 | medium | - | sonnet | standard (sonnet) | sonnet | bank sample file |
 | G-bank | C-067 | camt: split batch entries into one row per payment | Bank | M | P1 | medium | C-066 | sonnet | standard (sonnet) | sonnet | bank sample file |
 | G-guide | C-013 | Retake the user guide screenshots of version 3.0 | Guide/Release | M | P2 | low | all slice 3 cards (see card) | sonnet | standard (sonnet) | sonnet | Playwright (approved) |
-| G-guide | C-014 | User guide as a Word document for the 3.0 release | Guide/Release | M | P2 | low | C-013, C-025 | sonnet | standard (sonnet) | sonnet | .docx tool download |
+| G-guide | C-014 | User guide 3.0 as a PDF, built like the 2.0 guide | Guide/Release | M | P2 | low | C-013, C-025 | sonnet | standard (sonnet) | sonnet | - |
 | R | C-026 | Release 3.0.0: raise the version pair and publish v1 | Guide/Release | S | P1 | high | all slice 3 cards (see card) | opus | standard (sonnet) | opus | owner go to publish |
 
 Waves 14 to 17 run one card at a time because they all edit style.css; the free slots go to the gated cards (bank sample, guide) if their gates are cleared by then.

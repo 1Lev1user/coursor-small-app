@@ -52,6 +52,7 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 37. Approved test edits: test/model.test.js (C-029), test/importCore.test.js:575-587 (C-068), test/importCheckPanel.test.js:124 (C-058), test/settingsGroups.test.js:195 (C-046, 2026-10-05). Font download approved after the licence check (SIL OFL 1.1, free of charge).
 38. Motion after saving (C-075, 2026-10-05): only the Money now figure rolls; no budget bar is added to Home.
 39. Bank sample cards (2026-10-05): build everything else for 3.0 now; C-064, C-065, C-066, C-067 and C-069 wait until the owner sends the anonymised bank export later.
+40. User guide 3.0 (2026-10-05): built exactly like the 2.0 guide, as a PDF by scripts/build_user_guide_pdf.py (reportlab, already installed); no Word document and no download. Replaces the Word plan of 2026-10-03.
 
 ## What this changes in the drafted cards
 | Card | Change |
@@ -90,5 +91,5 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 
 ## Still open
 - The owner's bank sample file (real format, made-up data): needed for C-064, C-065, C-066, C-067, C-069.
-- User guide: retake screenshots (C-013, Playwright approved) and Word guide (C-014) in the execution phase.
+- User guide: retake screenshots (C-013, Playwright approved) and the PDF guide (C-014) in the execution phase.
 - C-006 (automatic publishing) stays postponed; C-026 becomes the 3.0 release.
