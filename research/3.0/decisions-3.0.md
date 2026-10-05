@@ -49,7 +49,7 @@ Decided with the owner on 2026-10-04 after the 3.0 audit (research/3.0/). These 
 34. The one-time 3.0 setup cannot be skipped; the paydays list may stay empty (refines 9).
 35. In an unfinished month Trends shows no comparison card at all (refines 19).
 36. "Replace everything" downloads the current data and replaces in one tap after the preview (refines 18).
-37. Approved test edits: test/model.test.js (C-029), test/importCore.test.js:575-587 (C-068). Font download approved after the licence check (SIL OFL 1.1, free of charge).
+37. Approved test edits: test/model.test.js (C-029), test/importCore.test.js:575-587 (C-068), test/importCheckPanel.test.js:124 (C-058), test/settingsGroups.test.js:195 (C-046, 2026-10-05). Font download approved after the licence check (SIL OFL 1.1, free of charge).
 
 ## What this changes in the drafted cards
 | Card | Change |
