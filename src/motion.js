@@ -63,3 +63,62 @@ export const collapseKeyframes = () => [{
     paddingBlock: '0px',
     borderTopWidth: '0px',
 }];
+
+const ADD_FORMS = ['Add expense', 'Add income'];
+const ADD_CLOSED = ['Home', 'Expense added', 'Income added', 'Refund added'];
+const MONTH_TABS = ['month', 'chart'];
+
+/**
+ * Screen change from `prev` to `next` ({ tab, title, monthKey }) as a transition kind, or null for none.
+ * Month kinds only when the tab stays Month or Chart: on Add, setMonthKey runs before goTo('month').
+ */
+export function transitionKind(prev, next) {
+    if (prev === null) {
+        return null;
+    }
+    if (prev.tab !== next.tab) {
+        return 'tab';
+    }
+    if (next.tab === 'add') {
+        if (prev.title === 'Home' && ADD_FORMS.includes(next.title)) {
+            return 'sheet-open';
+        }
+        return ADD_FORMS.includes(prev.title) && ADD_CLOSED.includes(next.title) ? 'sheet-close' : null;
+    }
+    if (MONTH_TABS.includes(next.tab) && prev.monthKey !== next.monthKey) {
+        return next.monthKey > prev.monthKey ? 'month-next' : 'month-prev';
+    }
+    return null;
+}
+
+let transitionSeq = 0;
+
+/**
+ * Runs `update` inside a same-document View Transition when the browser has one, `kind` is not null
+ * and Reduce Motion is off; otherwise at once. `data-transition` holds the kind until the latest
+ * transition ends. Returns true when a transition started.
+ */
+export function runWithTransition(kind, update, env = {}) {
+    const doc = env.doc ?? globalThis.document;
+    const reduce = env.reduce ?? prefersReducedMotion;
+    if (kind === null || reduce() || typeof doc?.startViewTransition !== 'function') {
+        update();
+        return false;
+    }
+    const mine = ++transitionSeq;
+    const dataset = doc.documentElement.dataset;
+    dataset.transition = kind;
+    const clear = () => {
+        if (mine === transitionSeq) {
+            delete dataset.transition;
+        }
+    };
+    try {
+        doc.startViewTransition(update).finished.then(clear, clear);
+    } catch {
+        clear();
+        update();
+        return false;
+    }
+    return true;
+}
