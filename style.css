@@ -146,6 +146,7 @@
 
     --tabbar-height: 3.75rem;
     --tap: 44px;
+    --content-max: 46rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -277,7 +278,9 @@ body {
     z-index: 10;
     width: 100%;
     background: var(--bg);
-    padding: var(--s3) calc(var(--s4) + env(safe-area-inset-right)) var(--s3) calc(var(--s4) + env(safe-area-inset-left));
+    padding-block: var(--s3);
+    padding-inline: max(calc(var(--s4) + env(safe-area-inset-left)), calc((100% - var(--content-max)) / 2 + var(--s4)))
+        max(calc(var(--s4) + env(safe-area-inset-right)), calc((100% - var(--content-max)) / 2 + var(--s4)));
     padding-top: calc(var(--s3) + env(safe-area-inset-top));
 }
 
@@ -293,6 +296,8 @@ body {
     position: relative;
     z-index: 2;
     width: 100%;
+    max-width: var(--content-max);
+    margin-inline: auto;
     padding: var(--s4);
     padding-left: calc(var(--s4) + env(safe-area-inset-left));
     padding-right: calc(var(--s4) + env(safe-area-inset-right));
@@ -318,7 +323,8 @@ body.is-setup .tabbar {
     justify-content: stretch;
     gap: var(--s1);
     background: var(--surface);
-    padding-inline: calc(var(--s4) + env(safe-area-inset-left)) calc(var(--s4) + env(safe-area-inset-right));
+    padding-inline: max(calc(var(--s4) + env(safe-area-inset-left)), calc((100% - var(--content-max)) / 2 + var(--s4)))
+        max(calc(var(--s4) + env(safe-area-inset-right)), calc((100% - var(--content-max)) / 2 + var(--s4)));
     padding-bottom: 0;
 }
 
@@ -758,7 +764,10 @@ body.is-setup .tabbar {
 
 .chart-legend-button:disabled {
     cursor: default;
-    opacity: 0.55;
+}
+
+.chart-legend-button:disabled .chart-swatch {
+    opacity: 0.45;
 }
 
 .chart-swatch {
@@ -2249,7 +2258,8 @@ textarea:focus::placeholder {
 
 .data-table tbody th {
     font-weight: 600;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    min-width: 7rem;
 }
 
 .data-table .is-number,
@@ -2262,6 +2272,10 @@ textarea:focus::placeholder {
 .data-table tfoot th,
 .data-table tfoot td {
     font-weight: 700;
+}
+
+.year-category-table {
+    min-width: 17rem;
 }
 
 /* Changes vs last month */
