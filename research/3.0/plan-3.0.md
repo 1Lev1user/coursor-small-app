@@ -147,7 +147,7 @@ Waves 14 to 17 run one card at a time because they all edit style.css; the free 
 | G2 Answers to section 6 | C-030, C-031, C-034, C-038 | Cleared 2026-10-04 (section 6) |
 | G3 Font download | C-074 (wave 7) | Cleared 2026-10-04 after the licence check: Golos Text and Literata are SIL OFL 1.1 (google/fonts OFL.txt, npm licence field OFL-1.1), free of charge, bundling allowed with the licence file |
 | G4 Bank sample file | C-064 to C-067, C-069 | A real export from the owner's bank with made-up data (CSV or Excel, and camt XML if the bank offers it) |
-| G5 Guide tools | C-013, C-014 | Playwright is approved (2026-10-04); go for a temporary .docx generator for C-014 |
+| G5 Guide tools | C-013, C-014 | Playwright is approved (2026-10-04); the PDF guide needs no download (decision 40) |
 | G6 Manual checks | release | Tick the Manual items of each merged card on the iPhone (listed in each pull request); they gate the release, not the merge |
 | G7 Publish | C-026 | Explicit go to publish 3.0.0 to v1, and whether 3.0 waits for the G4 cards |
 
