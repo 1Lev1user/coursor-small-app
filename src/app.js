@@ -18,7 +18,7 @@ import { render as renderSetup } from './views/setup.js';
 import { render as renderMoneySetup } from './views/moneySetup.js';
 import { render as renderImport } from './views/import.js';
 import { selectOnFocus } from './inputFocus.js';
-import { entryIdSet, findNewEntryId } from './motion.js';
+import { entryIdSet, findNewEntryId, runWithTransition, transitionKind } from './motion.js';
 
 const TOAST_MS = 2000;
 const UNDO_TOAST_MS = 8000;
@@ -567,7 +567,36 @@ function renderStorageIssue(issue) {
     viewElement.append(card);
 }
 
+// The screen last drawn, and whether a transition is queued (its callback draws the latest state).
+let shownScreen = null;
+let renderPending = false;
+
+const screenNow = () => ({
+    tab: app.tab,
+    title: app.tab === 'add' ? addScreenTitle() : null,
+    monthKey: app.monthKey,
+});
+
 function render() {
+    if (renderPending) {
+        return;
+    }
+    const plain = app.storageIssue !== null || app.data.settings.setupComplete !== true;
+    const kind = plain ? null : transitionKind(shownScreen, screenNow());
+    const update = () => {
+        renderPending = false;
+        renderNow();
+        shownScreen = screenNow();
+    };
+    if (kind === null) {
+        update();
+        return;
+    }
+    renderPending = true;
+    runWithTransition(kind, update);
+}
+
+function renderNow() {
     if (app.storageIssue !== null) {
         renderStorageIssue(app.storageIssue);
         return;

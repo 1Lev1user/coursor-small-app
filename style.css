@@ -146,6 +146,14 @@
     --dur-new-fade: 900ms;
     --dur-new-fade-reduced: 400ms;
     --row-new: color-mix(in srgb, var(--accent) 22%, transparent);
+    --dur-tab-out: 120ms;
+    --dur-tab-in: 160ms;
+    --dur-month: 200ms;
+    --dur-sheet-open: 280ms;
+    --dur-sheet-close: 200ms;
+    --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+    --shift-month: 12px;
+    --shift-sheet: 24px;
 
     --s1: 0.25rem;
     --s2: 0.5rem;
@@ -1107,6 +1115,104 @@ textarea:focus::placeholder {
         transition:
             opacity var(--dur-toast-in) var(--ease),
             transform var(--dur-toast-in) var(--ease);
+    }
+}
+
+/* Screen changes: same-document View Transitions (src/motion.js sets html[data-transition]). */
+@media (prefers-reduced-motion: no-preference) {
+    .app-header {
+        view-transition-name: app-header;
+    }
+
+    .tabbar {
+        view-transition-name: tabbar;
+    }
+
+    ::view-transition {
+        pointer-events: none;
+    }
+
+    ::view-transition-group(root) {
+        background: var(--bg);
+    }
+
+    /* Header and tab bar do not fade or move. */
+    ::view-transition-group(app-header),
+    ::view-transition-group(tabbar),
+    ::view-transition-new(app-header),
+    ::view-transition-new(tabbar) {
+        animation: none;
+    }
+
+    ::view-transition-old(app-header),
+    ::view-transition-old(tabbar) {
+        display: none;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        mix-blend-mode: normal;
+    }
+
+    html[data-transition='month-next'] {
+        --vt-x: var(--shift-month);
+    }
+
+    html[data-transition='month-prev'] {
+        --vt-x: calc(-1 * var(--shift-month));
+    }
+
+    html[data-transition='sheet-open'] {
+        --vt-y: var(--shift-sheet);
+    }
+
+    @keyframes vt-fade-out {
+        to {
+            opacity: 0;
+        }
+    }
+
+    @keyframes vt-enter {
+        from {
+            opacity: 0;
+            transform: translate(var(--vt-x, 0), var(--vt-y, 0));
+        }
+    }
+
+    @keyframes vt-leave-down {
+        to {
+            opacity: 0;
+            transform: translateY(var(--shift-sheet));
+        }
+    }
+
+    html[data-transition='tab']::view-transition-old(root),
+    html[data-transition='month-next']::view-transition-old(root),
+    html[data-transition='month-prev']::view-transition-old(root) {
+        animation: vt-fade-out var(--dur-tab-out) var(--ease) both;
+    }
+
+    html[data-transition='tab']::view-transition-new(root) {
+        animation: vt-enter var(--dur-tab-in) var(--ease) both;
+    }
+
+    html[data-transition='month-next']::view-transition-new(root),
+    html[data-transition='month-prev']::view-transition-new(root) {
+        animation: vt-enter var(--dur-month) var(--ease) both;
+    }
+
+    html[data-transition='sheet-open']::view-transition-old(root),
+    html[data-transition='sheet-close']::view-transition-new(root) {
+        animation: none;
+    }
+
+    html[data-transition='sheet-open']::view-transition-new(root) {
+        animation: vt-enter var(--dur-sheet-open) var(--ease-sheet) both;
+    }
+
+    html[data-transition='sheet-close']::view-transition-old(root) {
+        z-index: 1;
+        animation: vt-leave-down var(--dur-sheet-close) var(--ease-sheet) both;
     }
 }
 
