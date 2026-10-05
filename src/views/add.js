@@ -92,7 +92,45 @@ let addIncomeCategoryError = '';
 /** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[], refund?: boolean }} */
 let lastAdded = null;
 
+let focusFormRequested = false;
+
+/** Returns true once after an Add form was opened from Home or the other form; then clears. */
+export function takeFocusRequest() {
+    const requested = focusFormRequested;
+    focusFormRequested = false;
+    return requested;
+}
+
+/** @returns {'close-panel' | 'home' | null} */
+export function escapeAction(event, quickPanelOpen) {
+    if (event.key !== 'Escape' || event.defaultPrevented === true || event.isComposing === true) {
+        return null;
+    }
+    return quickPanelOpen ? 'close-panel' : 'home';
+}
+
+function onFormEscape(event, quickPanelOpen, ctx) {
+    const action = escapeAction(event, quickPanelOpen);
+    if (action === null) {
+        return;
+    }
+    event.preventDefault();
+    if (action === 'close-panel') {
+        closeQuickPanels();
+    } else {
+        openAddPanel('home');
+    }
+    ctx.render();
+}
+
 export function openAddPanel(next = 'home') {
+    const previous = panel;
+    // Never from 'added': a failed save re-opens the form and must not move scroll or focus.
+    focusFormRequested =
+        (next === 'expense' || next === 'income') && next !== previous && previous !== 'added';
+    if (focusFormRequested && typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+    }
     if (next === 'expense' || next === 'income' || next === 'added') {
         panel = next;
     } else {
@@ -804,6 +842,9 @@ function renderIncomeForm(root, ctx) {
     form.id = 'add-income-form';
     form.className = 'card stack';
     form.noValidate = true;
+    form.addEventListener('keydown', (event) => {
+        onFormEscape(event, addingIncomeCategory || addingCategory || confirmNoteAsSub, ctx);
+    });
 
     form.append(element('p', 'muted home-auto-note', incomeFormNote(ctx.data)));
 
@@ -1096,8 +1137,11 @@ function renderIncomeForm(root, ctx) {
     );
     root.append(form);
 
+    const focusForm = takeFocusRequest();
     if (addingIncomeCategory) {
         document.getElementById('add-quick-income-category-name')?.focus();
+    } else if (focusForm) {
+        (ctx.data.incomeSources.length > 0 ? sourceSelect : categorySelect).focus();
     }
 }
 
@@ -1159,6 +1203,9 @@ function renderExpenseForm(root, ctx) {
     form.id = 'add-form';
     form.className = 'card stack';
     form.noValidate = true;
+    form.addEventListener('keydown', (event) => {
+        onFormEscape(event, addingCategory || confirmNoteAsSub || addingIncomeCategory, ctx);
+    });
 
     const categorySelect = document.createElement('select');
     categorySelect.required = true;
@@ -1709,6 +1756,7 @@ function renderExpenseForm(root, ctx) {
     rebuildSubcategories();
     root.append(form);
 
+    const focusForm = takeFocusRequest();
     if (saveError !== '') {
         formError.textContent = saveError;
         formError.hidden = false;
@@ -1722,5 +1770,7 @@ function renderExpenseForm(root, ctx) {
     } else if (focusAmountOnRender) {
         focusAmountOnRender = false;
         amountInput.focus();
+    } else if (focusForm) {
+        categorySelect.focus();
     }
 }

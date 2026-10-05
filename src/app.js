@@ -114,11 +114,16 @@ function goTo(tab, options = {}) {
         return;
     }
 
+    const changed = tab !== app.tab;
+
     if (tab === 'add') {
         openAddPanel(options.panel ?? 'home');
     }
 
     app.tab = tab;
+    if (changed) {
+        window.scrollTo(0, 0);
+    }
     render();
 }
 

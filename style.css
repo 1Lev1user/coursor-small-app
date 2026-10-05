@@ -857,6 +857,12 @@ body.is-setup .tabbar {
     max-width: 100%;
 }
 
+.field input[type='date']::-webkit-calendar-picker-indicator:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
 .field select {
     appearance: none;
     padding-right: calc(var(--s4) + var(--s5));
