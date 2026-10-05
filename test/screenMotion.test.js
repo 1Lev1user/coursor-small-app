@@ -8,7 +8,7 @@ import { addScreenTitle, openAddPanel } from '../src/views/add.js';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const css = readFileSync(join(root, 'style.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const appSource = readFileSync(join(root, 'src', 'app.js'), 'utf8');
+const appSource = readFileSync(join(root, 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
 const NO_PREFERENCE = '@media (prefers-reduced-motion: no-preference)';
 const KINDS = ['tab', 'month-next', 'month-prev', 'sheet-open', 'sheet-close'];
 
