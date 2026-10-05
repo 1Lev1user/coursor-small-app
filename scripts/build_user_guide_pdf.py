@@ -169,7 +169,7 @@ def build():
         str(OUT), pagesize=A4,
         leftMargin=12 * mm, rightMargin=12 * mm,
         topMargin=10 * mm, bottomMargin=12 * mm,
-        title="My Expenses - Illustrated User Guide",
+        title="My Expenses - Illustrated User Guide (version 3.0)",
         author=AUTHOR,
         subject="Install steps and screen-by-screen guide",
         creator=f"My Expenses guide by {AUTHOR}",
@@ -178,13 +178,14 @@ def build():
 
     # Cover
     story.append(Paragraph("My Expenses", s["title"]))
-    story.append(Paragraph("User guide - install &amp; every screen", s["sub"]))
+    story.append(Paragraph("User guide - version 3.0: install &amp; every screen", s["sub"]))
     story.append(HRFlowable(width="100%", thickness=0.8, color=LINE, spaceBefore=1, spaceAfter=6))
     story.append(Paragraph("App link (tap to open)", s["link_label"]))
     story.append(Paragraph(link_tag(), s["link_hero"]))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph(
-        "Local-only euro tracker for income and spending. No account and no cloud sync - "
+        "Local-only euro tracker for income and spending. It keeps track of the money on your "
+        "card: every expense lowers it and every income raises it. No account and no cloud sync - "
         "everything stays on this device. Not an App Store / Google Play download: open the "
         "link in the right browser, then add it to your Home Screen.",
         s["note"],
@@ -264,8 +265,11 @@ def build():
     story.append(Paragraph("3. Computer &amp; new phone", s["h1"]))
     story.append(Paragraph(
         f"<b>Desktop:</b> Chrome/Edge → {link_tag('open the link')} → Install page as app, or bookmark. "
-        "<b>New phone:</b> on the old device go to Settings → Backup &amp; export → Export JSON; "
-        "install on the new phone; Settings → Import backup (this replaces all data on that device).",
+        "<b>New phone:</b> on the old phone go to Settings → <b>Backup</b> → "
+        "<b>Export backup (JSON)</b> and send the file to yourself. Install the app on the new "
+        "phone, then Settings → <b>Backup</b> → <b>Import backup</b>, choose the file and tap "
+        "<b>Replace everything</b>. Then open Home and check that Money now matches the old phone; "
+        "if the app asks you to set up your money, follow the steps on screen.",
         s["body"],
     ))
 
@@ -277,116 +281,263 @@ def build():
     story.append(Paragraph(f"Open the app: {link_tag()}", s["link_block"]))
 
     story.append(side_by_side(
-        s, "screen-setup.png", "First-run setup",
+        s, "screen-setup.png", "Getting started: your name and budget",
         [
-            "<b>Your name</b> - used to personalise Home.",
-            "<b>Monthly spend budget</b> field (euros; 0 allowed).",
-            "<b>Savings</b> as € or % of that budget.",
-            "<b>Usual monthly income</b> field (euros; 0 allowed).",
-            "A continue / save control at the bottom.",
+            "<b>Welcome</b> with <b>Your name</b>, <b>Monthly budget (EUR)</b> and "
+            "<b>Savings</b> (switch between € and %).",
+            "A line that shows what the Savings number comes to, with a worked example.",
+            "The button <b>Continue</b>.",
         ],
         [
-            "Enter your name (you can change it later in Settings → Plan).",
-            "Enter how much you plan to spend each month.",
-            "Set Savings (0 is fine; cannot go over 100% of the budget).",
-            "Enter usual income - counted automatically every month later.",
-            "Save to open the app.",
+            "Enter your name and how much you plan to spend each month (0 is allowed).",
+            "Set Savings. It cannot be more than the monthly budget.",
+            "Tap <b>Continue</b>. The next screen asks about the money on your card.",
+            "You can change the name and the budget later in Settings.",
         ],
     ))
 
     story.append(side_by_side(
-        s, "screen-home.png", "Home (first tab)",
+        s, "screen-money-setup.png", "Getting started: set up your money",
+        [
+            "<b>Set up your money</b> and the question <b>How much is on the card now? (EUR)</b>.",
+            "Under <b>Regular income</b>: <b>Name</b>, <b>Expected amount (EUR)</b> and "
+            "<b>Payday (day of month)</b>, with <b>Remove</b>.",
+            "Further down (scroll): <b>Add another income</b> and <b>Start</b>.",
+        ],
+        [
+            "Type the amount on your card today. A negative amount such as -40.00 is accepted.",
+            "Add each regular income, for example a salary, with its usual amount and the day "
+            "of the month it arrives. You may leave it empty and add incomes later in Settings.",
+            "Tap <b>Start</b> (the app says “Money setup complete”). From now on every expense "
+            "lowers Money now and every income raises it. Months before today stay as they are.",
+            "After an update from an older version you see this screen once, before Home. If "
+            "this month’s income already arrived, add it from Home with <b>Add income</b>.",
+        ],
+    ))
+
+    story.append(side_by_side(
+        s, "screen-home.png", "Home: Money now and the amount per day",
         [
             "Your month with your name (for example <b>Alex’s September</b>).",
-            "Green block: how much of this month’s spend budget is left.",
-            "<b>Add expense</b> (main button) and <b>Add income</b>.",
-            "Your three latest entries, and <b>Open Month</b> for the full list.",
-            "Bottom tabs: Home · Month · Chart · Settings.",
+            "The big block <b>Money now</b> with “Tap to check against your bank”.",
+            "Under it the amount per day, such as “€64.87 a day for 4 days until payday 28 Sep”, "
+            "and the line “Month budget: €709.50 left to spend · €290.50 spent of €1,000.00”.",
+            "<b>Add expense</b> and <b>Add income</b>, then <b>Quick add</b>, <b>Recent</b> and "
+            "<b>Open Month</b> further down. Tabs: Home · Month · Chart · Settings.",
         ],
         [
-            "Tap <b>Add expense</b> for day-to-day spending.",
-            "Tap <b>Add income</b> for a bonus, gift or side job. Your salary is added automatically.",
-            "Change your name anytime in <b>Settings → Plan</b>.",
-            "Use Month / Chart / Settings tabs for overview and setup.",
-        ],
-    ))
-
-    story.append(PageBreak())
-    story.append(side_by_side(
-        s, "screen-expense.png", "Add expense",
-        [
-            "Category picker and optional <b>+</b> to create a flexible category.",
-            "Subcategory when the category has sub-items.",
-            "Amount (euros), optional note (+ can save note as subcategory), and date.",
-            "<b>Add expense</b> button and <b>Back to Home</b>.",
-        ],
-        [
-            "Choose (or create) a category and subcategory if needed.",
-            "Enter the amount and optional note, pick the date, then save.",
-            "Use Back to Home when you’re done.",
+            "Read Money now as the amount that should be on your card right now.",
+            "The amount per day is Money now divided by the days until your next payday, or until "
+            "the end of the month. If nothing is left it says “Nothing left per day until …”.",
+            "Prefer a fixed amount? Settings → <b>Money</b> → <b>Amount per day</b>: choose "
+            "<b>Automatic</b> or <b>Fixed amount</b>, then save. Home then shows “€X left of "
+            "today’s €Y”.",
+            "After money was put into Savings, a line “Put into Savings since …” appears.",
         ],
     ))
 
     story.append(side_by_side(
-        s, "screen-income.png", "Add extra income",
+        s, "screen-settings-income.png", "Paydays and regular incomes",
         [
-            "Income category picker and <b>+</b> to create a new income category.",
-            "Amount, optional note, and date.",
-            "Reminder that usual salary comes from Settings → Plan.",
-            "<b>Add extra income</b> and <b>Back to Home</b>.",
+            "Settings, group <b>Income</b>, with <b>Regular income</b> open.",
+            "Each regular income with its amount, payday and this month’s state (“waiting for "
+            "you on Home”, “expected 28 Sep”), and <b>Edit</b> and <b>Delete</b>.",
+            "Below it the form <b>Add regular income</b>: <b>Name</b>, <b>Expected amount "
+            "(EUR)</b>, payday and income category.",
         ],
         [
-            "Choose a category or tap <b>+</b> to add one (bonus, gift, freelance…).",
-            "Log one-off income only - not regular salary.",
-            "Save, then return Home - or switch tabs to check Month totals.",
+            "Add each regular income once. In a month that is too short for the payday, the "
+            "last day of the month is used.",
+            "On the payday Home shows a card such as “Salary expected today: €2,000.00” (an "
+            "earlier missed one reads “expected on 15 Oct”) with <b>Amount received (EUR)</b>. "
+            "Change the amount if it differs.",
+            "<b>Received</b> records the income. <b>Later</b> hides the card until you reopen "
+            "the app. <b>Skip this month</b> leaves it out for this month.",
+            "Nothing is added without your tap, and the payday is the exact date you set.",
         ],
     ))
 
-    story.append(PageBreak())
+    story.append(side_by_side(
+        s, "screen-bank-check.png", "Check against the bank",
+        [
+            "Money now with the sheet <b>How much is on the card now?</b> open under it.",
+            "<b>Amount on the card (EUR)</b> and a live line, here “The app shows €259.50. The "
+            "difference -€27.00 is added as an expense in Uncategorised dated today, and counts "
+            "in this month.”",
+            "<b>Save</b> and <b>Cancel</b>.",
+        ],
+        [
+            "Tap the Money now figure, type the amount your bank shows and read the line "
+            "before you save.",
+            "If the amounts match, nothing is added (“Matches your bank. Nothing added.”). "
+            "Otherwise the app adds the difference: an income in Other if the bank shows more, "
+            "an expense in Uncategorised if it shows less.",
+            "The difference is one ordinary dated entry with the note “Bank difference”. Edit "
+            "or delete it in Month. Past months do not change.",
+        ],
+    ))
+
+    story.append(side_by_side(
+        s, "screen-expense.png", "Adding entries: expense, refund, quick add",
+        [
+            "<b>Category</b> with <b>+</b> to create one, a <b>Subcategory</b> once the "
+            "category has sub-items, and <b>Currency</b>.",
+            "<b>Amount (€)</b>, <b>Refund (money back from a shop)</b>, <b>Note (what was "
+            "it?)</b> and <b>Date</b>.",
+            "<b>Save as template</b> and <b>Add expense</b>.",
+        ],
+        [
+            "Pick the category, enter the amount and tap <b>Add expense</b>. A confirmation "
+            "says “Expense added”.",
+            "For a foreign purchase choose another currency: enter the amount in that currency "
+            "and what your bank charged in EUR.",
+            "Tick <b>Refund</b> for money back from a shop. It lowers spending and is marked "
+            "Refund.",
+            "Tick <b>Save as template</b> and the expense becomes a <b>Quick add</b> button on "
+            "Home, like “Coffee · €3.50”. One tap adds it; the message “Added Coffee” has "
+            "<b>Undo</b>. Edit templates in Settings → <b>Quick add</b>.",
+        ],
+    ))
+
+    story.append(side_by_side(
+        s, "screen-income.png", "Adding entries: income",
+        [
+            "A hint: pick the regular income this is, or Other income for a bonus or a gift.",
+            "<b>Income from</b>, <b>Income category</b> with <b>+</b>, <b>Amount (€)</b>, "
+            "<b>Date</b> and <b>Note (optional)</b>.",
+            "<b>Add income</b> and <b>Back to Home</b>.",
+        ],
+        [
+            "Choose a regular income (for example Salary) in <b>Income from</b> to count it as "
+            "received for that month. Choose <b>Other income (bonus, gift, ...)</b> for a "
+            "one-off.",
+            "Enter the amount and the date, then tap <b>Add income</b>. Money now goes up.",
+            "Tap <b>+</b> to make a new income category.",
+        ],
+    ))
+
     story.append(side_by_side(
         s, "screen-month.png", "Month",
         [
-            "Month switcher and totals for the selected month.",
-            "Budget left / cash summary vs plan and income.",
-            "Per-category progress (spent vs limit).",
-            "List of expenses (and related entries) for that month.",
+            "Month switcher, <b>Budget left</b> and <b>Cash left</b> (income minus spending "
+            "for the month).",
+            "“Spent €290.50 of €1,000.00 · Income €350.00”.",
+            "“Starts with €200.00 (from 1 Sep) · Ends with €259.50”: Money now at the start "
+            "and the end of the month.",
+            "One line per regular income, such as “Salary: expected since 20 Sep”; after "
+            "you confirm it reads “received”, or “skipped this month”.",
+            "<b>Categories</b> with progress, <b>Search all entries</b> and the <b>Entries</b> list.",
         ],
         [
-            "Move between months to review past spending.",
-            "Spot which categories are over or under plan.",
-            "Open an entry if you need to check details for that month.",
+            "Move between months to review the past.",
+            "See which categories are over or under their limit.",
+            "<b>Edit</b> or <b>Delete</b> an entry. After a delete the message “Deleted” offers "
+            "<b>Undo</b>, which brings the entry back.",
         ],
     ))
 
     story.append(side_by_side(
-        s, "screen-chart.png", "Chart",
+        s, "screen-chart.png", "Chart: Spending and Income",
         [
-            "Two analytics: <b>Spending</b> and <b>Income</b>.",
-            "Spending donut by expense category (tap a row to drill into subcategories).",
-            "Income donut: usual salary from Plan + extra income by category.",
-            "Note: spend budget stays fixed - extra income only raises Cash left.",
+            "The switcher <b>Chart view</b>: <b>Spending</b>, <b>Income</b>, <b>Trends</b>, "
+            "<b>Year</b>, and the month navigator.",
+            "Spending: a donut by category with the total spent, and a row per category with "
+            "its planned amount.",
+            "The note “The monthly budget stays fixed for this month. Extra income does not "
+            "raise it.”",
         ],
         [
-            "Compare which expense areas take most of the budget.",
-            "See where money came from this month (Plan salary vs extras).",
-            "Switch months with the month navigator at the top.",
+            "Tap a category row to open its subcategories. <b>All spending</b> goes back.",
+            "Income shows the income you received, by category. It raises Cash left, not the "
+            "spending budget. Months from before 3.0 may label part of their income differently.",
+            "Year shows totals for the year, and <b>Export the year</b> saves them as a CSV.",
         ],
     ))
 
-    story.append(PageBreak())
     story.append(side_by_side(
-        s, "screen-settings.png", "Settings",
+        s, "screen-trends.png", "Chart: Trends",
         [
-            "Jump links: Plan · Income · Subscriptions · Categories · Backup · Rights.",
-            "Plan block for your name, monthly spend budget, and usual income.",
-            "Subscriptions: budget share + recurring list (day of month).",
-            "Categories editor (Savings is protected) and Backup &amp; export.",
+            "A bar for each of the last 12 months, a solid line for the average and a dashed "
+            "line for the budget.",
+            "The selected month: spent, budget and income.",
+            "<b>Show as table</b> and the note “Tap a bar for details”.",
         ],
         [
-            "Edit Plan (name, budget / usual income - 0 allowed).",
-            "Manage extra-income categories and subscription reminders.",
-            "Tune category limits (% or €); Savings stays fixed and ≤ 100% of budget.",
-            "Export / import JSON backup, or export a month CSV.",
+            "Tap a bar to see that month’s numbers. <b>Show as table</b> gives the same as a table.",
+            "The average counts only months that have spending.",
+            "When it is shown, the card <b>Changes vs last month</b> lists the categories "
+            "that moved most; <b>Show all</b> opens the full list.",
+        ],
+    ))
+
+    story.append(side_by_side(
+        s, "screen-settings.png", "Settings: groups",
+        [
+            "One page of groups; each row shows a one-line summary, such as “Money now "
+            "€259.50”.",
+            "In order: <b>Money</b>, <b>Income</b>, <b>Monthly budget</b>, <b>Backup</b>, "
+            "<b>Categories and limits</b>, <b>Subscriptions</b>, <b>Quick add</b>, "
+            "<b>Goals</b>, <b>Bank import (advanced)</b>, <b>Profile and about</b> (scroll "
+            "down to reach the last ones).",
+        ],
+        [
+            "Tap a group to open it. One group is open at a time.",
+            "Your name: <b>Profile and about</b> → <b>Save name</b>.",
+            "The budget: <b>Monthly budget</b> → <b>Save budget</b>. A budget of 0 asks "
+            "“Are you sure?” first.",
+            "Savings and category limits: <b>Categories and limits</b>.",
+            "Subscriptions are recurring payments with a day of the month.",
+        ],
+        max_width_mm=58, max_height_mm=118,
+    ))
+
+    story.append(side_by_side(
+        s, "screen-import.png", "Import a bank statement",
+        [
+            "The import screen after a file was read: <b>Bank reference (optional)</b>, "
+            "<b>Decimal separator</b> and the date format question.",
+            "“3 rows are ready to import.”",
+            "<b>Check what was read</b>: sample rows, <b>Money in</b>, <b>Money out</b> and "
+            "“Rows read: 3, skipped: 0”.",
+        ],
+        [
+            "Settings → <b>Bank import (advanced)</b> → <b>Import a bank statement</b>. The "
+            "steps are Load, Columns, Duplicates, Categorise and Confirm.",
+            "<b>Choose file</b> (CSV, Excel .xlsx, camt.053 or FiDAViSTA XML) or <b>Paste "
+            "text</b>. The file is read on this device and nothing is uploaded.",
+            "Look at <b>Check what was read</b> before you go on. If almost every row is money "
+            "in, the app warns you: tick <b>Reverse money in and out</b> on the Columns step "
+            "(some banks show spending as positive numbers).",
+            "Duplicates: <b>Exact</b>, <b>Possible duplicate: added by you</b> and "
+            "<b>Possible duplicate: similar amount</b>. Possible duplicates are not imported "
+            "unless you tick <b>Import anyway</b>.",
+            "For each row <b>What is it?</b> offers Expense, Refund, Income, Transfer or Skip. "
+            "Near a payday the app asks “Is this the Salary?” and Yes ties the row to it. "
+            "Then tap <b>Import</b>; <b>Undo this import</b> reverses it.",
+        ],
+    ))
+
+    story.append(side_by_side(
+        s, "screen-settings-backup.png", "Backup and restore",
+        [
+            "Settings, group <b>Backup</b>: <b>Export backup (JSON)</b> and <b>Import backup</b>.",
+            "<b>Month CSV</b> with <b>Europe CSV</b> and <b>Standard CSV</b>.",
+            "<b>Data from before the last update</b>: <b>Download pre-update copy</b>, "
+            "<b>Restore pre-update copy</b> and, below, <b>Delete this copy</b>.",
+        ],
+        [
+            "Export a backup now and then and keep the file safe. Home reminds you (“Last "
+            "backup 4 days ago”, or “No backup yet. If this phone is lost, your data is "
+            "gone.”) with <b>Export backup</b> and <b>Later</b>.",
+            "<b>Import backup</b>: after you choose a file, a preview shows “This file: N "
+            "expenses, N incomes, N subscriptions” and the dates it covers. Then choose "
+            "<b>Settings only</b> or <b>Replace everything</b> (it cannot be undone), or "
+            "Cancel.",
+            "Safety copy: <b>Replace everything</b> first downloads your current data as "
+            "my-expenses-before-replace-(date).json, then replaces it.",
+            "Pre-update copy: <b>Restore pre-update copy</b> asks you to confirm (“Entries "
+            "added since the update are removed. Your current data is downloaded first.”), "
+            "then tap <b>Restore</b>.",
         ],
         max_width_mm=58, max_height_mm=118,
     ))
