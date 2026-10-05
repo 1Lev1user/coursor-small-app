@@ -32,5 +32,8 @@ The orchestrator then does Level 4 (process/review.md), merges, sets Status Done
 - After a usage-limit stop, never resume a worker by message: its worktree may be gone and it falls back to the orchestrator's checkout. Start a fresh worker run instead (2026-10-04: a resumed C-032 worker committed in the planning checkout and its code reached main unreviewed; reverted).
 - Planning commits are pushed only as `git push <remote> main-work:main` after checking that the current branch is `main-work`, never `HEAD:main`.
 - Cards that share allowed_paths never run at the same time.
+- Tests that read source files as text normalise line endings first (`.replace(/
+/g, '
+')`); after each merge the orchestrator runs `npm test` in the planning checkout, which has CRLF files on Windows (2026-10-05: a C-077 test passed in CI and in the worker's LF worktree but failed on the owner's machine; fixed by C-086).
 - Live or irreversible steps (publishing, releases) wait for the owner's explicit go, even when the card is otherwise done.
 - Manual acceptance items are listed for the owner in the pull request; they are never marked done by an agent. They gate the release (publishing to v1), not the merge into main, because main is not live.
