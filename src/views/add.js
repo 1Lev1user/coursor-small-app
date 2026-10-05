@@ -34,6 +34,7 @@ import { renderGoalCard } from './goalCard.js';
 import { renderPaydayReminders } from './paydayReminder.js';
 import { renderMoneyBlock } from './homeMoney.js';
 import { moneyNow } from '../balance.js';
+import { rollNumber } from '../motion.js';
 import { entryAmountText } from './entryDisplay.js';
 import {
     amountErrorText,
@@ -675,6 +676,9 @@ export function homeBudgetText(model) {
         : `Month budget: ${amount} ${model.label} · ${model.sub}`;
 }
 
+/** Money now as last shown on Home; null until the first Home render since app start. */
+let lastMoneyNowCents = null;
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const monthKey = currentMonthKey();
@@ -714,9 +718,24 @@ function renderHome(root, ctx) {
     actions.append(expenseBtn, incomeBtn);
 
     let figureArea = [figure];
-    if (moneyNow(ctx.data) !== null) {
+    const moneyCents = moneyNow(ctx.data);
+    if (moneyCents !== null) {
         const budgetClass = over ? 'muted home-budget is-over' : 'muted home-budget';
-        figureArea = [renderMoneyBlock(ctx), element('p', budgetClass, homeBudgetText(figureModel))];
+        const from = lastMoneyNowCents;
+        lastMoneyNowCents = moneyCents;
+        const rolls = from !== null && from !== moneyCents;
+        const moneyBlock = renderMoneyBlock(ctx, rolls ? from : null);
+        if (rolls) {
+            const value = moneyBlock.querySelector('.home-figure-value');
+            rollNumber({
+                from,
+                to: moneyCents,
+                onFrame: (cents) => {
+                    value.textContent = formatEuro(cents);
+                },
+            });
+        }
+        figureArea = [moneyBlock, element('p', budgetClass, homeBudgetText(figureModel))];
     }
     layout.append(element('h2', 'home-title', heading), ...figureArea);
 

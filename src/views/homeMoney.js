@@ -170,10 +170,19 @@ function renderCheckSheet(ctx) {
     return form;
 }
 
-/** Money now as a button, the check sheet when open, then the per-day and Savings lines. */
-export function renderMoneyBlock(ctx) {
+/**
+ * Money now as a button, the check sheet when open, then the per-day and Savings lines.
+ * `shownCents` is the amount the value starts on when a roll to Money now follows.
+ */
+export function renderMoneyBlock(ctx, shownCents = null) {
     const moneyCents = moneyNow(ctx.data, new Date());
     const valueText = formatEuro(moneyCents);
+    const value = element(
+        'span',
+        valueText.length > 9 ? 'home-figure-value is-long' : 'home-figure-value',
+        shownCents === null ? valueText : formatEuro(shownCents),
+    );
+    value.setAttribute('aria-hidden', 'true');
     const block = element('div', 'stack home-money');
 
     const figure = element('button', moneyCents < 0 ? 'home-figure home-money-figure is-over' : 'home-figure home-money-figure');
@@ -182,7 +191,8 @@ export function renderMoneyBlock(ctx) {
     figure.setAttribute('aria-expanded', String(checking));
     figure.append(
         element('span', 'home-figure-label', 'Money now'),
-        element('span', valueText.length > 9 ? 'home-figure-value is-long' : 'home-figure-value', valueText),
+        value,
+        element('span', 'visually-hidden', valueText),
         element('span', 'home-figure-sub', 'Tap to check against your bank'),
     );
     figure.addEventListener('click', () => {
