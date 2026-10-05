@@ -74,6 +74,7 @@ const CORE_ASSETS = [
     './src/views/settings/income-categories.js',
     './src/views/settings/incomeSources.js',
     './src/views/settings/subscriptions.js',
+    './src/views/settings/templates.js',
     './src/views/settings/categories.js',
     './src/views/settings/backup.js',
     './src/views/settings/rights.js',
