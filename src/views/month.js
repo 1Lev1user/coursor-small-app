@@ -27,6 +27,13 @@ import {
 import { entryAmountText, entryTags } from './entryDisplay.js';
 import { renderSearchPanel } from './searchPanel.js';
 import { signedEuro } from './homeMoney.js';
+import {
+    COLLAPSE_MS,
+    EASE_OUT,
+    afterMotion,
+    collapseKeyframes,
+    prefersReducedMotion,
+} from '../motion.js';
 
 /** @type {{ mode: null | 'edit' | 'confirm-delete', type: null | 'expense' | 'income', id: null | string, draft: object | null, saveError: string, focusError: boolean }} */
 const entryUi = {
@@ -861,6 +868,28 @@ function renderIncomeEditor(ctx, income) {
     return form;
 }
 
+let collapsing = false;
+
+/** Folds the row away; null when it must go at once (Reduce Motion, or no Web Animations). */
+function collapseEntry(item) {
+    if (prefersReducedMotion() || typeof item?.animate !== 'function') {
+        return null;
+    }
+    const inner = element('div', '');
+    inner.style.minHeight = '0';
+    inner.style.overflow = 'hidden';
+    inner.append(...item.childNodes);
+    item.append(inner);
+    item.style.display = 'grid';
+    item.style.gridTemplateRows = '1fr';
+    const animation = item.animate(collapseKeyframes(), {
+        duration: COLLAPSE_MS,
+        easing: EASE_OUT,
+        fill: 'forwards',
+    });
+    return afterMotion(animation, COLLAPSE_MS + 150);
+}
+
 function renderDeleteConfirm(ctx, type, entry) {
     const box = element('div', 'confirm-box');
     box.setAttribute('role', 'group');
@@ -885,8 +914,20 @@ function renderDeleteConfirm(ctx, type, entry) {
             closeEntryUi();
             ctx.render();
         }),
-        actionButton('btn btn-danger', 'Delete', () => {
-            confirmDeleteEntry(ctx, type, entry);
+        actionButton('btn btn-danger', 'Delete', (event) => {
+            if (collapsing) {
+                return;
+            }
+            const folded = collapseEntry(event.currentTarget.closest('.entry-item'));
+            if (folded === null) {
+                confirmDeleteEntry(ctx, type, entry);
+                return;
+            }
+            collapsing = true;
+            folded.then(() => {
+                collapsing = false;
+                confirmDeleteEntry(ctx, type, entry);
+            });
         }),
     );
 
@@ -898,9 +939,14 @@ function renderDeleteConfirm(ctx, type, entry) {
     return box;
 }
 
-function renderEntry(ctx, item) {
+function renderEntry(ctx, item, highlightId) {
     const { entry, type } = item;
     const wrap = element('div', 'entry-item');
+    if (entry.id === highlightId) {
+        // is-settled starts the fade to transparent; it needs one painted frame with is-new alone.
+        wrap.classList.add('is-new');
+        requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('is-settled')));
+    }
     const row = element('div', 'entry-row');
     const description = element('div', 'entry-description');
     const label = type === 'expense'
@@ -966,6 +1012,7 @@ function renderEntry(ctx, item) {
 }
 
 function renderEntries(root, ctx, entries, label) {
+    const highlightId = ctx.takeHighlightId?.() ?? null;
     if (entries.length === 0) {
         const empty = element('section', 'card empty-state');
         const message = element('p', '', `Nothing recorded in ${label}.`);
@@ -981,7 +1028,7 @@ function renderEntries(root, ctx, entries, label) {
     card.append(element('h2', 'section-title', 'Entries'));
     const list = element('div', 'entry-list');
     for (const item of entries) {
-        list.append(renderEntry(ctx, item));
+        list.append(renderEntry(ctx, item, highlightId));
     }
     card.append(list);
     root.append(card);

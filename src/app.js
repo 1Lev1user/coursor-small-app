@@ -18,9 +18,11 @@ import { render as renderSetup } from './views/setup.js';
 import { render as renderMoneySetup } from './views/moneySetup.js';
 import { render as renderImport } from './views/import.js';
 import { selectOnFocus } from './inputFocus.js';
+import { entryIdSet, findNewEntryId } from './motion.js';
 
 const TOAST_MS = 2000;
 const UNDO_TOAST_MS = 8000;
+const TOAST_HIDE_FALLBACK_MS = 300;
 
 const views = {
     add: { render: renderAdd },
@@ -45,6 +47,12 @@ const tabbarElement = document.getElementById('tabbar');
 const tabButtons = [...tabbarElement.querySelectorAll('[data-tab]')];
 
 let toastTimer = null;
+let toastHideTimer = null;
+let toastSequence = 0;
+
+// Entry ids as of the last successful save; the one new id after a save is highlighted in Month.
+let knownEntryIds = entryIdSet(app.data);
+let highlightId = null;
 
 const duePrompt = {
     subscriptionId: null,
@@ -56,20 +64,34 @@ const duePrompt = {
 // "subscriptionId:monthKey" of reminders the owner chose Later for; cleared by a reload.
 const postponedDue = new Set();
 
-function toast(message, action) {
-    let node = document.getElementById('toast');
+/** Runs `then` once the toast's fade-out ends (or after a fallback); a newer call supersedes it. */
+function afterToastHidden(node, then) {
+    const sequence = ++toastSequence;
+    clearTimeout(toastHideTimer);
+    const finish = () => {
+        node.removeEventListener('transitionend', onEnd);
+        if (sequence !== toastSequence) {
+            return;
+        }
+        clearTimeout(toastHideTimer);
+        then();
+    };
+    const onEnd = (event) => {
+        if (event.target === node && event.propertyName === 'opacity') {
+            finish();
+        }
+    };
+    node.addEventListener('transitionend', onEnd);
+    toastHideTimer = setTimeout(finish, TOAST_HIDE_FALLBACK_MS);
+}
 
-    if (node === null) {
-        node = document.createElement('div');
-        node.id = 'toast';
-        node.className = 'toast';
-        node.setAttribute('role', 'status');
-        node.setAttribute('aria-live', 'polite');
-        document.body.append(node);
-    }
+function hideToast(node) {
+    node.classList.remove('is-shown');
+    afterToastHidden(node, () => node.remove());
+}
 
+function fillToast(node, message, action) {
     node.textContent = message;
-    clearTimeout(toastTimer);
     if (action !== undefined) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -77,28 +99,60 @@ function toast(message, action) {
         button.textContent = action.label;
         button.addEventListener('click', () => {
             clearTimeout(toastTimer);
-            node.remove();
+            hideToast(node);
             action.onClick();
         });
         node.append(button);
     }
     toastTimer = setTimeout(
-        () => node.remove(),
+        () => hideToast(node),
         action === undefined ? TOAST_MS : UNDO_TOAST_MS,
     );
 }
 
+function toast(message, action) {
+    let node = document.getElementById('toast');
+    clearTimeout(toastTimer);
+
+    if (node !== null) {
+        // Hide the toast on screen, then show the new one so the enter motion plays again.
+        node.classList.remove('is-shown');
+        afterToastHidden(node, () => {
+            fillToast(node, message, action);
+            node.classList.add('is-shown');
+        });
+        return;
+    }
+
+    node = document.createElement('div');
+    node.id = 'toast';
+    node.className = 'toast';
+    node.setAttribute('role', 'status');
+    node.setAttribute('aria-live', 'polite');
+    document.body.append(node);
+    fillToast(node, message, action);
+    void node.offsetWidth; // commit the hidden state so the enter transition runs
+    node.classList.add('is-shown');
+}
+
 function save() {
     const saved = saveToStorage(app.data);
-    if (!saved) {
-        if (storedIsNewer()) {
-            app.storageIssue = { status: 'newer' };
-        } else {
-            toast('Could not save to this device');
-        }
+    if (saved) {
+        highlightId = findNewEntryId(knownEntryIds, app.data) ?? highlightId;
+        knownEntryIds = entryIdSet(app.data);
+    } else if (storedIsNewer()) {
+        app.storageIssue = { status: 'newer' };
+    } else {
+        toast('Could not save to this device');
     }
     render();
     return saved;
+}
+
+function takeHighlightId() {
+    const id = highlightId;
+    highlightId = null;
+    return id;
 }
 
 function setMonthKey(key) {
@@ -136,6 +190,7 @@ function context() {
         setMonthKey,
         goTo,
         toast,
+        takeHighlightId,
     };
 }
 
