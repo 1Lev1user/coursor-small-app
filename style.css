@@ -1273,6 +1273,10 @@ textarea:focus::placeholder {
     flex: 1 1 12rem;
 }
 
+.inline-form.stack .field {
+    flex: 0 0 auto;
+}
+
 .subcategory-list {
     display: flex;
     flex-direction: column;
