@@ -27,3 +27,39 @@ export function rollNumber({ from, to, duration = 600, onFrame, raf = requestAni
     };
     raf(step);
 }
+
+/** Row collapse: keep COLLAPSE_MS and EASE_OUT equal to --dur-collapse and --ease in style.css. */
+export const COLLAPSE_MS = 200;
+export const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+/** Resolves when `animation` finishes or is cancelled, or after `fallbackMs` if neither event arrives. */
+export function afterMotion(animation, fallbackMs) {
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            animation.removeEventListener('finish', done);
+            animation.removeEventListener('cancel', done);
+            resolve();
+        };
+        const timer = setTimeout(done, fallbackMs);
+        animation.addEventListener('finish', done);
+        animation.addEventListener('cancel', done);
+    });
+}
+
+export const entryIdSet = (data) =>
+    new Set([...data.expenses, ...data.incomes].map(({ id }) => id));
+
+/** The one entry id in `data` that is not in `previousIds`; null for none, or for several (an import). */
+export function findNewEntryId(previousIds, data) {
+    const added = [...entryIdSet(data)].filter((id) => !previousIds.has(id));
+    return added.length === 1 ? added[0] : null;
+}
+
+/** Target keyframe of a removed row; the start is the row's own style. */
+export const collapseKeyframes = () => [{
+    gridTemplateRows: '0fr',
+    opacity: 0,
+    paddingBlock: '0px',
+    borderTopWidth: '0px',
+}];
