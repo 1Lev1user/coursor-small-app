@@ -32,7 +32,7 @@
 | Design | C-070 to C-077 (8) | Hints vanish on focus, design bugs fixed, tinted-block buttons, palette fixes, Golos Text + Literata, main and quiet motion |
 | Guide and release | C-013, C-014, C-026 (3) | Screenshots and Word guide of 3.0, release 3.0.0 on v1 |
 
-58 cards (on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, C-034 into C-034, C-081 and C-082, and C-039 into C-039 and C-083). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
+59 cards (C-084 added on 2026-10-05 from the C-046 review; on 2026-10-04 C-041 was split into C-041 and C-078, C-035 into C-035, C-079 and C-080, C-034 into C-034, C-081 and C-082, and C-039 into C-039 and C-083). C-006 (publish workflow) stays postponed; C-010 (FiDAViSTA check) waits for the owner's anonymised file and is outside 3.0 unless the file comes.
 
 ## 2. How every card runs (the task procedure)
 
@@ -105,6 +105,7 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W7 | C-080 | Bank import asks whether a money-in row is a regular income | Money | M | P1 | medium | C-079 | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-039 | Home shows Money now, the per-day amount and the month budget; check against the bank | Money | M | P1 | medium | C-034, C-036, C-037, C-038, C-081, C-082 | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-083 | Settings > Money and the Month lines: what the month started and ended with, and each regular income | Money | M | P1 | medium | C-039, C-041, C-078 | sonnet | standard (sonnet) | sonnet | - |
+| W13 | C-084 | Settings edit forms: fields sit at their natural height | Design | S | P2 | low | C-046 | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-056 | Read money direction from more words and from a D/C mark without a space | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W8 | C-063 | Excel import: read the sheet that holds the transactions | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W9 | C-042 | Categories and limits: collapsed rows, one category open at a time | Settings/UX | M | P1 | low | C-041 | sonnet | standard (sonnet) | sonnet | - |
@@ -119,7 +120,7 @@ Agent tiers: planner Sonnet (Opus for risk high). Worker light = Haiku, only for
 | W12 | C-062 | Detect the delimiter when the file starts with a long preamble | Bank | S | P1 | medium | - | sonnet | standard (sonnet) | sonnet | - |
 | W12 | C-050 | Screens open at the top; Add forms start in the first field and close on Escape | Settings/UX | M | P2 | low | C-048 | sonnet | standard (sonnet) | sonnet | - |
 | W12 | C-046 | Settings > Quick add: rename, re-price and delete templates | Settings/UX | M | P2 | low | C-041 | sonnet | standard (sonnet) | sonnet | - |
-| W13 | C-075 | Motion: after saving, Money now rolls to the new amount and the budget bar grows | Design | M | P2 | low | C-039, C-074 | sonnet | standard (sonnet) | sonnet | - |
+| W13 | C-075 | Motion: after saving, Money now rolls to the new amount | Design | M | P2 | low | C-039, C-074 | sonnet | standard (sonnet) | sonnet | - |
 | W13 | C-049 | Search shows the total of the results | Settings/UX | S | P2 | low | - | sonnet | standard (sonnet) | sonnet | - |
 | W13 | C-052 | Show the comparison with last month only after the month has ended | Settings/UX | S | P2 | low | - | sonnet | standard (sonnet) | sonnet | - |
 | W14 | C-076 | Quiet motion: toast slides in and out, new row highlight, removed row collapses | Design | M | P2 | low | C-075, C-050 | sonnet | standard (sonnet) | sonnet | - |
