@@ -55,6 +55,7 @@ const draft = {
     originalAmount: '',
     saveTemplate: false,
     templateName: '',
+    refund: false,
 };
 
 const TEMPLATE_NAME_MAX = 40;
@@ -87,7 +88,7 @@ let addingIncomeCategory = false;
 let addIncomeCategoryName = '';
 let addIncomeCategoryError = '';
 
-/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[] }} */
+/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[], refund?: boolean }} */
 let lastAdded = null;
 
 export function openAddPanel(next = 'home') {
@@ -121,7 +122,10 @@ export function addScreenTitle() {
         return 'Add income';
     }
     if (panel === 'added') {
-        return lastAdded?.kind === 'income' ? 'Income added' : 'Expense added';
+        if (lastAdded?.kind === 'income') {
+            return 'Income added';
+        }
+        return lastAdded?.refund === true ? 'Refund added' : 'Expense added';
     }
     return 'Home';
 }
@@ -267,7 +271,9 @@ function renderAddedConfirm(root, ctx) {
         element(
             'h2',
             'section-title',
-            lastAdded.kind === 'income' ? 'Income added' : 'Expense added',
+            lastAdded.kind === 'income'
+                ? 'Income added'
+                : (lastAdded.refund === true ? 'Refund added' : 'Expense added'),
         ),
         element('p', 'big-number', formatEuro(lastAdded.amountCents)),
         element('p', 'muted', lastAdded.label),
@@ -1092,6 +1098,33 @@ export function render(root, ctx) {
     renderExpenseForm(root, ctx);
 }
 
+export function newExpenseRecord({
+    categoryId,
+    subcategoryId,
+    amountCents,
+    note,
+    date,
+    currency,
+    originalAmountCents,
+    refund,
+}) {
+    return {
+        id: createId('exp'),
+        categoryId,
+        subcategoryId,
+        amountCents,
+        note,
+        date,
+        currency,
+        originalAmountCents,
+        refund: refund === true,
+        importId: '',
+        bankRef: '',
+        fingerprint: '',
+        goalId: '',
+    };
+}
+
 function renderExpenseForm(root, ctx) {
     const categories = selectableCategories(ctx.data);
 
@@ -1167,7 +1200,17 @@ function renderExpenseForm(root, ctx) {
     templateNameInput.maxLength = TEMPLATE_NAME_MAX;
     templateNameInput.value = draft.templateName;
     const templateNameField = buildField('add-template-name', 'Template name', templateNameInput);
-    templateNameField.wrapper.hidden = !draft.saveTemplate;
+    templateNameField.wrapper.hidden = draft.refund || !draft.saveTemplate;
+    templateCheckLabel.hidden = draft.refund;
+
+    const refundCheck = document.createElement('input');
+    refundCheck.type = 'checkbox';
+    refundCheck.id = 'add-refund';
+    refundCheck.checked = draft.refund;
+    const refundLabel = document.createElement('label');
+    refundLabel.className = 'check-row';
+    refundLabel.htmlFor = 'add-refund';
+    refundLabel.append(refundCheck, element('span', '', 'Refund (money back from a shop)'));
 
     const notePlus = document.createElement('button');
     notePlus.type = 'button';
@@ -1287,12 +1330,18 @@ function renderExpenseForm(root, ctx) {
 
     templateCheck.addEventListener('change', () => {
         draft.saveTemplate = templateCheck.checked;
-        templateNameField.wrapper.hidden = !templateCheck.checked;
+        templateNameField.wrapper.hidden = refundCheck.checked || !templateCheck.checked;
         clearError(templateNameField);
         if (templateCheck.checked && templateNameInput.value.trim() === '') {
             templateNameInput.value = defaultTemplateName();
             draft.templateName = templateNameInput.value;
         }
+    });
+    refundCheck.addEventListener('change', () => {
+        draft.refund = refundCheck.checked;
+        templateCheckLabel.hidden = refundCheck.checked;
+        templateNameField.wrapper.hidden = refundCheck.checked || !templateCheck.checked;
+        clearError(templateNameField);
     });
     templateNameInput.addEventListener('input', () => {
         draft.templateName = templateNameInput.value;
@@ -1496,7 +1545,7 @@ function renderExpenseForm(root, ctx) {
         const amounts = currency.read();
         const { amountCents } = amounts;
         const date = dateInput.value;
-        const wantsTemplate = templateCheck.checked;
+        const wantsTemplate = templateCheck.checked && !refundCheck.checked;
         const templateName = wantsTemplate
             ? (templateNameInput.value.trim() || defaultTemplateName())
             : '';
@@ -1551,8 +1600,7 @@ function renderExpenseForm(root, ctx) {
 
         const monthKey = monthKeyOf(date);
         const planWasAlreadyFrozen = Object.hasOwn(ctx.data.monthPlans, monthKey);
-        const expense = {
-            id: createId('exp'),
+        const expense = newExpenseRecord({
             categoryId,
             subcategoryId,
             amountCents,
@@ -1560,12 +1608,8 @@ function renderExpenseForm(root, ctx) {
             date,
             currency: amounts.currency,
             originalAmountCents: amounts.originalAmountCents,
-            refund: false,
-            importId: '',
-            bankRef: '',
-            fingerprint: '',
-            goalId: '',
-        };
+            refund: refundCheck.checked,
+        });
 
         ctx.data.expenses.push(expense);
         freezeMonthPlan(ctx.data, monthKey);
@@ -1589,6 +1633,7 @@ function renderExpenseForm(root, ctx) {
         lastAdded = {
             kind: 'expense',
             amountCents,
+            refund: expense.refund,
             label: expenseEntryLabel(ctx.data, categoryId, subcategoryId),
             details: details.filter((line) => line !== ''),
         };
@@ -1622,6 +1667,7 @@ function renderExpenseForm(root, ctx) {
         draft.originalAmount = '';
         draft.saveTemplate = false;
         draft.templateName = '';
+        draft.refund = false;
     });
 
     form.append(
@@ -1631,6 +1677,7 @@ function renderExpenseForm(root, ctx) {
         currency.currencyField.wrapper,
         currency.originalField.wrapper,
         amountField.wrapper,
+        refundLabel,
         noteField.wrapper,
         notePanelHost,
         dateField.wrapper,
