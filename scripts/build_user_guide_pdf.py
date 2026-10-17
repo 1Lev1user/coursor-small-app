@@ -503,8 +503,14 @@ def build():
         [
             "Settings → <b>Bank import (advanced)</b> → <b>Import a bank statement</b>. The "
             "steps are Load, Columns, Duplicates, Categorise and Confirm.",
-            "<b>Choose file</b> (CSV, Excel .xlsx, camt.053 or FiDAViSTA XML) or <b>Paste "
+            "<b>Choose file</b> (CSV, Excel .xls or .xlsx, camt.053 or FiDAViSTA XML) or <b>Paste "
             "text</b>. The file is read on this device and nothing is uploaded.",
+            "Card payments are named after the shop and, when the bank text gives the card "
+            "date, dated on the day you paid (the bank books them a few days later). "
+            "Personal codes and account numbers in the bank's transfer text are left out of "
+            "the entry text. Until you have a rule for a shop, the app suggests a category "
+            "for money you spent from the shop type the card network reports (for example "
+            "Groceries for a supermarket); you can change it.",
             "Look at <b>Check what was read</b> before you go on. If almost every row is money "
             "in, the app warns you: tick <b>Reverse money in and out</b> on the Columns step "
             "(some banks show spending as positive numbers).",

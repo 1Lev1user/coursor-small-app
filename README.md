@@ -37,12 +37,13 @@ Change your name under Settings > Profile and about, and the budget under Settin
 
 Settings > Bank import (advanced) > Import a bank statement. The file is read on this device and nothing is uploaded.
 
-- Formats: CSV, text pasted from internet banking, Excel .xlsx, ISO 20022 camt.052/053/054 XML and FiDAViSTA XML (Latvian banks). Old .xls files must be saved as .xlsx or CSV first.
+- Formats: CSV, text pasted from internet banking, Excel .xls and .xlsx, ISO 20022 camt.052/053/054 XML and FiDAViSTA XML (Latvian banks).
 - CSV, Excel and pasted text: the app guesses the columns and shows the first rows. Correct them once; the layout is remembered under the bank name.
 - Duplicates: rows already in the app are found by the bank reference, by an exact match of the same file, or by the same amount on the same or a nearby date. Nothing is merged or deleted without your choice.
 - Before importing, "Check what was read" shows the totals money in and money out. If your bank shows spending as positive numbers, tick "Reverse money in and out".
 - Possible duplicates are not imported unless you tick "Import anyway".
 - Each row can be an expense, a refund, income, a transfer between your own accounts (not counted) or skipped. "Remember" turns the choice into a rule, so the next import only asks about new shops. Rules are listed in the same Settings group.
+- Bank text: card payments are named after the shop and, when the bank text gives the card date, dated on the day you paid (the bank books them a few days later). Personal codes and account numbers in the bank's transfer text are left out of the entry text. Until you have a rule for a shop, the app suggests a category for money you spent from the shop type the card network reports (for example Groceries for a supermarket); you can change it.
 - A row near a payday or a subscription may ask "Is this the ...?". Yes ties the row to that regular income or subscription.
 - For a past month that has no plan yet, the app asks once: use the current budget, or record only the actual spending.
 - Every import can be undone from Settings > Bank import (advanced). Undo removes exactly that import's entries and keeps your rules and manual entries.
