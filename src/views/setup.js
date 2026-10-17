@@ -10,7 +10,6 @@ const draft = {
     budget: '',
     savingsAmount: '',
     savingsUnit: 'euro',
-    income: '',
 };
 
 function element(tagName, className, text) {
@@ -135,7 +134,7 @@ function buildSavingsField(ctx) {
         const budgetCents = draftBudgetCents();
         const nextUnit = draft.savingsUnit === 'euro' ? 'percent' : 'euro';
         if (nextUnit === 'euro' && draft.budget.trim() !== '' && parseAmount(draft.budget, { allowZero: true }) === null) {
-            setError(field, 'Enter a valid monthly spend budget first.');
+            setError(field, 'Enter a valid monthly budget first.');
             return;
         }
 
@@ -166,16 +165,14 @@ function savingsCategory(data) {
     return data.categories.find(({ id }) => id === 'savings');
 }
 
-function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
+function submitSetup(ctx, nameField, budgetField, savingsField) {
     clearError(nameField);
     clearError(budgetField);
     clearError(savingsField);
-    clearError(incomeField);
 
     draft.userName = nameField.control.value;
     draft.budget = budgetField.control.value;
     draft.savingsAmount = savingsField.control.value;
-    draft.income = incomeField.control.value;
 
     const userName = draft.userName.trim();
     if (userName === '') {
@@ -205,7 +202,7 @@ function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
             return;
         }
         if (cents > budgetCents) {
-            setError(savingsField, 'Savings cannot exceed the monthly spend budget.');
+            setError(savingsField, 'Savings cannot exceed the monthly budget.');
             savingsField.control.focus();
             return;
         }
@@ -225,13 +222,6 @@ function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
         savingsLimitCents = euroCentsFromPercent(savingsPercent, budgetCents);
     }
 
-    const incomeCents = parseAmount(draft.income, { allowZero: true });
-    if (incomeCents === null) {
-        setError(incomeField, 'Enter a valid amount of zero or more.');
-        incomeField.control.focus();
-        return;
-    }
-
     const savings = savingsCategory(ctx.data);
     if (savings === undefined) {
         setError(savingsField, 'Savings category is missing.');
@@ -241,7 +231,6 @@ function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
 
     ctx.data.settings.userName = userName;
     ctx.data.settings.monthlyBudgetCents = budgetCents;
-    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     savings.pinned = true;
     savings.limitMode = limitMode;
     savings.percent = savingsPercent;
@@ -253,7 +242,6 @@ function submitSetup(ctx, nameField, budgetField, savingsField, incomeField) {
     draft.budget = '';
     draft.savingsAmount = '';
     draft.savingsUnit = 'euro';
-    draft.income = '';
 
     if (ctx.save() !== false) {
         ctx.goTo('add');
@@ -268,9 +256,6 @@ export function render(root, ctx) {
     }
     if (draft.budget === '' && Number.isFinite(settings.monthlyBudgetCents)) {
         draft.budget = formatPlain(settings.monthlyBudgetCents);
-    }
-    if (draft.income === '' && Number.isFinite(settings.usualMonthlyIncomeCents)) {
-        draft.income = formatPlain(settings.usualMonthlyIncomeCents);
     }
     if (draft.savingsAmount === '') {
         const savings = savingsCategory(ctx.data);
@@ -291,8 +276,9 @@ export function render(root, ctx) {
         element(
             'p',
             'muted',
-            'Tell us your name and set your monthly plan once. You can change these later in Settings.',
+            'Tell us your name and set your monthly budget once. You can change these later in Settings.',
         ),
+        element('p', 'muted', 'Next you will enter the money on your card and your paydays.'),
     );
 
     const form = element('form', 'card stack setup-form');
@@ -318,7 +304,7 @@ export function render(root, ctx) {
     budgetInput.placeholder = '1000';
     budgetInput.required = true;
     budgetInput.value = draft.budget;
-    const budgetField = buildField('setup-budget', 'Monthly spend budget (EUR)', budgetInput);
+    const budgetField = buildField('setup-budget', 'Monthly budget (EUR)', budgetInput);
 
     const savingsField = buildSavingsField(ctx);
 
@@ -332,25 +318,12 @@ export function render(root, ctx) {
         );
     });
 
-    const incomeInput = document.createElement('input');
-    incomeInput.type = 'text';
-    incomeInput.inputMode = 'decimal';
-    incomeInput.autocomplete = 'off';
-    incomeInput.placeholder = '2000';
-    incomeInput.required = true;
-    incomeInput.value = draft.income;
-    const incomeField = buildField('setup-income', 'Usual monthly income (EUR)', incomeInput);
-    incomeInput.addEventListener('input', () => {
-        draft.income = incomeInput.value;
-        clearError(incomeField);
-    });
-
     const submit = element('button', 'btn btn-primary', 'Continue');
     submit.type = 'submit';
 
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        submitSetup(ctx, nameField, budgetField, savingsField, incomeField);
+        submitSetup(ctx, nameField, budgetField, savingsField);
     });
 
     form.append(
@@ -358,12 +331,6 @@ export function render(root, ctx) {
         budgetField.wrapper,
         savingsField.wrapper,
         element('p', 'muted', 'Example: 10% of a €1000 budget pins €100 to Savings.'),
-        incomeField.wrapper,
-        element(
-            'p',
-            'muted',
-            'Usual monthly income is counted automatically each month. Later you only add extra income from Home, not this salary again.',
-        ),
         submit,
     );
     layout.append(form);

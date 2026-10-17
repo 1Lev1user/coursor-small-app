@@ -3,7 +3,7 @@
  * VERSION must match package.json; a test checks it. Changing it renames
  * the cache, which makes installed apps fetch the new files.
  */
-const VERSION = '2.0.0';
+const VERSION = '3.0.0';
 const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
@@ -16,15 +16,16 @@ const CORE_ASSETS = [
     './icons/icon-192-maskable.png',
     './icons/icon-512-maskable.png',
     './icons/apple-touch-icon.png',
-    './fonts/onest-latin-wght-normal.woff2',
-    './fonts/onest-latin-ext-wght-normal.woff2',
-    './fonts/onest-cyrillic-wght-normal.woff2',
-    './fonts/onest-cyrillic-ext-wght-normal.woff2',
-    './fonts/unbounded-latin-wght-normal.woff2',
-    './fonts/unbounded-latin-ext-wght-normal.woff2',
-    './fonts/unbounded-cyrillic-wght-normal.woff2',
-    './fonts/unbounded-cyrillic-ext-wght-normal.woff2',
+    './fonts/golos-text-latin-wght-normal.woff2',
+    './fonts/golos-text-latin-ext-wght-normal.woff2',
+    './fonts/golos-text-cyrillic-wght-normal.woff2',
+    './fonts/golos-text-cyrillic-ext-wght-normal.woff2',
+    './fonts/literata-latin-wght-normal.woff2',
+    './fonts/literata-latin-ext-wght-normal.woff2',
+    './fonts/literata-cyrillic-wght-normal.woff2',
+    './fonts/literata-cyrillic-ext-wght-normal.woff2',
     './src/app.js',
+    './src/inputFocus.js',
     './src/storage.js',
     './src/months.js',
     './src/money.js',
@@ -42,12 +43,18 @@ const CORE_ASSETS = [
     './src/search.js',
     './src/goals.js',
     './src/analytics.js',
+    './src/incomeSources.js',
+    './src/balance.js',
+    './src/motion.js',
     './src/import/types.js',
     './src/import/text.js',
+    './src/import/details.js',
     './src/import/detect.js',
     './src/import/core.js',
     './src/import/xlsx.js',
+    './src/import/xls.js',
     './src/import/xml.js',
+    './src/import/mcc.js',
     './src/views/add.js',
     './src/views/month.js',
     './src/views/monthNav.js',
@@ -58,7 +65,10 @@ const CORE_ASSETS = [
     './src/views/trends.js',
     './src/views/year.js',
     './src/views/goalCard.js',
+    './src/views/paydayReminder.js',
+    './src/views/homeMoney.js',
     './src/views/settings/goals.js',
+    './src/views/settings/balance.js',
     './src/views/import.js',
     './src/views/settings/importSettings.js',
     './src/views/more.js',
@@ -66,11 +76,14 @@ const CORE_ASSETS = [
     './src/views/settings/plan.js',
     './src/views/settings/income.js',
     './src/views/settings/income-categories.js',
+    './src/views/settings/incomeSources.js',
     './src/views/settings/subscriptions.js',
+    './src/views/settings/templates.js',
     './src/views/settings/categories.js',
     './src/views/settings/backup.js',
     './src/views/settings/rights.js',
     './src/views/setup.js',
+    './src/views/moneySetup.js',
 ];
 
 // Versions before 2.0 cannot show the "Update" bar, so replace them at once.

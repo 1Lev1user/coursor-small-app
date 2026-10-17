@@ -1,4 +1,5 @@
 import { statementRow } from './types.js';
+import { splitBankDetails } from './details.js';
 
 const BOM_UTF8 = [0xef, 0xbb, 0xbf];
 const BOM_UTF16LE = [0xff, 0xfe];
@@ -53,7 +54,7 @@ function isBlankRow(row) {
     return row.length === 0 || (row.length === 1 && row[0].trim() === '');
 }
 
-function tokenize(text, delimiter) {
+function tokenize(text, delimiter, lenient = false) {
     const rows = [];
     let row = [];
     let field = '';
@@ -80,7 +81,7 @@ function tokenize(text, delimiter) {
             continue;
         }
 
-        if (ch === '"') {
+        if (ch === '"' && !lenient && field.trim() === '') {
             inQuotes = true;
             i += 1;
             continue;
@@ -109,6 +110,10 @@ function tokenize(text, delimiter) {
         i += 1;
     }
 
+    if (inQuotes) {
+        return tokenize(text, delimiter, true);
+    }
+
     if (field !== '' || row.length > 0) {
         row.push(field);
         rows.push(row);
@@ -119,9 +124,18 @@ function tokenize(text, delimiter) {
 
 function scoreDelimiter(text, delimiter) {
     const rows = tokenize(text, delimiter).filter((row) => !isBlankRow(row));
-    const sample = rows.slice(0, 20);
+    const firstDate = rows.findIndex((row) => row.some((cell) => isDateLikeValue(String(cell ?? '').trim())));
+    const start = firstDate > 0 ? firstDate - 1 : 0;
+    const sample = rows.slice(start, start + 20);
     if (sample.length === 0) {
-        return { rows, score: -1 };
+        return { rows, score: -1, strayQuotes: 0 };
+    }
+
+    let strayQuotes = 0;
+    for (const row of sample) {
+        for (const cell of row) {
+            strayQuotes += String(cell ?? '').split('"').length - 1;
+        }
     }
 
     const counts = new Map();
@@ -139,19 +153,24 @@ function scoreDelimiter(text, delimiter) {
     }
 
     if (dominantCount < 2) {
-        return { rows, score: 0 };
+        return { rows, score: 0, strayQuotes };
     }
 
     const consistency = dominantFreq / sample.length;
-    return { rows, score: consistency + dominantCount / 1000 };
+    return { rows, score: consistency + dominantCount / 1000, strayQuotes };
 }
 
 /**
  * Detects the delimiter among , ; TAB | by consistency of field counts over
- * the first 20 non-empty lines, and tokenizes the whole text with it.
+ * over a window of 20 non-empty lines that starts one line above the first
+ * line holding a date-like cell (so a long preamble does not hide the table),
+ * and tokenizes the whole text with it. On an equal score above 0 the
+ * candidate with fewer quote characters left in its fields wins.
  * Full RFC 4180 quoting: "" escapes a quote, delimiters and newlines may
- * appear inside quoted fields, CRLF and LF both work. Empty lines (including
- * a trailing one) are dropped.
+ * appear inside quoted fields, CRLF and LF both work. A quote opens a quoted
+ * field only at the start of a field, and an unterminated quote falls back to
+ * treating every quote as an ordinary character. Empty lines (including a
+ * trailing one) are dropped.
  * @param {string} text
  * @returns {{ delimiter: string, rows: string[][] }}
  */
@@ -162,7 +181,11 @@ export function parseDelimited(text) {
 
     for (const delimiter of DELIMITER_CANDIDATES) {
         const result = scoreDelimiter(normalized, delimiter);
-        if (!best || result.score > best.score) {
+        const tiedWithFewerQuotes = best
+            && result.score === best.score
+            && result.score > 0
+            && result.strayQuotes < best.strayQuotes;
+        if (!best || result.score > best.score || tiedWithFewerQuotes) {
             best = result;
             bestDelimiter = delimiter;
         }
@@ -193,20 +216,78 @@ function isNumericOrDateCell(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(trimmed);
 }
 
+/** Index of the last non-blank cell plus one (trailing blank cells do not count). */
+function trimmedLength(row) {
+    let length = row.length;
+    while (length > 0 && String(row[length - 1] ?? '').trim() === '') {
+        length -= 1;
+    }
+    return length;
+}
+
 /**
- * Finds the header row, skipping preamble lines (account number, period,
- * bank name): the first row whose non-empty cell count equals the dominant
- * count across all rows and whose cells are entirely non numeric/date-like.
- * Returns -1 when nothing looks like a header (e.g. pasted data with no
- * header row at all).
- * @param {string[][]} rows
- * @returns {number}
+ * A header row names at least half of the columns (a title line like
+ * 'Konta izraksts;;;;' has only one filled cell) and holds no numeric or
+ * date-like cell.
  */
-export function findHeaderRow(rows) {
-    if (rows.length === 0) {
+function isTextHeaderCandidate(row, width) {
+    const nonEmpty = row.filter((cell) => String(cell ?? '').trim() !== '');
+    if (nonEmpty.length < Math.max(2, Math.ceil(width / 2))) {
+        return false;
+    }
+    return !nonEmpty.some(isNumericOrDateCell);
+}
+
+/** Most frequent trimmed row length among rows of 2+ cells; ties go to the larger. */
+function dominantWidth(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+        const length = trimmedLength(row);
+        if (length >= 2) {
+            counts.set(length, (counts.get(length) || 0) + 1);
+        }
+    }
+    let dominant = 0;
+    let dominantFreq = 0;
+    for (const [length, freq] of counts) {
+        if (freq > dominantFreq || (freq === dominantFreq && length > dominant)) {
+            dominantFreq = freq;
+            dominant = length;
+        }
+    }
+    return dominant;
+}
+
+/**
+ * Index of the first row whose cell in the date column is date-like, or -1.
+ * The date column is the one with the most date-like cells (ties go to the
+ * lower index), so a date inside a preamble line does not count as data.
+ */
+function firstDataRow(rows) {
+    const hits = [];
+    for (const row of rows) {
+        row.forEach((cell, index) => {
+            if (isDateLikeValue(String(cell ?? '').trim())) {
+                hits[index] = (hits[index] || 0) + 1;
+            }
+        });
+    }
+    let dateColumn = -1;
+    let best = 0;
+    hits.forEach((count, index) => {
+        if (count > best) {
+            best = count;
+            dateColumn = index;
+        }
+    });
+    if (dateColumn < 0) {
         return -1;
     }
+    return rows.findIndex((row) => isDateLikeValue(String(row[dateColumn] ?? '').trim()));
+}
 
+/** The earlier rule, kept for files where no row has a date (e.g. '17 Sep 2026'): equal row width. */
+function findHeaderRowSameWidth(rows) {
     const counts = new Map();
     for (const row of rows) {
         if (row.length === 0) {
@@ -228,18 +309,7 @@ export function findHeaderRow(rows) {
     }
 
     for (let i = 0; i < rows.length; i += 1) {
-        const row = rows[i];
-        if (row.length !== dominant) {
-            continue;
-        }
-        const nonEmpty = row.filter((cell) => cell.trim() !== '');
-        // A title line like 'Konta izraksts;;;;' has the right width but
-        // only one filled cell; a header names at least half the columns.
-        if (nonEmpty.length < Math.max(2, Math.ceil(dominant / 2))) {
-            continue;
-        }
-        const numericCount = nonEmpty.filter(isNumericOrDateCell).length;
-        if (numericCount === 0) {
+        if (rows[i].length === dominant && isTextHeaderCandidate(rows[i], dominant)) {
             return i;
         }
     }
@@ -247,17 +317,43 @@ export function findHeaderRow(rows) {
     return -1;
 }
 
+/**
+ * Finds the header row, skipping preamble lines (account number, period,
+ * bank name): the nearest all-text row above the first data row (the first
+ * row with a date in the date column) that names at least half of the
+ * columns. Widths are compared after trimming trailing blank cells and are
+ * not required to be equal, so a header and data rows may differ in width.
+ * When that finds nothing it falls back to the first all-text row of the
+ * dominant width. Returns -1 when nothing looks like a header (e.g. pasted
+ * data with no header row at all).
+ * @param {string[][]} rows
+ * @returns {number}
+ */
+export function findHeaderRow(rows) {
+    const dominant = dominantWidth(rows);
+    if (dominant >= 2) {
+        for (let i = firstDataRow(rows) - 1; i >= 0; i -= 1) {
+            if (isTextHeaderCandidate(rows[i], dominant)) {
+                return i;
+            }
+        }
+    }
+
+    return findHeaderRowSameWidth(rows);
+}
+
 const KEYWORDS = {
     date: ['datums', 'дата', 'kuupaev', 'data', 'date', 'laikas'],
     debit: ['debit', 'debets', 'дебет', 'deebet', 'исходящ'],
     credit: ['credit', 'kredit', 'кредит', 'kreedit'],
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
-    direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'тип', 'type'],
+    direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'zime', 'sign', 'тип', 'type'],
     currency: ['currency', 'valuta', 'валюта', 'valuuta', 'valiuta'],
     // Only the bank's own unique id: a payer 'reference' repeats every month (rent).
     bankRef: [
         'transaction id', 'transaction reference', 'bank reference', 'arhiva kods', 'arhiva numurs',
         'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
+        'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
     ],
     description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
 };
@@ -282,8 +378,8 @@ function isDateLikeValue(value) {
     return /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(value);
 }
 
-const OUT_VALUES = ['D', 'DR', 'DB', 'DBIT', 'DEBIT', 'DEBET', 'DEBETS', 'DEEBET', 'Д', 'ДЕБЕТ'];
-const IN_VALUES = ['C', 'K', 'CR', 'CRDT', 'CREDIT', 'KREDIT', 'KREDITS', 'KREEDIT', 'К', 'КРЕДИТ'];
+const OUT_VALUES = ['D', 'DR', 'DB', 'DBIT', 'DEBIT', 'DEBET', 'DEBETS', 'DEEBET', 'Д', 'ДЕБЕТ', 'OUT', '-', 'IZDEVUMI', 'IZMAKSA', 'EXPENSE', 'РАСХОД'];
+const IN_VALUES = ['C', 'K', 'CR', 'CRDT', 'CREDIT', 'KREDIT', 'KREDITS', 'KREEDIT', 'К', 'КРЕДИТ', 'IN', '+', 'IENAKUMI', 'IEMAKSA', 'INCOME', 'ПРИХОД'];
 const DIRECTION_BY_VALUE = new Map([
     ...OUT_VALUES.map((value) => [value, 'out']),
     ...IN_VALUES.map((value) => [value, 'in']),
@@ -312,11 +408,9 @@ function guessDecimalSeparator(sampleRows, columns) {
     const indexes = [columns.amount, columns.debit, columns.credit].filter((index) => index >= 0);
     for (const index of indexes) {
         for (const value of columnSamples(sampleRows, index)) {
-            if (/\d,\d{1,2}\)?-?$/.test(value)) {
-                return ',';
-            }
-            if (/\d\.\d{1,2}\)?-?$/.test(value)) {
-                return '.';
+            const match = /\d([.,])\d{1,2}\)?-?$/.exec(stripAmountDecoration(value).text);
+            if (match) {
+                return match[1];
             }
         }
     }
@@ -376,6 +470,16 @@ export function guessColumns(header, sampleRows) {
 
     for (const key of ['debit', 'credit']) {
         const samples = columnSamples(sampleRows, columns[key]);
+        // One column named after both sides ('Debets/Kredīts') with signed amounts is the Amount column.
+        if (columns[key] >= 0 && columns.amount === -1 && samples.length > 0
+            && KEYWORDS.debit.some((word) => normalizedHeader[columns[key]].includes(word))
+            && KEYWORDS.credit.some((word) => normalizedHeader[columns[key]].includes(word))
+            && samples.every(isAmountLikeValue) && !samples.every(isDirectionValue)) {
+            columns.amount = columns[key];
+            columns[key] = -1;
+            amountVia = 'keyword';
+            continue;
+        }
         if (columns[key] >= 0 && samples.length > 0 && samples.every(isDirectionValue)) {
             columns.direction = columns[key];
             columns[key] = -1;
@@ -450,14 +554,22 @@ export function guessColumns(header, sampleRows) {
         const width = sampleRows[0] ? sampleRows[0].length : 0;
         for (let i = 0; i < width; i += 1) {
             const samples = columnSamples(sampleRows, i);
-            if (!used.has(i) && samples.length > 0 && samples.every(isDirectionValue)) {
+            // One repeated '-' or '+' is a placeholder column, not a direction.
+            const onlyOneSign = samples.every((value) => value === samples[0]) && /^[+-]$/.test(samples[0]);
+            if (!used.has(i) && samples.length > 0 && !onlyOneSign && samples.every(isDirectionValue)) {
                 columns.direction = i;
                 break;
             }
         }
     }
 
-    const dateFormat = columns.date >= 0 ? inferDateFormat(columnSamples(sampleRows, columns.date)) : null;
+    const dateSamples = columns.date >= 0 ? columnSamples(sampleRows, columns.date) : [];
+    // Day-first is the only dotted order in the LV/EE/LT bank formats seen; UNVERIFIED for banks outside them.
+    // Slash and dash dates stay ambiguous (null) unless a day above 12 settles it.
+    const dateFormat = columns.date >= 0
+        ? inferDateFormat(dateSamples)
+            ?? (dateSamples.length > 0 && dateSamples.every((value) => /^\d{1,2}\.\d{1,2}\.\d{2,4}/.test(value)) ? 'DMY' : null)
+        : null;
     const decimalSeparator = guessDecimalSeparator(sampleRows, columns);
 
     let confidence = 0;
@@ -607,6 +719,27 @@ export function parseDateWith(value, format) {
 const NBSP_RE = /[  ]/g;
 
 /**
+ * Strips what surrounds an amount: non-breaking spaces, unicode minus signs,
+ * a trailing D/C/K mark (D means negative) and a leading or trailing currency
+ * code or symbol ('€ -12.50', 'EUR -12.50', '-12,50 EUR').
+ * @param {string} value
+ * @returns {{ text: string, negative: boolean }}
+ */
+export function stripAmountDecoration(value) {
+    let text = value.replace(NBSP_RE, ' ').trim();
+    let negative = false;
+
+    text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
+    const trailingMark = text.match(/(?:(?<=\d)\s*|\s+)(DR|CR|D|C|K)$/i);
+    if (trailingMark) {
+        negative = /^D/i.test(trailingMark[1]);
+        text = text.slice(0, trailingMark.index).trim();
+    }
+    text = text.replace(/^(?:[A-Z]{3}|[€$£¥₽])\s*/i, '').replace(/\s*(?:[A-Z]{3}|[€$£¥₽])$/i, '').trim();
+    return { text, negative };
+}
+
+/**
  * Parses a money string into signed integer cents. Handles thousands and
  * decimal separators, leading/trailing minus, parentheses for negative,
  * a leading plus, and currency symbols/codes. Never uses floating-point
@@ -621,22 +754,13 @@ export function parseAmountWith(value, decimalSeparator = '.') {
         return null;
     }
 
-    let text = value.replace(NBSP_RE, ' ').trim();
-    if (text === '') {
+    if (value.trim() === '') {
         return null;
     }
 
-    let negative = false;
-
-    // Web pages and banks use real minus signs and dashes; currency marks
-    // and codes may sit before the sign ('€ -12.50', 'EUR -12.50').
-    text = text.replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-');
-    const trailingMark = text.match(/\s+(DR|CR|D|C|K)$/i);
-    if (trailingMark) {
-        negative = /^D/i.test(trailingMark[1]);
-        text = text.slice(0, trailingMark.index).trim();
-    }
-    text = text.replace(/^(?:[A-Z]{3}|[€$£¥₽])\s*/i, '').replace(/\s*(?:[A-Z]{3}|[€$£¥₽])$/i, '').trim();
+    const decorated = stripAmountDecoration(value);
+    let text = decorated.text;
+    let negative = decorated.negative;
 
     if (/^\(.*\)$/.test(text)) {
         negative = true;
@@ -709,8 +833,10 @@ const SUMMARY_CORE_WORDS = [
 const SUMMARY_QUALIFIERS = [
     'opening', 'closing', 'beginning', 'starting', 'ending', 'final', 'initial', 'account', 'period',
     'available', 'booked', 'of', 'the', 'for', 'and', 'on', 'un', 'ja', 'ir',
-    'sakuma', 'beigu', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
+    'sakuma', 'beigu', 'beigas', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
     'debit', 'credit', 'algus', 'lopp', 'pradinis', 'galutinis', 'laikotarpio',
+    'brought', 'forward', 'carried',
+    'debeta', 'kredita', 'komisiju', 'kopeja', 'izejoso', 'ienakoso', 'maksajumu', 'bez', 'komisijam',
     'начальное', 'конечное', 'входящий', 'исходящий', 'за', 'период', 'на', 'по', 'счету',
 ].map(normalizeText);
 
@@ -720,12 +846,15 @@ function summaryWords(value) {
     return normalizeText(value).split(/[^\p{L}]+/u).filter((word) => word !== '');
 }
 
-/** The whole cell is a summary label such as 'Kopā', 'Closing balance' or 'Sākuma saldo'. */
-function isSummaryCell(value) {
+/**
+ * The whole cell is a summary label such as 'Kopā', 'Closing balance' or 'Sākuma saldo'.
+ * With footer true (a row without a date) the bare word 'summa' also counts, as in 'Komisiju summa'.
+ */
+function isSummaryCell(value, footer = false) {
     const words = summaryWords(value);
     return words.length > 0
-        && words.every((word) => SUMMARY_WORDS.has(word))
-        && words.some((word) => SUMMARY_CORE_WORDS.includes(word));
+        && words.every((word) => SUMMARY_WORDS.has(word) || (footer && word === 'summa'))
+        && words.some((word) => SUMMARY_CORE_WORDS.includes(word) || (footer && word === 'summa'));
 }
 
 function hasSummaryKeyword(row) {
@@ -736,12 +865,14 @@ function hasSummaryKeyword(row) {
 }
 
 /**
- * A summary row has a description that is only a summary label, or mentions a
- * summary word and has no valid date. 'TotalEnergies' with a date stays a transaction.
+ * A summary row has any cell that consists only of summary words and includes at least one core word,
+ * or mentions a summary keyword and has no valid date. 'TotalEnergies' with a date stays a transaction.
  */
 function isSummaryRow(row, descriptionIndex, hasDate) {
-    const labelCells = descriptionIndex >= 0 ? [cellAt(row, descriptionIndex)] : row;
-    if (labelCells.some(isSummaryCell)) {
+    if (row.some((cell) => isSummaryCell(cell))) {
+        return true;
+    }
+    if (!hasDate && row.some((cell) => isSummaryCell(cell, true))) {
         return true;
     }
     return !hasDate && hasSummaryKeyword(row);
@@ -758,6 +889,7 @@ function cellAt(row, index) {
  * not parse are skipped and reported, as are obvious summary rows.
  * A row in another currency gets amountCents null (the UI asks for the EUR
  * charged) unless layout.columns.eurAmount points at a EUR amount column.
+ * layout.reverse === true flips every row's direction (a bank that shows spending as positive).
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
@@ -795,6 +927,7 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         let amountCents = null;
         let direction = null;
+        let unknownDirection = false;
 
         const hasSplitColumns = columns.debit >= 0 || columns.credit >= 0;
         if (hasSplitColumns) {
@@ -817,7 +950,10 @@ export function rowsToStatement(rows, headerRow, layout) {
                 amountCents = Math.abs(parsed);
 
                 if (columns.direction >= 0) {
-                    direction = directionOfValue(cellAt(row, columns.direction));
+                    const directionValue = cellAt(row, columns.direction);
+                    direction = directionOfValue(directionValue);
+                    // A word we do not know is not a reason to guess money in: only an explicit minus decides.
+                    unknownDirection = !direction && directionValue.trim() !== '' && parsed >= 0;
                 }
 
                 if (!direction) {
@@ -830,10 +966,16 @@ export function rowsToStatement(rows, headerRow, layout) {
             skipped.push({ line, reason: 'zero amount' });
             continue;
         }
+        if (unknownDirection) {
+            skipped.push({ line, reason: 'unknown direction' });
+            continue;
+        }
         if (amountCents === null || !direction) {
             skipped.push({ line, reason: 'unparsable amount' });
             continue;
         }
+
+        if (layout.reverse === true) direction = direction === 'in' ? 'out' : 'in';
 
         let currency = 'EUR';
         if (columns.currency >= 0) {
@@ -851,18 +993,19 @@ export function rowsToStatement(rows, headerRow, layout) {
             euroCents = eur !== null && eur !== 0 ? Math.abs(eur) : null;
         }
 
-        const description = cellAt(row, columns.description);
+        const split = splitBankDetails(cellAt(row, columns.description), date);
         const bankRef = cellAt(row, columns.bankRef);
 
         statementRows.push(statementRow({
-            date,
+            date: split.date || date,
             amountCents: euroCents,
             direction,
             currency,
             originalAmountCents: amountCents,
-            description,
-            counterparty: '',
+            description: split.description,
+            counterparty: split.counterparty,
             bankRef,
+            mcc: split.mcc,
         }));
     }
 

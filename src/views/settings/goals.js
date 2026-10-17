@@ -4,9 +4,10 @@ import {
     contribute,
     deleteGoal,
     goalProgress,
+    reopenGoal,
     updateGoal,
 } from '../../goals.js';
-import { formatEuro, formatPlain, parseAmount } from '../../money.js';
+import { amountProblem, formatEuro, formatPlain, parseAmount } from '../../money.js';
 import { monthLabel, todayISO } from '../../months.js';
 import {
     actionButton,
@@ -172,7 +173,7 @@ function renderAddMoneyForm(ctx, goal) {
         const cents = parseAmount(draft.amount);
         if (cents === null) {
             draft.errorField = 'amount';
-            draft.error = 'Enter a valid amount greater than zero.';
+            draft.error = amountProblem(draft.amount);
             state.focusId = amount.control.id;
             ctx.render();
             return;
@@ -223,7 +224,7 @@ function readGoalFields(nameField, targetField, deadlineField) {
     }
     const targetCents = parseAmount(targetField.control.value);
     if (targetCents === null) {
-        return { ok: false, errorField: 'target', error: 'Enter a valid amount greater than zero.' };
+        return { ok: false, errorField: 'target', error: amountProblem(targetField.control.value) };
     }
     return { ok: true, name, targetCents, deadline: deadlineField.control.value };
 }
@@ -373,7 +374,12 @@ function renderClosedGoal(ctx, goal) {
         element('p', 'muted', `Closed ${formatDay(goal.closedAt)}.`),
     );
     const actions = element('div', 'more-actions goal-actions');
-    actions.append(goalAction(ctx, goal, 'delete', 'Delete', 'btn btn-ghost-danger'));
+    const reopen = actionButton('btn', 'Reopen', () => {
+        reopenGoal(ctx.data, goal.id);
+        finish(ctx, 'Goal reopened', 'goals-title');
+    });
+    reopen.id = `goal-action-reopen-${goal.id}`;
+    actions.append(reopen, goalAction(ctx, goal, 'delete', 'Delete', 'btn btn-ghost-danger'));
     item.append(actions);
     if (state.goalId === goal.id && state.mode === 'delete') {
         item.append(renderDeleteConfirm(ctx, goal));

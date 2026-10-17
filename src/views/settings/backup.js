@@ -1,15 +1,19 @@
-import { todayISO } from '../../months.js';
+import { todayISO, fullDate } from '../../months.js';
 import {
     exportBackup,
     importBackup,
     countRecords,
     mergeSettingsOnly,
+    markBackedUp,
+    describeBackup,
+    restoredLastBackup,
 } from '../../backup.js';
 import { buildMonthCsv, csvFilename } from '../../csv.js';
 import { downloadText } from '../../files.js';
 import {
     readPreUpdateCopy,
     deletePreUpdateCopy,
+    restorePreUpdateCopy,
     readRescueCopy,
     deleteRescueCopy,
 } from '../../storage.js';
@@ -56,14 +60,24 @@ function replaceAppData(ctx, next) {
     Object.assign(ctx.data, next);
 }
 
-/** Downloads a full backup and records today as the last backup day. */
+function countLabel(count, singular, plural) {
+    return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/*
+ * Downloads a full backup and records today as the last backup day. The day
+ * is set before the file is made, so the file carries it too.
+ */
 export function doExportBackup(ctx) {
+    const previous = markBackedUp(ctx.data);
     const { filename, json } = exportBackup(ctx.data);
     downloadText(filename, json, 'application/json');
-    ctx.data.settings.lastBackupISO = todayISO();
-    if (persist(ctx)) {
-        ctx.toast('Backup exported');
+    if (!persist(ctx)) {
+        ctx.data.settings.lastBackupISO = previous;
+        ctx.render();
+        return;
     }
+    ctx.toast('Backup exported');
 }
 
 function doExportMonthCsv(ctx, flavour) {
@@ -86,6 +100,7 @@ function beginImportBackup(ctx, file) {
         if (preview.ok !== true) {
             state.pendingImportText = null;
             state.pendingImportCounts = null;
+            state.pendingImportIncoming = null;
             state.importError = preview.reason;
             ctx.render();
             return;
@@ -93,12 +108,14 @@ function beginImportBackup(ctx, file) {
 
         state.pendingImportText = rawText;
         state.pendingImportCounts = countRecords(ctx.data);
+        state.pendingImportIncoming = describeBackup(preview.data);
         state.importError = '';
         ctx.render();
     });
     reader.addEventListener('error', () => {
         state.pendingImportText = null;
         state.pendingImportCounts = null;
+        state.pendingImportIncoming = null;
         state.importError = 'Could not read that file.';
         ctx.render();
     });
@@ -115,18 +132,71 @@ function confirmImportBackup(ctx, mode = 'all') {
         state.importError = result.reason;
         state.pendingImportText = null;
         state.pendingImportCounts = null;
+        state.pendingImportIncoming = null;
         ctx.render();
         return;
     }
 
-    const next = mode === 'settings' ? mergeSettingsOnly(ctx.data, result.data) : result.data;
-    replaceAppData(ctx, next);
+    if (mode === 'settings') {
+        replaceAppData(ctx, mergeSettingsOnly(ctx.data, result.data));
+        state.pendingImportText = null;
+        state.pendingImportCounts = null;
+        state.pendingImportIncoming = null;
+        state.importError = '';
+        if (persist(ctx)) {
+            ctx.toast('Settings imported');
+        }
+        return;
+    }
+
+    // Everything: download the current data first, then replace it. If the
+    // save fails, the current data is put back; save() already reported it.
+    const json = JSON.stringify(ctx.data, null, 2);
+    const before = JSON.parse(json);
+    if (hasBackupWorthyData(ctx.data)) {
+        downloadText(`my-expenses-before-replace-${todayISO()}.json`, json, 'application/json');
+    }
+    result.data.settings.lastBackupISO = restoredLastBackup(
+        result.data.settings.lastBackupISO,
+        todayISO(),
+    );
+    replaceAppData(ctx, result.data);
     state.pendingImportText = null;
     state.pendingImportCounts = null;
+    state.pendingImportIncoming = null;
     state.importError = '';
-    if (persist(ctx)) {
-        ctx.toast(mode === 'settings' ? 'Settings imported' : 'Backup imported');
+    if (!persist(ctx)) {
+        replaceAppData(ctx, before);
+        ctx.render();
+        return;
     }
+    ctx.toast('Backup imported');
+}
+
+/*
+ * Checks the copy first, downloads the current data, then replaces it.
+ * If the save fails, the current data is put back; save() already
+ * reported the error.
+ */
+function restorePreUpdate(ctx) {
+    state.confirmRestorePreUpdate = false;
+    const result = restorePreUpdateCopy();
+    if (result.ok !== true) {
+        ctx.toast(result.reason);
+        ctx.render();
+        return;
+    }
+
+    const json = JSON.stringify(ctx.data, null, 2);
+    const before = JSON.parse(json);
+    downloadText(`my-expenses-before-restore-${todayISO()}.json`, json, 'application/json');
+    replaceAppData(ctx, result.data);
+    if (!persist(ctx)) {
+        replaceAppData(ctx, before);
+        ctx.render();
+        return;
+    }
+    ctx.toast('Pre-update copy restored');
 }
 
 export function renderBackupReminder(ctx) {
@@ -185,11 +255,27 @@ export function renderBackupSection(ctx) {
         section.append(error);
     }
 
-    if (state.pendingImportText !== null && state.pendingImportCounts !== null) {
+    if (
+        state.pendingImportText !== null
+        && state.pendingImportCounts !== null
+        && state.pendingImportIncoming !== null
+    ) {
         const counts = state.pendingImportCounts;
+        const incoming = state.pendingImportIncoming;
+        const fileDates = incoming.firstDate === ''
+            ? ''
+            : ` · ${fullDate(incoming.firstDate)} to ${fullDate(incoming.lastDate)}`;
         const box = element('div', 'confirm-box');
         box.setAttribute('role', 'group');
         box.append(
+            element(
+                'p',
+                '',
+                `This file: ${countLabel(incoming.expenses, 'expense', 'expenses')},`
+                    + ` ${countLabel(incoming.incomes, 'income', 'incomes')},`
+                    + ` ${countLabel(incoming.subscriptions, 'subscription', 'subscriptions')}`
+                    + fileDates,
+            ),
             element('p', 'confirm-copy', 'What should come from this backup?'),
             element(
                 'p',
@@ -205,7 +291,8 @@ export function renderBackupSection(ctx) {
                 '',
                 `Everything: replaces all data. Your ${counts.expenses} expenses,`
                     + ` ${counts.incomes} incomes and ${counts.subscriptions} subscriptions`
-                    + ' on this device are deleted. This cannot be undone.',
+                    + ' on this device are deleted. Your current data is downloaded first,'
+                    + ' then replaced. This cannot be undone.',
             ),
             actionButton('btn btn-danger', 'Replace everything', () => {
                 confirmImportBackup(ctx, 'all');
@@ -213,6 +300,7 @@ export function renderBackupSection(ctx) {
             actionButton('btn', 'Cancel', () => {
                 state.pendingImportText = null;
                 state.pendingImportCounts = null;
+                state.pendingImportIncoming = null;
                 state.importError = '';
                 ctx.render();
             }),
@@ -246,12 +334,12 @@ export function renderBackupSection(ctx) {
     const preUpdate = readPreUpdateCopy();
     if (preUpdate !== null) {
         section.append(
-            element('h3', 'category-name', 'Data from before version 2.0'),
+            element('h3', 'category-name', 'Data from before the last update'),
             element(
                 'p',
                 'muted',
-                'This device kept a copy of your data as it was before the 2.0 update.'
-                    + ' If something looks wrong, download it and restore it with Import backup.',
+                'This device kept a copy of your data as it was before the last update.'
+                    + ' If something looks wrong, use Restore pre-update copy to go back to it, or download it first.',
             ),
         );
         if (state.confirmDeletePreUpdate) {
@@ -268,13 +356,37 @@ export function renderBackupSection(ctx) {
                     ctx.render();
                 },
             ));
+        } else if (state.confirmRestorePreUpdate) {
+            const box = element('div', 'confirm-box');
+            box.setAttribute('role', 'group');
+            box.append(
+                element(
+                    'p',
+                    'confirm-copy',
+                    'Entries added since the update are removed. Your current data is downloaded first.',
+                ),
+                actionButton('btn', 'Cancel', () => {
+                    state.confirmRestorePreUpdate = false;
+                    ctx.render();
+                }),
+                actionButton('btn btn-danger', 'Restore', () => {
+                    restorePreUpdate(ctx);
+                }),
+            );
+            section.append(box);
         } else {
             const preUpdateActions = element('div', 'backup-actions');
             preUpdateActions.append(
                 actionButton('btn', 'Download pre-update copy', () => {
-                    downloadText(`my-expenses-before-2.0-${todayISO()}.json`, preUpdate, 'application/json');
+                    downloadText(`my-expenses-before-update-${todayISO()}.json`, preUpdate, 'application/json');
+                }),
+                actionButton('btn', 'Restore pre-update copy', () => {
+                    state.confirmDeletePreUpdate = false;
+                    state.confirmRestorePreUpdate = true;
+                    ctx.render();
                 }),
                 actionButton('btn btn-ghost-danger', 'Delete this copy', () => {
+                    state.confirmRestorePreUpdate = false;
                     state.confirmDeletePreUpdate = true;
                     ctx.render();
                 }),

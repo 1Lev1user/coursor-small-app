@@ -1,3 +1,5 @@
+import { spendCents } from './budget.js';
+
 function normaliseText(value) {
     return String(value ?? '')
         .normalize('NFD')
@@ -74,4 +76,24 @@ export function searchEntries(data, filters = {}) {
             return second.index - first.index;
         })
         .map(({ type, entry }) => ({ type, entry }));
+}
+
+/**
+ * Count and sum the results; every result counts, however many the list shows.
+ * Spent uses spendCents, so a refund lowers it.
+ * @param {{ type: 'expense'|'income', entry: object }[]} results what searchEntries returned
+ * @returns {{ expenseCount: number, incomeCount: number, expenseCents: number, incomeCents: number }}
+ */
+export function searchTotals(results) {
+    const totals = { expenseCount: 0, incomeCount: 0, expenseCents: 0, incomeCents: 0 };
+    for (const { type, entry } of results) {
+        if (type === 'expense') {
+            totals.expenseCount += 1;
+            totals.expenseCents += spendCents(entry);
+        } else {
+            totals.incomeCount += 1;
+            totals.incomeCents += entry.amountCents;
+        }
+    }
+    return totals;
 }

@@ -1,4 +1,4 @@
-import { parseAmount, formatEuro } from '../../money.js';
+import { amountProblem, parseAmount, formatEuro } from '../../money.js';
 import { refreshCurrentMonthPlan, syncCategoryPlanFields } from '../../budget.js';
 import {
     element,
@@ -8,13 +8,30 @@ import {
     setError,
     clearError,
     centsInputValue,
+    actionButton,
 } from './shared.js';
 
 const planDraft = {
-    userName: null,
     budget: null,
-    income: null,
+    confirmZero: false,
     errorField: '',
+    error: '',
+};
+
+export function needsZeroBudgetConfirm(savedCents, newCents) {
+    return savedCents > 0 && newCents === 0;
+}
+
+export function planDraftDirty(settings, draft) {
+    if (draft?.budget === null || draft?.budget === undefined) {
+        return false;
+    }
+    const cents = parseAmount(draft.budget, { allowZero: true });
+    return cents === null ? true : cents !== settings.monthlyBudgetCents;
+}
+
+const profileDraft = {
+    userName: null,
     error: '',
 };
 
@@ -67,58 +84,62 @@ export function renderWarnings(root, plan) {
     }
 }
 
-function savePlan(ctx, nameField, budgetField, incomeField) {
-    clearError(nameField);
+function savePlan(ctx, budgetField, confirmed = false) {
     clearError(budgetField);
-    clearError(incomeField);
     planDraft.error = '';
     planDraft.errorField = '';
 
-    planDraft.userName = nameField.control.value;
     planDraft.budget = budgetField.control.value;
-    planDraft.income = incomeField.control.value;
-
-    const userName = String(planDraft.userName ?? '').trim();
-    if (userName === '') {
-        planDraft.errorField = 'name';
-        planDraft.error = 'Enter your name.';
-        setError(nameField, planDraft.error);
-        nameField.control.focus();
-        return;
-    }
 
     const budgetCents = parseAmount(planDraft.budget, { allowZero: true });
     if (budgetCents === null) {
+        planDraft.confirmZero = false;
         planDraft.errorField = 'budget';
-        planDraft.error = 'Enter a valid amount of zero or more.';
+        planDraft.error = amountProblem(planDraft.budget, { allowZero: true });
         setError(budgetField, planDraft.error);
         budgetField.control.focus();
         return;
     }
 
-    const incomeCents = parseAmount(planDraft.income, { allowZero: true });
-    if (incomeCents === null) {
-        planDraft.errorField = 'income';
-        planDraft.error = 'Enter a valid amount of zero or more.';
-        setError(incomeField, planDraft.error);
-        incomeField.control.focus();
+    if (!confirmed && needsZeroBudgetConfirm(ctx.data.settings.monthlyBudgetCents, budgetCents)) {
+        planDraft.confirmZero = true;
+        ctx.render();
         return;
     }
 
-    ctx.data.settings.userName = userName;
     ctx.data.settings.monthlyBudgetCents = budgetCents;
     syncCategoryPlanFields(ctx.data.categories, budgetCents);
-    ctx.data.settings.usualMonthlyIncomeCents = incomeCents;
     refreshCurrentMonthPlan(ctx.data);
 
-    planDraft.userName = null;
     planDraft.budget = null;
-    planDraft.income = null;
+    planDraft.confirmZero = false;
     planDraft.error = '';
     planDraft.errorField = '';
 
     if (persist(ctx)) {
-        ctx.toast('Plan saved');
+        ctx.toast('Budget saved');
+    }
+}
+
+function saveProfile(ctx, nameField) {
+    clearError(nameField);
+    profileDraft.error = '';
+    profileDraft.userName = nameField.control.value;
+
+    const userName = String(profileDraft.userName ?? '').trim();
+    if (userName === '') {
+        profileDraft.error = 'Enter your name.';
+        setError(nameField, profileDraft.error);
+        nameField.control.focus();
+        return;
+    }
+
+    ctx.data.settings.userName = userName;
+    profileDraft.userName = null;
+    profileDraft.error = '';
+
+    if (persist(ctx)) {
+        ctx.toast('Name saved');
     }
 }
 
@@ -126,7 +147,97 @@ export function renderPlanSection(ctx) {
     const settings = ctx.data.settings;
     const section = element('section', 'card stack');
     section.id = 'more-plan';
-    section.append(element('h2', 'section-title', 'Plan'));
+    section.append(element('h2', 'section-title', 'Monthly budget'));
+
+    const form = element('form', 'stack plan-form');
+    form.noValidate = true;
+
+    const budgetInput = document.createElement('input');
+    budgetInput.type = 'text';
+    budgetInput.inputMode = 'decimal';
+    budgetInput.autocomplete = 'off';
+    budgetInput.placeholder = '1000';
+    budgetInput.value = centsInputValue(settings.monthlyBudgetCents, planDraft.budget);
+    const budgetField = buildField('plan-budget', 'Monthly budget (EUR)', budgetInput);
+
+    const marker = element('p', 'plan-unsaved', 'Unsaved changes');
+    marker.setAttribute('role', 'status');
+    const discard = actionButton('btn btn-ghost', 'Discard', () => {
+        planDraft.budget = null;
+        planDraft.confirmZero = false;
+        planDraft.error = '';
+        planDraft.errorField = '';
+        ctx.render();
+    });
+    const syncDirty = () => {
+        const dirty = planDraftDirty(settings, planDraft);
+        marker.hidden = !dirty;
+        discard.hidden = !dirty;
+    };
+
+    let confirmBox = null;
+    budgetInput.addEventListener('input', () => {
+        planDraft.budget = budgetInput.value;
+        planDraft.confirmZero = false;
+        confirmBox?.remove();
+        confirmBox = null;
+        clearError(budgetField);
+        syncDirty();
+    });
+    syncDirty();
+
+    if (planDraft.error !== '') {
+        if (planDraft.errorField === 'budget') {
+            setError(budgetField, planDraft.error);
+        }
+    }
+
+    const draftCents = parseAmount(planDraft.budget ?? '', { allowZero: true });
+    if (planDraft.confirmZero && needsZeroBudgetConfirm(settings.monthlyBudgetCents, draftCents)) {
+        confirmBox = element('div', 'confirm-box');
+        confirmBox.setAttribute('role', 'group');
+        confirmBox.append(
+            element(
+                'p',
+                'confirm-copy',
+                'Are you sure? A budget of 0 makes every expense show as over budget.',
+            ),
+            actionButton('btn', 'Cancel', () => {
+                planDraft.confirmZero = false;
+                ctx.render();
+            }),
+            actionButton('btn btn-danger', 'Save budget 0', () => savePlan(ctx, budgetField, true)),
+        );
+    }
+
+    const submit = element('button', 'btn btn-primary', 'Save budget');
+    submit.type = 'submit';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        savePlan(ctx, budgetField);
+    });
+
+    form.append(
+        budgetField.wrapper,
+        element(
+            'p',
+            'muted',
+            'Income is counted when it arrives: add regular incomes under Settings > Income, '
+                + 'and anything else with Add income on Home.',
+        ),
+        marker,
+        discard,
+        ...(confirmBox ? [confirmBox] : []),
+        submit,
+    );
+    section.append(form);
+    return section;
+}
+
+export function renderProfileSection(ctx) {
+    const section = element('section', 'card stack');
+    section.id = 'more-profile';
+    section.append(element('h2', 'section-title', 'Your name'));
 
     const form = element('form', 'stack plan-form');
     form.noValidate = true;
@@ -136,66 +247,25 @@ export function renderPlanSection(ctx) {
     nameInput.autocomplete = 'given-name';
     nameInput.placeholder = 'Your first name';
     nameInput.maxLength = 40;
-    nameInput.value = planDraft.userName ?? settings.userName ?? '';
-    const nameField = buildField('plan-name', 'Your name', nameInput);
+    nameInput.value = profileDraft.userName ?? ctx.data.settings.userName ?? '';
+    const nameField = buildField('profile-name', 'Your name', nameInput);
     nameInput.addEventListener('input', () => {
-        planDraft.userName = nameInput.value;
+        profileDraft.userName = nameInput.value;
         clearError(nameField);
     });
 
-    const budgetInput = document.createElement('input');
-    budgetInput.type = 'text';
-    budgetInput.inputMode = 'decimal';
-    budgetInput.autocomplete = 'off';
-    budgetInput.placeholder = '1000';
-    budgetInput.value = centsInputValue(settings.monthlyBudgetCents, planDraft.budget);
-    const budgetField = buildField('plan-budget', 'Monthly spend budget (EUR)', budgetInput);
-    budgetInput.addEventListener('input', () => {
-        planDraft.budget = budgetInput.value;
-        clearError(budgetField);
-    });
-
-    const incomeInput = document.createElement('input');
-    incomeInput.type = 'text';
-    incomeInput.inputMode = 'decimal';
-    incomeInput.autocomplete = 'off';
-    incomeInput.placeholder = '2000';
-    incomeInput.value = centsInputValue(settings.usualMonthlyIncomeCents, planDraft.income);
-    const incomeField = buildField('plan-income', 'Usual monthly income (EUR)', incomeInput);
-    incomeInput.addEventListener('input', () => {
-        planDraft.income = incomeInput.value;
-        clearError(incomeField);
-    });
-
-    if (planDraft.error !== '') {
-        if (planDraft.errorField === 'name') {
-            setError(nameField, planDraft.error);
-        } else if (planDraft.errorField === 'budget') {
-            setError(budgetField, planDraft.error);
-        } else if (planDraft.errorField === 'income') {
-            setError(incomeField, planDraft.error);
-        }
+    if (profileDraft.error !== '') {
+        setError(nameField, profileDraft.error);
     }
 
-    const submit = element('button', 'btn btn-primary', 'Save plan');
+    const submit = element('button', 'btn btn-primary', 'Save name');
     submit.type = 'submit';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        savePlan(ctx, nameField, budgetField, incomeField);
+        saveProfile(ctx, nameField);
     });
 
-    form.append(
-        nameField.wrapper,
-        budgetField.wrapper,
-        incomeField.wrapper,
-        element(
-            'p',
-            'muted',
-            'Usual monthly income is applied automatically each month in Month totals. '
-                + 'On Home, add only extra income such as a bonus or a gift. This salary is already counted.',
-        ),
-        submit,
-    );
+    form.append(nameField.wrapper, submit);
     section.append(form);
     return section;
 }

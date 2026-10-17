@@ -6,6 +6,7 @@ const euroFormatter = new Intl.NumberFormat('en-IE', {
 /**
  * Parses user typed money into integer cents. Returns null for invalid input.
  * By default requires a positive amount; pass `{ allowZero: true }` to accept 0.
+ * Accepts thousands groups of three digits (space, 1,234.56, 1.234,56); a lone "1,234" or "1.234" stays refused.
  * @param {unknown} input
  * @param {{ allowZero?: boolean }} [options]
  * @returns {number | null}
@@ -20,7 +21,18 @@ export function parseAmount(input, options = {}) {
         return null;
     }
 
-    const normalized = trimmed.replace(',', '.');
+    const spaceGroups = /^\d{1,3}(?:[ \u00A0\u202F]\d{3})+(?:[.,]\d{1,2})?$/.test(trimmed);
+    const commaGroups = /^(\d{1,3}(?:,\d{3})+)(\.\d{1,2})?$/.exec(trimmed);
+    const dotGroups = /^(\d{1,3}(?:\.\d{3})+)(,\d{1,2})?$/.exec(trimmed);
+    let normalized = trimmed.replace(',', '.');
+    if (spaceGroups) {
+        normalized = trimmed.replace(/[ \u00A0\u202F]/g, '').replace(',', '.');
+    } else if (commaGroups && (commaGroups[1].split(',').length > 2 || commaGroups[2] !== undefined)) {
+        normalized = trimmed.replace(/,/g, '');
+    } else if (dotGroups && (dotGroups[1].split('.').length > 2 || dotGroups[2] !== undefined)) {
+        normalized = trimmed.replace(/\./g, '').replace(',', '.');
+    }
+
     if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
         return null;
     }
@@ -34,6 +46,29 @@ export function parseAmount(input, options = {}) {
     }
 
     return cents;
+}
+
+/**
+ * Says why `parseAmount` refused the input; returns '' when the input is accepted.
+ * @param {unknown} input
+ * @param {{ allowZero?: boolean }} [options]
+ * @returns {string}
+ */
+export function amountProblem(input, { allowZero = false } = {}) {
+    if (parseAmount(input, { allowZero }) !== null) {
+        return '';
+    }
+    const trimmed = typeof input === 'string' ? input.trim() : '';
+    if (trimmed === '') {
+        return 'Enter an amount.';
+    }
+    if (trimmed.startsWith('-')) {
+        return 'Amounts cannot be negative.';
+    }
+    if (parseAmount(trimmed, { allowZero: true }) === 0) {
+        return 'Enter an amount greater than zero.';
+    }
+    return 'Use a number like 1234.56 or 1234,56, with at most two decimals.';
 }
 
 /**

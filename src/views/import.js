@@ -2,6 +2,8 @@ import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
 import { monthKeyOf, monthLabel } from '../months.js';
 import { createId } from '../model.js';
+import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
+import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
 import { formatMoney } from '../currency.js';
 import { detectFormat } from '../import/detect.js';
 import {
@@ -11,9 +13,11 @@ import {
     guessColumns,
     parseDateWith,
     rowsToStatement,
+    stripAmountDecoration,
 } from '../import/text.js';
 import { parseCamt, parseFidavista } from '../import/xml.js';
 import { readXlsx } from '../import/xlsx.js';
+import { readXls } from '../import/xls.js';
 import {
     findDuplicates,
     defaultDecisions,
@@ -28,7 +32,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const PREVIEW_ROWS = 5;
 const GUESS_SAMPLE_ROWS = 20;
 const SKIPPED_SHOWN = 20;
-const TABULAR_FORMATS = ['csv', 'xlsx', 'paste'];
+const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'paste'];
 
 const KIND_LABELS = {
     expense: 'Expense',
@@ -47,12 +51,13 @@ const SKIP_REASONS = {
     'summary row': 'Summary or balance line',
     'unparsable date': 'Date not recognised',
     'unparsable amount': 'Amount not recognised',
+    'unknown direction': 'Direction not recognised',
 };
 
-const DUPLICATE_GROUPS = [
+export const DUPLICATE_GROUPS = [
     ['exact', 'Exact', 'Already imported. The bank reference or every detail matches.'],
-    ['probable', 'Probable', 'Same date and amount as an entry you added yourself.'],
-    ['weak', 'Weak', 'Same amount within 2 days of a saved entry.'],
+    ['probable', 'Possible duplicate: added by you', 'Same date and amount as an entry you added yourself. Not imported unless you tick it.'],
+    ['weak', 'Possible duplicate: similar amount', 'Same amount within 2 days of a saved entry. Not imported unless you tick it.'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -86,8 +91,9 @@ export function layoutFitsSample(saved, sampleRows) {
     let foreign = 0;
     for (const key of ['amount', 'debit', 'credit']) {
         for (const value of samplesAt(sampleRows, columns[key] ?? -1)) {
-            const match = DECIMAL_TAIL.exec(value);
-            if (match?.[1] === other && !value.includes(saved.decimalSeparator)) foreign += 1;
+            const text = stripAmountDecoration(value).text;
+            const match = DECIMAL_TAIL.exec(text);
+            if (match?.[1] === other && !text.includes(saved.decimalSeparator)) foreign += 1;
             else if (match) own += 1;
         }
     }
@@ -160,6 +166,28 @@ export function suggestSalary(data, row, decision) {
     return { incomeCategoryId: SALARY_INCOME_ID };
 }
 
+/**
+ * An expense row whose text names a subscription not yet logged that month:
+ * the import asks whether it is that subscription's payment. Never silent.
+ * takenKeys holds `${subscriptionId}:${monthKey}` already claimed by other rows.
+ */
+export function suggestSubscription(data, row, decision, takenKeys = new Set()) {
+    const monthKey = monthKeyOf(row.date);
+    if (
+        decision.kind !== 'expense'
+        || row.direction !== 'out'
+        || decision.subscriptionId
+        || decision.subscriptionDeclined === true
+        || monthKey === null
+    ) {
+        return null;
+    }
+    const text = [row.counterparty, row.description].join(' ');
+    return (data.subscriptions ?? []).find((sub) => nameAppearsIn(sub.name, text)
+        && !isLoggedThisMonth(data, sub.id, monthKey)
+        && !takenKeys.has(`${sub.id}:${monthKey}`)) ?? null;
+}
+
 export function rememberHint(data, decision) {
     const pattern = String(decision.pattern ?? '').trim().toUpperCase() || 'this text';
     let target;
@@ -205,7 +233,7 @@ export function layoutRecord({ name, signature, delimiter, encoding, headerRow, 
         columns.debit = -1;
         columns.credit = -1;
     }
-    return {
+    const record = {
         id: createId('layout'),
         name,
         signature,
@@ -216,6 +244,8 @@ export function layoutRecord({ name, signature, delimiter, encoding, headerRow, 
         headerRow,
         columns,
     };
+    if (layout.mode !== 'split' && layout.reverse === true) record.reverse = true;
+    return record;
 }
 
 /** Same signature replaces the stored layout and keeps its id. */
@@ -249,6 +279,60 @@ export function dateQuestion(sample) {
     const [, dm, dd] = dmy.split('-').map(Number);
     const [, mm, md] = mdy.split('-').map(Number);
     return `Is ${sample} the ${ordinal(dd)} of ${MONTH_NAMES[dm - 1]} or ${MONTH_NAMES[mm - 1]} ${ordinal(md)}?`;
+}
+
+/** What was actually read, for a person to compare with the bank's own figures. */
+export function checkSummary(rows, skipped, { fileLines = null, tableRows = null } = {}) {
+    let totalInCents = 0;
+    let totalOutCents = 0;
+    let foreignCount = 0;
+    let inCount = 0;
+    for (const row of rows) {
+        if (row.direction === 'in') inCount += 1;
+        if (row.amountCents === null) foreignCount += 1;
+        if (!Number.isInteger(row.amountCents)) continue;
+        if (row.direction === 'in') totalInCents += row.amountCents;
+        else totalOutCents += row.amountCents;
+    }
+    const mismatch = Number.isFinite(fileLines) && Number.isFinite(tableRows) && fileLines !== tableRows;
+    return {
+        read: rows.length,
+        skippedCount: skipped.length,
+        totalInCents,
+        totalOutCents,
+        foreignCount,
+        inCount,
+        sample: rows.length > 4 ? [...rows.slice(0, 3), rows[rows.length - 1]] : rows,
+        mostlyIn: rows.length >= 5 && inCount * 10 >= rows.length * 9,
+        lineMismatch: mismatch ? { fileLines, tableRows } : null,
+    };
+}
+
+/** Where the check panel is drawn: 'columns', 'saved' (layout remembered), 'file' (camt, FiDAViSTA) or null. */
+export function checkPanelPlacement(step, { tabular, savedLayoutName }) {
+    if (step === 'columns') return 'columns';
+    if (step !== 'duplicates') return null;
+    if (!tabular) return 'file';
+    return savedLayoutName !== '' ? 'saved' : null;
+}
+
+export function checkWarnings(summary, placement) {
+    const warnings = [];
+    const counts = `(${summary.inCount} of ${summary.read})`;
+    if (summary.mostlyIn && placement === 'columns') {
+        warnings.push(`Almost every row is money in ${counts}. If your bank shows spending as positive numbers, check the Direction column. Try Reverse money in and out below.`);
+    } else if (summary.mostlyIn && placement === 'saved') {
+        warnings.push(`Almost every row is money in ${counts}. The saved columns may no longer fit this file: use Change columns above, check the Direction column and try Reverse money in and out.`);
+    }
+    if (summary.lineMismatch) {
+        const { fileLines, tableRows } = summary.lineMismatch;
+        warnings.push(`The file has ${fileLines} lines but ${tableRows} rows were read. Some lines may have been joined together; look for a stray quote mark.`);
+    }
+    return warnings;
+}
+
+export function stepCountText(index, total, formatKnown) {
+    return !formatKnown && index === 0 ? 'Step 1' : `Step ${index + 1} of ${total}`;
 }
 
 function columnLetter(index) {
@@ -285,6 +369,7 @@ function freshState() {
         fileName: '',
         format: '',
         encoding: '',
+        fileLines: null,
         table: null,
         layout: null,
         askDate: false,
@@ -367,6 +452,22 @@ function button(className, label, onClick) {
     node.type = 'button';
     node.addEventListener('click', onClick);
     return node;
+}
+
+/** A question with Yes and No, or its answer with Undo. Ids: `${idPrefix}-yes|no|undo`. */
+function questionLine({ idPrefix, question, answered, onYes, onNo, onUndo }) {
+    const line = element('div', 'imp-note-row');
+    const link = (id, label, onClick) => {
+        const node = button('btn btn-ghost imp-link', label, onClick);
+        node.id = `${idPrefix}-${id}`;
+        return node;
+    };
+    if (typeof answered === 'string') {
+        line.append(element('p', 'muted imp-hint', answered), link('undo', 'Undo', onUndo));
+    } else {
+        line.append(element('p', 'muted imp-hint', question), link('yes', 'Yes', onYes), link('no', 'No', onNo));
+    }
+    return line;
 }
 
 function option(value, text, selected) {
@@ -452,9 +553,18 @@ function isOldExcel(bytes) {
 }
 
 const UNKNOWN_FILE = 'This file does not look like a bank statement.'
-    + ' Use a CSV, Excel (.xlsx), camt.053 or FiDAViSTA XML file.';
+    + ' Use a CSV, Excel (.xls or .xlsx), camt.053 or FiDAViSTA XML file.';
 
-async function readStatementFile(file) {
+const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT940 yet.'
+    + ' Export the same statement as CSV or camt.053 XML.';
+const OFX_FILE = 'This looks like an OFX/QFX statement. The app cannot read OFX/QFX yet.'
+    + ' Export the same statement as CSV or camt.053 XML.';
+
+function countLines(text) {
+    return text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '').length;
+}
+
+export async function readStatementFile(file) {
     if (file.size > MAX_FILE_BYTES) {
         return { ok: false, reason: 'This file is larger than 10 MB. Export a shorter period.' };
     }
@@ -463,13 +573,16 @@ async function readStatementFile(file) {
         return { ok: false, reason: 'This file is empty.' };
     }
     if (isZip(bytes) || isOldExcel(bytes)) {
-        const sheet = await readXlsx(bytes);
+        const format = isZip(bytes) ? 'xlsx' : 'xls';
+        const sheet = await (format === 'xlsx' ? readXlsx(bytes) : readXls(bytes));
         if (!sheet.ok) return sheet;
-        return { ok: true, kind: 'table', format: 'xlsx', rows: sheet.rows, delimiter: '', encoding: '' };
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
     }
 
     const { text, encoding } = decodeBytes(bytes);
     const format = detectFormat(text, file.name);
+    if (format === 'mt940') return { ok: false, reason: MT940_FILE };
+    if (format === 'ofx') return { ok: false, reason: OFX_FILE };
     if (format === 'camt' || format === 'fidavista') {
         const parsed = format === 'camt' ? parseCamt(text) : parseFidavista(text);
         if (!parsed.ok) return parsed;
@@ -477,7 +590,7 @@ async function readStatementFile(file) {
     }
     if (format === 'csv') {
         const { delimiter, rows } = parseDelimited(text);
-        return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding };
+        return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding, lineCount: countLines(text) };
     }
     return { ok: false, reason: UNKNOWN_FILE };
 }
@@ -521,13 +634,14 @@ function loadPaste(ctx) {
     }
     state.loadError = '';
     state.fileName = 'Pasted text';
-    acceptLoaded(ctx, { ok: true, kind: 'table', format: 'paste', rows, delimiter, encoding: '' });
+    acceptLoaded(ctx, { ok: true, kind: 'table', format: 'paste', rows, delimiter, encoding: '', lineCount: countLines(text) });
 }
 
 function acceptLoaded(ctx, result) {
     state.format = result.format;
     state.encoding = result.encoding ?? '';
     state.savedLayoutName = '';
+    state.fileLines = result.lineCount ?? null;
     if (result.kind === 'statement') {
         state.table = null;
         state.layout = null;
@@ -556,12 +670,20 @@ function startTable(ctx, result) {
     const columns = { ...guess.columns, eurAmount: -1 };
     const signature = headerSignature(header);
 
-    state.table = { rows, headerRow, header, delimiter: result.delimiter ?? '', signature };
+    state.table = {
+        rows,
+        parsedRows: result.rows.length,
+        headerRow,
+        header,
+        delimiter: result.delimiter ?? '',
+        signature,
+    };
     state.layout = {
         mode: columns.debit >= 0 || columns.credit >= 0 ? 'split' : 'single',
         columns,
         decimalSeparator: guess.decimalSeparator,
         dateFormat: guess.dateFormat,
+        reverse: false,
     };
     state.askDate = guess.dateFormat === null;
     state.dateSample = samplesAt(sample, columns.date)[0] ?? '';
@@ -580,6 +702,7 @@ function startTable(ctx, result) {
             columns: savedColumns,
             decimalSeparator: saved.decimalSeparator,
             dateFormat: saved.dateFormat,
+            reverse: saved.reverse === true,
         };
         state.askDate = false;
         state.bankName = saved.name;
@@ -593,8 +716,9 @@ function startTable(ctx, result) {
     goStep(ctx, 'columns');
 }
 
-function parseLayout() {
-    const { columns, mode } = state.layout;
+/** The layout rowsToStatement reads: unused amount columns cleared, reverse only for one amount column. */
+export function parseLayoutFor(layout) {
+    const { columns, mode } = layout;
     const effective = { ...columns };
     if (mode === 'split') {
         effective.amount = -1;
@@ -603,11 +727,17 @@ function parseLayout() {
         effective.debit = -1;
         effective.credit = -1;
     }
-    return {
+    const result = {
         columns: effective,
-        decimalSeparator: state.layout.decimalSeparator,
-        dateFormat: state.layout.dateFormat,
+        decimalSeparator: layout.decimalSeparator,
+        dateFormat: layout.dateFormat,
     };
+    if (mode !== 'split' && layout.reverse === true) result.reverse = true;
+    return result;
+}
+
+function parseLayout() {
+    return parseLayoutFor(state.layout);
 }
 
 function layoutProblem() {
@@ -659,7 +789,7 @@ function stepHeader(title) {
     const index = list.indexOf(state.step);
     if (index >= 0) {
         const indicator = element('p', 'imp-steps');
-        indicator.append(element('span', 'imp-steps-count', `Step ${index + 1} of ${list.length}`));
+        indicator.append(element('span', 'imp-steps-count', stepCountText(index, list.length, state.format !== '')));
         const dots = element('span', 'imp-dots');
         dots.setAttribute('aria-hidden', 'true');
         list.forEach((step, dotIndex) => {
@@ -692,7 +822,7 @@ function renderLoad(ctx) {
     card.append(element(
         'p',
         '',
-        'Download a statement from your online bank as CSV, Excel (.xlsx) or XML (camt.053 or FiDAViSTA), then choose it here.',
+        'Download a statement from your online bank as CSV, Excel (.xls or .xlsx) or XML (camt.053 or FiDAViSTA), then choose it here.',
     ));
 
     const fileLabel = element('label', 'btn btn-primary imp-file-label');
@@ -702,7 +832,7 @@ function renderLoad(ctx) {
     input.type = 'file';
     input.id = 'imp-file';
     input.className = 'imp-file-input';
-    input.accept = '.csv,.txt,.xlsx,.xls,.xml';
+    input.accept = '.csv,.txt,.xlsx,.xls,.xml,.sta,.mt940,.ofx,.qfx';
     input.disabled = state.loading;
     input.addEventListener('change', () => {
         const file = input.files?.[0];
@@ -815,6 +945,48 @@ function renderSkipped(skipped) {
     return box;
 }
 
+/** Bank text is untrusted: everything here goes in through textContent. */
+function renderCheckPanel(summary, placement) {
+    const panel = element('section', 'stack imp-panel');
+    panel.setAttribute('aria-labelledby', 'imp-panel-title');
+    const title = element('h3', 'category-name', 'Check what was read');
+    title.id = 'imp-panel-title';
+    panel.append(title);
+
+    const list = element('ul', 'imp-panel-rows');
+    for (const row of summary.sample) {
+        const item = element('li', 'imp-panel-row');
+        item.append(
+            element('span', 'imp-panel-date', row.date),
+            element('span', 'imp-panel-text', describeRow(row)),
+            element('span', 'imp-panel-amount', amountText(row)),
+        );
+        list.append(item);
+    }
+    panel.append(list);
+
+    const totals = element('dl', 'imp-panel-totals');
+    for (const [label, cents] of [['Money in', summary.totalInCents], ['Money out', summary.totalOutCents]]) {
+        const pair = element('div', 'imp-panel-total');
+        pair.append(element('dt', '', label), element('dd', '', formatEuro(cents)));
+        totals.append(pair);
+    }
+    panel.append(totals);
+
+    panel.append(element('p', 'imp-panel-counts', `Rows read: ${summary.read}, skipped: ${summary.skippedCount}`));
+    if (summary.foreignCount > 0) {
+        panel.append(element(
+            'p',
+            'muted',
+            `${plural(summary.foreignCount, 'row is', 'rows are')} in another currency and not in these totals.`,
+        ));
+    }
+    for (const warning of checkWarnings(summary, placement)) {
+        panel.append(element('p', 'imp-strong', warning));
+    }
+    return panel;
+}
+
 function renderColumns(ctx) {
     const card = element('section', 'card stack');
     card.append(stepHeader('Check the columns'));
@@ -866,6 +1038,16 @@ function renderColumns(ctx) {
     );
     if (state.layout.mode === 'single') {
         grid.append(columnSelect(ctx, 'direction', 'Direction column (optional)', true, 'A column with D or K, debit or credit.'));
+        const reverse = element('div', 'stack');
+        const reverseHint = element('p', 'muted', 'Use this if your bank shows spending as positive numbers.');
+        reverseHint.id = 'imp-reverse-hint';
+        const reverseCheck = checkRow('imp-reverse', 'Reverse money in and out', state.layout.reverse === true, (checked) => {
+            state.layout.reverse = checked;
+            refresh(ctx, 'imp-reverse');
+        });
+        reverseCheck.querySelector('input').setAttribute('aria-describedby', reverseHint.id);
+        reverse.append(reverseCheck, reverseHint);
+        grid.append(reverse);
     }
     if (state.layout.columns.currency >= 0) {
         grid.append(columnSelect(ctx, 'eurAmount', 'Amount in EUR (optional)', true, 'For rows in another currency.'));
@@ -912,6 +1094,13 @@ function renderColumns(ctx) {
         if (parsed.skipped.length > 0) status.append(renderSkipped(parsed.skipped));
     }
     card.append(status);
+    if (problem === '' && parsed.rows.length > 0) {
+        const summary = checkSummary(parsed.rows, parsed.skipped, {
+            fileLines: state.fileLines,
+            tableRows: state.table.parsedRows,
+        });
+        card.append(renderCheckPanel(summary, 'columns'));
+    }
 
     if (state.table.signature !== '') {
         const nameInput = document.createElement('input');
@@ -971,6 +1160,14 @@ function renderDuplicates(ctx) {
             button('btn btn-ghost imp-link', 'Change columns', () => goStep(ctx, 'columns')),
         );
         card.append(note);
+    }
+    const placement = checkPanelPlacement('duplicates', { tabular: isTabular(), savedLayoutName: state.savedLayoutName });
+    if (placement !== null && state.rows.length > 0) {
+        const summary = checkSummary(state.rows, state.skipped, {
+            fileLines: state.fileLines,
+            tableRows: state.table?.parsedRows ?? null,
+        });
+        card.append(renderCheckPanel(summary, placement));
     }
     card.append(element('p', '', `${state.fileName}: ${plural(state.rows.length, 'transaction', 'transactions')}.`));
     for (const warning of state.warnings) {
@@ -1129,7 +1326,8 @@ function renderDecisionRow(ctx, index) {
         );
         grid.append(buildField(incomeId, 'Income category', incomeSelect));
         const usual = ctx.data.settings.usualMonthlyIncomeCents ?? 0;
-        if (decision.incomeCategoryId === SALARY_INCOME_ID && usual > 0) {
+        if (decision.incomeCategoryId === SALARY_INCOME_ID && usual > 0
+            && !usesNewCounting(ctx.data, monthKeyOf(row.date))) {
             grid.append(element(
                 'p',
                 'muted imp-hint',
@@ -1159,6 +1357,80 @@ function renderDecisionRow(ctx, index) {
         ));
     }
     item.append(grid);
+
+    if (decision.kind === 'expense') {
+        const idPrefix = `imp-subq-${index}`;
+        const marked = (ctx.data.subscriptions ?? []).find(({ id }) => id === decision.subscriptionId);
+        if (marked) {
+            item.append(questionLine({
+                idPrefix,
+                answered: `Marked as the ${marked.name} subscription for ${monthLabel(monthKeyOf(row.date))}.`,
+                onUndo: () => {
+                    delete decision.subscriptionId;
+                    refresh(ctx, `${idPrefix}-yes`);
+                },
+            }));
+        } else {
+            const takenKeys = new Set();
+            state.decisions.forEach((other, otherIndex) => {
+                if (otherIndex !== index && other.include === true && other.kind === 'expense' && other.subscriptionId) {
+                    takenKeys.add(`${other.subscriptionId}:${monthKeyOf(state.rows[otherIndex].date)}`);
+                }
+            });
+            const sub = suggestSubscription(ctx.data, row, decision, takenKeys);
+            if (sub) {
+                item.append(questionLine({
+                    idPrefix,
+                    question: `Is this the ${sub.name} subscription?`,
+                    onYes: () => {
+                        decision.subscriptionId = sub.id;
+                        refresh(ctx, `${idPrefix}-undo`);
+                    },
+                    onNo: () => {
+                        decision.subscriptionDeclined = true;
+                        refresh(ctx, kindId);
+                    },
+                }));
+            }
+        }
+    }
+
+    if (decision.kind === 'income') {
+        const idPrefix = `imp-incq-${index}`;
+        const tied = (ctx.data.incomeSources ?? []).find(({ id }) => id === decision.sourceId);
+        if (tied) {
+            item.append(questionLine({
+                idPrefix,
+                answered: `Tied to ${tied.name} for ${monthLabel(monthKeyOf(row.date))}.`,
+                onUndo: () => {
+                    delete decision.sourceId;
+                    refresh(ctx, `${idPrefix}-yes`);
+                },
+            }));
+        } else if (!decision.sourceId && decision.sourceDeclined !== true) {
+            const takenIncomeKeys = new Set();
+            state.decisions.forEach((other, otherIndex) => {
+                if (otherIndex !== index && other.include === true && other.kind === 'income' && other.sourceId) {
+                    takenIncomeKeys.add(`${other.sourceId}:${monthKeyOf(state.rows[otherIndex].date)}`);
+                }
+            });
+            const found = suggestIncomeSource(ctx.data, row, takenIncomeKeys);
+            if (found) {
+                item.append(questionLine({
+                    idPrefix,
+                    question: `Is this the ${found.name}?`,
+                    onYes: () => {
+                        decision.sourceId = found.id;
+                        refresh(ctx, `${idPrefix}-undo`);
+                    },
+                    onNo: () => {
+                        decision.sourceDeclined = true;
+                        refresh(ctx, kindId);
+                    },
+                }));
+            }
+        }
+    }
 
     const hint = element('p', 'muted imp-hint', rememberHint(ctx.data, decision));
     hint.id = `imp-hint-${index}`;
@@ -1412,7 +1684,7 @@ function renderConfirm(ctx) {
         ['Incomes', String(sum.incomes)],
         ['Transfers (not counted)', String(sum.transfers)],
         ['Skipped', String(sum.skipped)],
-        ['Duplicates left out', String(sum.duplicates)],
+        ['Left out as duplicates or possible duplicates', String(sum.duplicates)],
         ['Total out', formatEuro(sum.totalOutCents)],
         ['Total in', formatEuro(sum.totalInCents)],
         ['Period', periodText(sum.periodFrom, sum.periodTo)],

@@ -1,4 +1,4 @@
-import { parseAmount, formatEuro } from '../money.js';
+import { parseAmount, formatEuro, formatPlain } from '../money.js';
 import {
     currentMonthKey,
     monthKeyOf,
@@ -6,11 +6,12 @@ import {
     shortDate,
     todayISO,
 } from '../months.js';
-import { UNCATEGORISED_ID, createId } from '../model.js';
-import { addTemplate, templateToExpense } from '../templates.js';
+import { UNCATEGORISED_ID, createId, removeEntry, restoreEntry } from '../model.js';
+import { addTemplate, templateToExpense, isRepeatTap } from '../templates.js';
 import { describeForeign } from '../currency.js';
 import {
     freezeMonthPlan,
+    newNoLimitCategory,
     syncCategoryPlanFields,
     refreshCurrentMonthPlan,
     monthTotals,
@@ -30,6 +31,10 @@ import {
 import { openSettingsSection } from './more.js';
 import { doExportBackup } from './settings/backup.js';
 import { renderGoalCard } from './goalCard.js';
+import { renderPaydayReminders } from './paydayReminder.js';
+import { renderMoneyBlock } from './homeMoney.js';
+import { moneyNow } from '../balance.js';
+import { rollNumber } from '../motion.js';
 import { entryAmountText } from './entryDisplay.js';
 import {
     amountErrorText,
@@ -51,14 +56,17 @@ const draft = {
     originalAmount: '',
     saveTemplate: false,
     templateName: '',
+    refund: false,
 };
 
 const TEMPLATE_NAME_MAX = 40;
 const SOFT_BACKUP_DAYS = 14;
 const STRONG_BACKUP_DAYS = 30;
+const OVERDUE_BACKUP_DAYS = 60;
 const SNOOZE_DAYS = 7;
 
 const incomeDraft = {
+    sourceId: '',
     incomeCategoryId: '',
     amount: '',
     note: '',
@@ -81,10 +89,48 @@ let addingIncomeCategory = false;
 let addIncomeCategoryName = '';
 let addIncomeCategoryError = '';
 
-/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[] }} */
+/** @type {null | { kind: 'expense' | 'income', amountCents: number, label: string, details?: string[], refund?: boolean }} */
 let lastAdded = null;
 
+let focusFormRequested = false;
+
+/** Returns true once after an Add form was opened from Home or the other form; then clears. */
+export function takeFocusRequest() {
+    const requested = focusFormRequested;
+    focusFormRequested = false;
+    return requested;
+}
+
+/** @returns {'close-panel' | 'home' | null} */
+export function escapeAction(event, quickPanelOpen) {
+    if (event.key !== 'Escape' || event.defaultPrevented === true || event.isComposing === true) {
+        return null;
+    }
+    return quickPanelOpen ? 'close-panel' : 'home';
+}
+
+function onFormEscape(event, quickPanelOpen, ctx) {
+    const action = escapeAction(event, quickPanelOpen);
+    if (action === null) {
+        return;
+    }
+    event.preventDefault();
+    if (action === 'close-panel') {
+        closeQuickPanels();
+    } else {
+        openAddPanel('home');
+    }
+    ctx.render();
+}
+
 export function openAddPanel(next = 'home') {
+    const previous = panel;
+    // Never from 'added': a failed save re-opens the form and must not move scroll or focus.
+    focusFormRequested =
+        (next === 'expense' || next === 'income') && next !== previous && previous !== 'added';
+    if (focusFormRequested && typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+    }
     if (next === 'expense' || next === 'income' || next === 'added') {
         panel = next;
     } else {
@@ -112,10 +158,13 @@ export function addScreenTitle() {
         return 'Add expense';
     }
     if (panel === 'income') {
-        return 'Add extra income';
+        return 'Add income';
     }
     if (panel === 'added') {
-        return lastAdded?.kind === 'income' ? 'Extra income added' : 'Expense added';
+        if (lastAdded?.kind === 'income') {
+            return 'Income added';
+        }
+        return lastAdded?.refund === true ? 'Refund added' : 'Expense added';
     }
     return 'Home';
 }
@@ -180,22 +229,13 @@ function closeQuickPanels() {
     addIncomeCategoryError = '';
 }
 
-function createFlexibleCategory(ctx, name) {
+function createNoLimitCategory(ctx, name) {
     const allowed = canAddExpenseCategory(ctx.data);
     if (allowed.ok !== true) {
         return null;
     }
     const budget = ctx.data.settings.monthlyBudgetCents;
-    const category = {
-        id: createId('cat'),
-        name,
-        pinned: false,
-        percent: 0,
-        limitMode: 'percent',
-        limitCents: 0,
-        system: false,
-        subcategories: [],
-    };
+    const category = newNoLimitCategory(createId('cat'), name);
     ctx.data.categories.push(category);
     syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
@@ -270,7 +310,9 @@ function renderAddedConfirm(root, ctx) {
         element(
             'h2',
             'section-title',
-            lastAdded.kind === 'income' ? 'Extra income added' : 'Expense added',
+            lastAdded.kind === 'income'
+                ? 'Income added'
+                : (lastAdded.refund === true ? 'Refund added' : 'Expense added'),
         ),
         element('p', 'big-number', formatEuro(lastAdded.amountCents)),
         element('p', 'muted', lastAdded.label),
@@ -491,23 +533,34 @@ function addDaysISO(dateISO, days) {
 
 /**
  * Home backup reminder state. Hidden while snoozed or with no entries.
- * @returns {null | { level: 'soft' | 'strong', days: number | null }}
+ * @returns {null | { level: 'soft' | 'strong' | 'overdue', days: number | null }}
  */
 export function backupReminder(data, now = new Date()) {
     if (data.expenses.length + data.incomes.length === 0) {
         return null;
     }
     const today = todayISO(now);
+
+    const last = isoDay(data.settings.lastBackupISO);
     const snoozedUntil = data.settings.backupSnoozedUntil;
-    if (typeof snoozedUntil === 'string' && snoozedUntil !== '' && today < snoozedUntil) {
+    const isSnoozed = typeof snoozedUntil === 'string' && snoozedUntil !== '' && today < snoozedUntil;
+
+    if (last === null) {
+        if (isSnoozed) {
+            return null;
+        }
+        return { level: 'strong', days: null };
+    }
+
+    const days = Math.round((isoDay(today) - last) / 86_400_000);
+    if (days >= OVERDUE_BACKUP_DAYS) {
+        return { level: 'overdue', days };
+    }
+
+    if (isSnoozed) {
         return null;
     }
 
-    const last = isoDay(data.settings.lastBackupISO);
-    if (last === null) {
-        return { level: 'strong', days: null };
-    }
-    const days = Math.round((isoDay(today) - last) / 86_400_000);
     if (days >= STRONG_BACKUP_DAYS) {
         return { level: 'strong', days };
     }
@@ -518,7 +571,8 @@ export function backupReminder(data, now = new Date()) {
 }
 
 function renderBackupReminder(ctx, reminder) {
-    const strong = reminder.level === 'strong';
+    const overdue = reminder.level === 'overdue';
+    const strong = reminder.level === 'strong' || overdue;
     const card = element('section', strong ? 'home-backup is-strong' : 'home-backup');
     card.setAttribute('aria-labelledby', 'home-backup-title');
 
@@ -537,30 +591,42 @@ function renderBackupReminder(ctx, reminder) {
     exportBtn.type = 'button';
     exportBtn.addEventListener('click', () => doExportBackup(ctx));
 
-    const laterBtn = element('button', 'btn btn-ghost', 'Later');
-    laterBtn.type = 'button';
-    laterBtn.addEventListener('click', () => {
-        const previous = ctx.data.settings.backupSnoozedUntil;
-        ctx.data.settings.backupSnoozedUntil = addDaysISO(todayISO(), SNOOZE_DAYS);
-        if (ctx.save() === false) {
-            ctx.data.settings.backupSnoozedUntil = previous;
-            ctx.render();
-            return;
-        }
-        ctx.toast('Reminder snoozed for 7 days');
-    });
-
     const actions = element('div', 'home-backup-actions');
-    actions.append(exportBtn, laterBtn);
+    actions.append(exportBtn);
+
+    if (!overdue) {
+        const laterBtn = element('button', 'btn btn-ghost', 'Later');
+        laterBtn.type = 'button';
+        laterBtn.addEventListener('click', () => {
+            const previous = ctx.data.settings.backupSnoozedUntil;
+            ctx.data.settings.backupSnoozedUntil = addDaysISO(todayISO(), SNOOZE_DAYS);
+            if (ctx.save() === false) {
+                ctx.data.settings.backupSnoozedUntil = previous;
+                ctx.render();
+                return;
+            }
+            ctx.toast('Reminder snoozed for 7 days');
+        });
+        actions.append(laterBtn);
+    }
+
     card.append(title, actions);
     return card;
 }
 
 function templateButtonText(template) {
-    return `${template.name} · ${formatEuro(template.amountCents)}`;
+    return `${template.name} \u00b7 ${formatEuro(template.amountCents)}`;
 }
 
+let lastQuickAdd = null;
+
 function addFromTemplate(ctx, template) {
+    const nowMs = Date.now();
+    if (isRepeatTap(lastQuickAdd, template.id, nowMs)) {
+        return;
+    }
+    lastQuickAdd = { id: template.id, at: nowMs };
+
     const date = todayISO();
     const monthKey = monthKeyOf(date);
     const expense = { id: createId('exp'), ...templateToExpense(template, date) };
@@ -584,7 +650,22 @@ function addFromTemplate(ctx, template) {
         ctx.render();
         return;
     }
-    ctx.toast(`Added ${template.name}`);
+    ctx.toast(`Added ${template.name}`, {
+        label: 'Undo',
+        onClick: () => {
+            const removed = removeEntry(ctx.data, 'expense', expense.id);
+            if (removed === null) {
+                return;
+            }
+            if (ctx.save() === false) {
+                restoreEntry(ctx.data, 'expense', removed.entry, removed.index);
+                ctx.render();
+                return;
+            }
+            ctx.render();
+            ctx.toast(`Removed ${template.name}`);
+        },
+    });
 }
 
 function renderTemplates(ctx) {
@@ -610,6 +691,32 @@ function renderTemplates(ctx) {
     return section;
 }
 
+/** The Home figure: what is left to spend, with savings kept outside the spend budget. */
+export function homeFigureModel(totals) {
+    const over = totals.budgetLeftCents < 0;
+    let sub = `${formatEuro(totals.budgetSpentCents)} spent of ${formatEuro(totals.budgetCents)}`;
+    if (totals.outsideBudgetCents > 0) {
+        sub += ` \u00b7 ${formatEuro(totals.outsideBudgetCents)} saved`;
+    }
+    return {
+        over,
+        label: over ? 'over budget by' : 'left to spend',
+        valueCents: Math.abs(totals.budgetLeftCents),
+        sub,
+    };
+}
+
+/** The muted month-budget line under Money now. */
+export function homeBudgetText(model) {
+    const amount = formatEuro(model.valueCents);
+    return model.over
+        ? `Month budget: ${model.label} ${amount} · ${model.sub}`
+        : `Month budget: ${amount} ${model.label} · ${model.sub}`;
+}
+
+/** Money now as last shown on Home; null until the first Home render since app start. */
+let lastMoneyNowCents = null;
+
 function renderHome(root, ctx) {
     const layout = element('div', 'stack home-page');
     const monthKey = currentMonthKey();
@@ -618,20 +725,17 @@ function renderHome(root, ctx) {
     const monthName = monthLabel(monthKey).split(' ')[0];
     const heading = userName === '' ? monthLabel(monthKey) : `${userName}\u2019s ${monthName}`;
 
-    const over = totals.budgetLeftCents < 0;
-    const figureText = formatEuro(Math.abs(totals.budgetLeftCents));
+    const figureModel = homeFigureModel(totals);
+    const { over, label, valueCents, sub } = figureModel;
+    const figureText = formatEuro(valueCents);
     const figure = element('section', over ? 'home-figure is-over' : 'home-figure');
     figure.setAttribute('aria-labelledby', 'home-figure-label');
-    const figureLabel = element('p', 'home-figure-label', over ? 'over budget by' : 'left to spend');
+    const figureLabel = element('p', 'home-figure-label', label);
     figureLabel.id = 'home-figure-label';
     figure.append(
         figureLabel,
         element('p', figureText.length > 9 ? 'home-figure-value is-long' : 'home-figure-value', figureText),
-        element(
-            'p',
-            'home-figure-sub',
-            `${formatEuro(totals.spentCents)} spent of ${formatEuro(totals.budgetCents)}`,
-        ),
+        element('p', 'home-figure-sub', sub),
     );
 
     const expenseBtn = element('button', 'btn btn-primary', 'Add expense');
@@ -651,11 +755,34 @@ function renderHome(root, ctx) {
     const actions = element('div', 'home-actions');
     actions.append(expenseBtn, incomeBtn);
 
-    layout.append(
-        element('h2', 'home-title', heading),
-        figure,
-        actions,
-    );
+    let figureArea = [figure];
+    const moneyCents = moneyNow(ctx.data);
+    if (moneyCents !== null) {
+        const budgetClass = over ? 'muted home-budget is-over' : 'muted home-budget';
+        const from = lastMoneyNowCents;
+        lastMoneyNowCents = moneyCents;
+        const rolls = from !== null && from !== moneyCents;
+        const moneyBlock = renderMoneyBlock(ctx, rolls ? from : null);
+        if (rolls) {
+            const value = moneyBlock.querySelector('.home-figure-value');
+            rollNumber({
+                from,
+                to: moneyCents,
+                onFrame: (cents) => {
+                    value.textContent = formatEuro(cents);
+                },
+            });
+        }
+        figureArea = [moneyBlock, element('p', budgetClass, homeBudgetText(figureModel))];
+    }
+    layout.append(element('h2', 'home-title', heading), ...figureArea);
+
+    const paydayReminders = renderPaydayReminders(ctx);
+    if (paydayReminders !== null) {
+        layout.append(paydayReminders);
+    }
+
+    layout.append(actions);
 
     const templates = renderTemplates(ctx);
     if (templates !== null) {
@@ -666,7 +793,7 @@ function renderHome(root, ctx) {
         element(
             'p',
             'muted home-auto-note',
-            'Salary and subscriptions are added for you. Everything stays on this device.',
+            'Paydays and subscriptions remind you when they are due. Nothing is added until you confirm it. Everything stays on this device.',
         ),
     );
 
@@ -693,9 +820,19 @@ function renderHome(root, ctx) {
     root.append(layout);
 }
 
+/** The line above the Add income form. */
+export function incomeFormNote(data) {
+    return data.incomeSources.length > 0
+        ? 'Pick the regular income this is, so it counts as received for that month. Choose Other income for a bonus or a gift.'
+        : 'Add any income here, such as a bonus or a gift.';
+}
+
 function renderIncomeForm(root, ctx) {
     if (incomeDraft.date === '') {
         incomeDraft.date = todayISO();
+    }
+    if (!ctx.data.incomeSources.some(({ id }) => id === incomeDraft.sourceId)) {
+        incomeDraft.sourceId = '';
     }
     if (!ctx.data.incomeCategories.some(({ id }) => id === incomeDraft.incomeCategoryId)) {
         incomeDraft.incomeCategoryId = '';
@@ -705,14 +842,30 @@ function renderIncomeForm(root, ctx) {
     form.id = 'add-income-form';
     form.className = 'card stack';
     form.noValidate = true;
+    form.addEventListener('keydown', (event) => {
+        onFormEscape(event, addingIncomeCategory || addingCategory || confirmNoteAsSub, ctx);
+    });
 
-    form.append(
-        element(
-            'p',
-            'muted home-auto-note',
-            'Extra income only, such as a bonus or a gift. Your salary is added automatically each month.',
-        ),
-    );
+    form.append(element('p', 'muted home-auto-note', incomeFormNote(ctx.data)));
+
+    const sourceSelect = document.createElement('select');
+    sourceSelect.append(option('', 'Other income (bonus, gift, ...)'));
+    for (const incomeSource of ctx.data.incomeSources) {
+        sourceSelect.append(option(incomeSource.id, incomeSource.name));
+    }
+    sourceSelect.value = incomeDraft.sourceId;
+    const sourceField = buildField('home-income-source', 'Income from', sourceSelect);
+    sourceSelect.addEventListener('change', () => {
+        incomeDraft.sourceId = sourceSelect.value;
+        const picked = ctx.data.incomeSources.find(({ id }) => id === sourceSelect.value);
+        if (picked !== undefined) {
+            incomeDraft.incomeCategoryId = picked.incomeCategoryId;
+            if (incomeDraft.amount.trim() === '') {
+                incomeDraft.amount = formatPlain(picked.expectedCents, '.');
+            }
+        }
+        ctx.render();
+    });
 
     const categorySelect = document.createElement('select');
     categorySelect.required = true;
@@ -889,7 +1042,7 @@ function renderIncomeForm(root, ctx) {
     const submit = document.createElement('button');
     submit.type = 'submit';
     submit.className = 'btn btn-primary';
-    submit.textContent = 'Add extra income';
+    submit.textContent = 'Add income';
 
     form.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -930,15 +1083,20 @@ function renderIncomeForm(root, ctx) {
         }
 
         const incomeCategoryId = incomeDraft.incomeCategoryId;
+        const sourceId = ctx.data.incomeSources.some(({ id }) => id === incomeDraft.sourceId)
+            ? incomeDraft.sourceId
+            : '';
         ctx.data.incomes.push({
             id: createId('inc'),
             incomeCategoryId,
             amountCents,
             note: incomeDraft.note.trim(),
             date: incomeDraft.date,
+            sourceId,
         });
         freezeMonthPlan(ctx.data, monthKeyOf(incomeDraft.date));
 
+        incomeDraft.sourceId = '';
         incomeDraft.incomeCategoryId = '';
         incomeDraft.amount = '';
         incomeDraft.date = todayISO();
@@ -965,6 +1123,9 @@ function renderIncomeForm(root, ctx) {
         }
     });
 
+    if (ctx.data.incomeSources.length > 0) {
+        form.append(sourceField.wrapper);
+    }
     form.append(
         categoryField.wrapper,
         categoryPanelHost,
@@ -976,8 +1137,11 @@ function renderIncomeForm(root, ctx) {
     );
     root.append(form);
 
+    const focusForm = takeFocusRequest();
     if (addingIncomeCategory) {
         document.getElementById('add-quick-income-category-name')?.focus();
+    } else if (focusForm) {
+        (ctx.data.incomeSources.length > 0 ? sourceSelect : categorySelect).focus();
     }
 }
 
@@ -997,6 +1161,33 @@ export function render(root, ctx) {
     renderExpenseForm(root, ctx);
 }
 
+export function newExpenseRecord({
+    categoryId,
+    subcategoryId,
+    amountCents,
+    note,
+    date,
+    currency,
+    originalAmountCents,
+    refund,
+}) {
+    return {
+        id: createId('exp'),
+        categoryId,
+        subcategoryId,
+        amountCents,
+        note,
+        date,
+        currency,
+        originalAmountCents,
+        refund: refund === true,
+        importId: '',
+        bankRef: '',
+        fingerprint: '',
+        goalId: '',
+    };
+}
+
 function renderExpenseForm(root, ctx) {
     const categories = selectableCategories(ctx.data);
 
@@ -1012,6 +1203,9 @@ function renderExpenseForm(root, ctx) {
     form.id = 'add-form';
     form.className = 'card stack';
     form.noValidate = true;
+    form.addEventListener('keydown', (event) => {
+        onFormEscape(event, addingCategory || confirmNoteAsSub || addingIncomeCategory, ctx);
+    });
 
     const categorySelect = document.createElement('select');
     categorySelect.required = true;
@@ -1072,7 +1266,17 @@ function renderExpenseForm(root, ctx) {
     templateNameInput.maxLength = TEMPLATE_NAME_MAX;
     templateNameInput.value = draft.templateName;
     const templateNameField = buildField('add-template-name', 'Template name', templateNameInput);
-    templateNameField.wrapper.hidden = !draft.saveTemplate;
+    templateNameField.wrapper.hidden = draft.refund || !draft.saveTemplate;
+    templateCheckLabel.hidden = draft.refund;
+
+    const refundCheck = document.createElement('input');
+    refundCheck.type = 'checkbox';
+    refundCheck.id = 'add-refund';
+    refundCheck.checked = draft.refund;
+    const refundLabel = document.createElement('label');
+    refundLabel.className = 'check-row';
+    refundLabel.htmlFor = 'add-refund';
+    refundLabel.append(refundCheck, element('span', '', 'Refund (money back from a shop)'));
 
     const notePlus = document.createElement('button');
     notePlus.type = 'button';
@@ -1192,12 +1396,18 @@ function renderExpenseForm(root, ctx) {
 
     templateCheck.addEventListener('change', () => {
         draft.saveTemplate = templateCheck.checked;
-        templateNameField.wrapper.hidden = !templateCheck.checked;
+        templateNameField.wrapper.hidden = refundCheck.checked || !templateCheck.checked;
         clearError(templateNameField);
         if (templateCheck.checked && templateNameInput.value.trim() === '') {
             templateNameInput.value = defaultTemplateName();
             draft.templateName = templateNameInput.value;
         }
+    });
+    refundCheck.addEventListener('change', () => {
+        draft.refund = refundCheck.checked;
+        templateCheckLabel.hidden = refundCheck.checked;
+        templateNameField.wrapper.hidden = refundCheck.checked || !templateCheck.checked;
+        clearError(templateNameField);
     });
     templateNameInput.addEventListener('input', () => {
         draft.templateName = templateNameInput.value;
@@ -1270,7 +1480,7 @@ function renderExpenseForm(root, ctx) {
                 return;
             }
 
-            const category = createFlexibleCategory(ctx, name);
+            const category = createNoLimitCategory(ctx, name);
             if (category === null) {
                 addCategoryError = canAddExpenseCategory(ctx.data).reason;
                 setError(nameField, addCategoryError);
@@ -1401,7 +1611,7 @@ function renderExpenseForm(root, ctx) {
         const amounts = currency.read();
         const { amountCents } = amounts;
         const date = dateInput.value;
-        const wantsTemplate = templateCheck.checked;
+        const wantsTemplate = templateCheck.checked && !refundCheck.checked;
         const templateName = wantsTemplate
             ? (templateNameInput.value.trim() || defaultTemplateName())
             : '';
@@ -1456,8 +1666,7 @@ function renderExpenseForm(root, ctx) {
 
         const monthKey = monthKeyOf(date);
         const planWasAlreadyFrozen = Object.hasOwn(ctx.data.monthPlans, monthKey);
-        const expense = {
-            id: createId('exp'),
+        const expense = newExpenseRecord({
             categoryId,
             subcategoryId,
             amountCents,
@@ -1465,12 +1674,8 @@ function renderExpenseForm(root, ctx) {
             date,
             currency: amounts.currency,
             originalAmountCents: amounts.originalAmountCents,
-            refund: false,
-            importId: '',
-            bankRef: '',
-            fingerprint: '',
-            goalId: '',
-        };
+            refund: refundCheck.checked,
+        });
 
         ctx.data.expenses.push(expense);
         freezeMonthPlan(ctx.data, monthKey);
@@ -1494,6 +1699,7 @@ function renderExpenseForm(root, ctx) {
         lastAdded = {
             kind: 'expense',
             amountCents,
+            refund: expense.refund,
             label: expenseEntryLabel(ctx.data, categoryId, subcategoryId),
             details: details.filter((line) => line !== ''),
         };
@@ -1527,6 +1733,7 @@ function renderExpenseForm(root, ctx) {
         draft.originalAmount = '';
         draft.saveTemplate = false;
         draft.templateName = '';
+        draft.refund = false;
     });
 
     form.append(
@@ -1536,6 +1743,7 @@ function renderExpenseForm(root, ctx) {
         currency.currencyField.wrapper,
         currency.originalField.wrapper,
         amountField.wrapper,
+        refundLabel,
         noteField.wrapper,
         notePanelHost,
         dateField.wrapper,
@@ -1548,6 +1756,7 @@ function renderExpenseForm(root, ctx) {
     rebuildSubcategories();
     root.append(form);
 
+    const focusForm = takeFocusRequest();
     if (saveError !== '') {
         formError.textContent = saveError;
         formError.hidden = false;
@@ -1561,5 +1770,7 @@ function renderExpenseForm(root, ctx) {
     } else if (focusAmountOnRender) {
         focusAmountOnRender = false;
         amountInput.focus();
+    } else if (focusForm) {
+        categorySelect.focus();
     }
 }

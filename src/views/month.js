@@ -1,13 +1,21 @@
+import { monthBalance } from '../balance.js';
 import { monthTotals, freezeMonthPlan } from '../budget.js';
+import { incomeStatus } from '../incomeSources.js';
 import { formatEuro, formatPlain } from '../money.js';
 import {
     addMonths,
     isInMonth,
+    isMonthFinished,
     monthKeyOf,
     monthLabel,
     shortDate,
 } from '../months.js';
-import { SAVINGS_ID, UNCATEGORISED_ID } from '../model.js';
+import {
+    SAVINGS_ID,
+    UNCATEGORISED_ID,
+    removeEntry,
+    restoreEntry,
+} from '../model.js';
 import { describeForeign } from '../currency.js';
 import { renderMonthNav } from './monthNav.js';
 import {
@@ -18,6 +26,14 @@ import {
 } from './currencyFields.js';
 import { entryAmountText, entryTags } from './entryDisplay.js';
 import { renderSearchPanel } from './searchPanel.js';
+import { signedEuro } from './homeMoney.js';
+import {
+    COLLAPSE_MS,
+    EASE_OUT,
+    afterMotion,
+    collapseKeyframes,
+    prefersReducedMotion,
+} from '../motion.js';
 
 /** @type {{ mode: null | 'edit' | 'confirm-delete', type: null | 'expense' | 'income', id: null | string, draft: object | null, saveError: string, focusError: boolean }} */
 const entryUi = {
@@ -119,26 +135,53 @@ function headline(caption, amountCents, negativeMessage) {
     return wrapper;
 }
 
-function renderSummary(root, totals) {
+/** Lines under the summary: what the month started and ended with, and each regular income. */
+export function monthMoneyLines(data, monthKey, now = new Date()) {
+    const lines = [];
+    const balance = monthBalance(data, monthKey);
+    if (balance !== null) {
+        const from = balance.startsOn === data.settings.balanceStart.date
+            ? ` (from ${shortDate(balance.startsOn)})`
+            : '';
+        lines.push(`Starts with ${formatEuro(balance.openingCents)}${from} \u00b7 Ends with ${formatEuro(balance.closingCents)}`);
+    }
+    for (const item of incomeStatus(data, monthKey, now)) {
+        if (item.state === 'received') {
+            const note = item.receivedCents === item.expectedCents
+                ? ''
+                : ` (expected ${formatEuro(item.expectedCents)}, ${signedEuro(item.receivedCents - item.expectedCents)})`;
+            lines.push(`${item.name}: received ${formatEuro(item.receivedCents)}${note}`);
+        } else if (item.state === 'upcoming') {
+            lines.push(`${item.name}: expected ${formatEuro(item.expectedCents)} on ${shortDate(item.date)}`);
+        } else if (item.state === 'due') {
+            lines.push(`${item.name}: expected since ${shortDate(item.date)}`);
+        } else {
+            lines.push(`${item.name}: skipped this month`);
+        }
+    }
+    return lines;
+}
+
+function renderSummary(root, totals, moneyLines = []) {
     const card = element('section', 'card stack');
-    const longest = Math.max(
-        formatEuro(totals.budgetLeftCents).length,
-        formatEuro(totals.cashLeftCents).length,
-    );
+    const cashHeadline = { caption: 'Cash left', cents: totals.cashLeftCents, note: 'more spent than came in' };
+    const shown = totals.hasBudget
+        ? [{ caption: 'Budget left', cents: totals.budgetLeftCents, note: 'over budget' }, cashHeadline]
+        : [cashHeadline];
+    const longest = Math.max(...shown.map(({ cents }) => formatEuro(cents).length));
     const headlines = element('div', longest > 8 ? 'month-headlines is-long' : 'month-headlines');
-    headlines.append(
-        headline('Budget left', totals.budgetLeftCents, 'over budget'),
-        headline('Cash left', totals.cashLeftCents, 'more spent than came in'),
-    );
+    headlines.append(...shown.map(({ caption, cents, note }) => headline(caption, cents, note)));
+    const spentText = totals.hasBudget
+        ? `Spent ${formatEuro(totals.spentCents)} of ${formatEuro(totals.budgetCents)}`
+        : `Spent ${formatEuro(totals.spentCents)}`;
     card.append(
         headlines,
-        element(
-            'p',
-            'muted',
-            `Spent ${formatEuro(totals.spentCents)} of ${formatEuro(totals.budgetCents)}`
-                + ` \u00b7 Income ${formatEuro(totals.incomeCents)}`,
-        ),
+        element('p', 'muted', `${spentText} \u00b7 Income ${formatEuro(totals.incomeCents)}`),
     );
+    if (!totals.hasBudget) {
+        card.append(element('p', 'muted', 'No budget for this month.'));
+    }
+    card.append(...moneyLines.map((line) => element('p', 'muted', line)));
     root.append(card);
 }
 
@@ -169,10 +212,14 @@ function renderCategories(root, categories, budgetCents) {
         const ofBudgetPercent = budgetCents > 0
             ? (category.spentCents * 100) / budgetCents
             : 0;
-        const amountText = noLimit
+        const noBudgetAtAll = noLimit && budgetCents === 0;
+        let amountText = noLimit
             ? `${formatEuro(category.spentCents)} \u00b7 ${displayPercent(ofBudgetPercent)} of budget`
             : `${formatEuro(category.spentCents)} of `
                 + (category.limitCents === 0 ? 'no budget' : formatEuro(category.limitCents));
+        if (noBudgetAtAll) {
+            amountText = formatEuro(category.spentCents);
+        }
         heading.append(
             element('h3', 'category-name', category.name),
             element('p', 'category-amount', amountText),
@@ -201,7 +248,9 @@ function renderCategories(root, categories, budgetCents) {
         track.setAttribute('aria-valuemin', '0');
         track.setAttribute('aria-valuemax', '100');
         track.setAttribute('aria-valuenow', String(Math.round(width)));
-        if (noLimit) {
+        if (noBudgetAtAll) {
+            track.setAttribute('aria-valuetext', formatEuro(category.spentCents));
+        } else if (noLimit) {
             track.setAttribute(
                 'aria-valuetext',
                 `${displayPercent(ofBudgetPercent)} of monthly budget`,
@@ -212,9 +261,13 @@ function renderCategories(root, categories, budgetCents) {
         track.append(fill);
 
         item.append(heading, track);
-        if (noLimit) {
+        if (noLimit && !noBudgetAtAll) {
             const details = element('div', 'row category-details');
-            details.append(element('span', 'muted', 'No limit'));
+            details.append(element(
+                'span',
+                'muted',
+                category.id === SAVINGS_ID ? 'Saved, not part of the spend budget' : 'No limit',
+            ));
             item.append(details);
         }
         if (category.over) {
@@ -500,17 +553,15 @@ function saveIncomeEdit(ctx, income, fields, currency) {
 }
 
 function confirmDeleteEntry(ctx, type, entry) {
-    const list = type === 'expense' ? ctx.data.expenses : ctx.data.incomes;
-    const index = list.findIndex(({ id }) => id === entry.id);
-    if (index === -1) {
+    const removed = removeEntry(ctx.data, type, entry.id);
+    if (removed === null) {
         closeEntryUi();
         ctx.render();
         return;
     }
 
-    const [removed] = list.splice(index, 1);
     if (ctx.save() === false) {
-        list.splice(index, 0, removed);
+        restoreEntry(ctx.data, type, removed.entry, removed.index);
         entryUi.saveError = 'Could not save to this device. Nothing was deleted. Try again.';
         entryUi.focusError = true;
         ctx.render();
@@ -519,7 +570,19 @@ function confirmDeleteEntry(ctx, type, entry) {
 
     closeEntryUi();
     ctx.render();
-    ctx.toast('Deleted');
+    ctx.toast('Deleted', {
+        label: 'Undo',
+        onClick: () => {
+            restoreEntry(ctx.data, type, removed.entry, removed.index);
+            if (ctx.save() === false) {
+                removeEntry(ctx.data, type, removed.entry.id);
+                ctx.render();
+                return;
+            }
+            ctx.render();
+            ctx.toast('Entry restored');
+        },
+    });
 }
 
 function renderExpenseEditor(ctx, expense) {
@@ -805,13 +868,35 @@ function renderIncomeEditor(ctx, income) {
     return form;
 }
 
+let collapsing = false;
+
+/** Folds the row away; null when it must go at once (Reduce Motion, or no Web Animations). */
+function collapseEntry(item) {
+    if (prefersReducedMotion() || typeof item?.animate !== 'function') {
+        return null;
+    }
+    const inner = element('div', '');
+    inner.style.minHeight = '0';
+    inner.style.overflow = 'hidden';
+    inner.append(...item.childNodes);
+    item.append(inner);
+    item.style.display = 'grid';
+    item.style.gridTemplateRows = '1fr';
+    const animation = item.animate(collapseKeyframes(), {
+        duration: COLLAPSE_MS,
+        easing: EASE_OUT,
+        fill: 'forwards',
+    });
+    return afterMotion(animation, COLLAPSE_MS + 150);
+}
+
 function renderDeleteConfirm(ctx, type, entry) {
     const box = element('div', 'confirm-box');
     box.setAttribute('role', 'group');
 
     const message = type === 'expense'
-        ? 'Delete this expense? This cannot be undone.'
-        : 'Delete this income? This cannot be undone.';
+        ? 'Delete this expense?'
+        : 'Delete this income?';
 
     const formError = element('p', 'error-text');
     formError.setAttribute('role', 'alert');
@@ -829,8 +914,20 @@ function renderDeleteConfirm(ctx, type, entry) {
             closeEntryUi();
             ctx.render();
         }),
-        actionButton('btn btn-danger', 'Delete', () => {
-            confirmDeleteEntry(ctx, type, entry);
+        actionButton('btn btn-danger', 'Delete', (event) => {
+            if (collapsing) {
+                return;
+            }
+            const folded = collapseEntry(event.currentTarget.closest('.entry-item'));
+            if (folded === null) {
+                confirmDeleteEntry(ctx, type, entry);
+                return;
+            }
+            collapsing = true;
+            folded.then(() => {
+                collapsing = false;
+                confirmDeleteEntry(ctx, type, entry);
+            });
         }),
     );
 
@@ -842,9 +939,14 @@ function renderDeleteConfirm(ctx, type, entry) {
     return box;
 }
 
-function renderEntry(ctx, item) {
+function renderEntry(ctx, item, highlightId) {
     const { entry, type } = item;
     const wrap = element('div', 'entry-item');
+    if (entry.id === highlightId) {
+        // is-settled starts the fade to transparent; it needs one painted frame with is-new alone.
+        wrap.classList.add('is-new');
+        requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('is-settled')));
+    }
     const row = element('div', 'entry-row');
     const description = element('div', 'entry-description');
     const label = type === 'expense'
@@ -910,6 +1012,7 @@ function renderEntry(ctx, item) {
 }
 
 function renderEntries(root, ctx, entries, label) {
+    const highlightId = ctx.takeHighlightId?.() ?? null;
     if (entries.length === 0) {
         const empty = element('section', 'card empty-state');
         const message = element('p', '', `Nothing recorded in ${label}.`);
@@ -925,7 +1028,7 @@ function renderEntries(root, ctx, entries, label) {
     card.append(element('h2', 'section-title', 'Entries'));
     const list = element('div', 'entry-list');
     for (const item of entries) {
-        list.append(renderEntry(ctx, item));
+        list.append(renderEntry(ctx, item, highlightId));
     }
     card.append(list);
     root.append(card);
@@ -933,19 +1036,21 @@ function renderEntries(root, ctx, entries, label) {
 
 export function render(root, ctx) {
     const totals = monthTotals(ctx.data, ctx.monthKey);
-    const previousMonthKey = addMonths(ctx.monthKey, -1);
-    const previousTotals = monthTotals(ctx.data, previousMonthKey);
     const label = monthLabel(ctx.monthKey);
     const entries = monthEntries(ctx.data, ctx.monthKey);
 
     const layout = element('div', 'stack');
     renderMonthNav(layout, ctx);
-    renderSummary(layout, totals);
-    layout.append(element('p', 'muted month-comparison', comparisonText(
-        totals,
-        previousTotals,
-        previousMonthKey,
-    )));
+    renderSummary(layout, totals, monthMoneyLines(ctx.data, ctx.monthKey, new Date()));
+    if (isMonthFinished(ctx.monthKey, new Date())) {
+        const previousMonthKey = addMonths(ctx.monthKey, -1);
+        const previousTotals = monthTotals(ctx.data, previousMonthKey);
+        layout.append(element('p', 'muted month-comparison', comparisonText(
+            totals,
+            previousTotals,
+            previousMonthKey,
+        )));
+    }
     renderCategories(layout, totals.categories, totals.budgetCents);
     layout.append(renderSearchPanel(ctx));
     renderEntries(layout, ctx, entries, label);

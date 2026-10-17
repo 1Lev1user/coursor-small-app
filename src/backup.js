@@ -17,6 +17,31 @@ export function exportBackup(data, now) {
     };
 }
 
+/** Sets today as the last backup day and returns the previous value (null when absent). */
+export function markBackedUp(data, now = new Date()) {
+    const previous = data.settings.lastBackupISO ?? null;
+    data.settings.lastBackupISO = todayISO(now);
+    return previous;
+}
+
+/** Entry counts and the earliest and latest entry date ('' when there are none). */
+export function describeBackup(data) {
+    const dates = [...data.expenses, ...data.incomes]
+        .map(({ date }) => date)
+        .filter((date) => typeof date === 'string' && date !== '')
+        .sort();
+    return {
+        ...countRecords(data),
+        firstDate: dates[0] ?? '',
+        lastDate: dates.at(-1) ?? '',
+    };
+}
+
+/** A restored file keeps its own backup day; a file without one counts as backed up today. */
+export function restoredLastBackup(incomingISO, today) {
+    return typeof incomingISO === 'string' && incomingISO !== '' ? incomingISO : today;
+}
+
 export function importBackup(rawText) {
     let parsed;
     try {
@@ -33,7 +58,7 @@ export function importBackup(rawText) {
     return { ok: true, data: result.data };
 }
 
-const LOCAL_SETTINGS = ['userName', 'lastBackupISO', 'backupSnoozedUntil', 'monthReviewDismissedFor'];
+const LOCAL_SETTINGS = ['userName', 'lastBackupISO', 'backupSnoozedUntil', 'monthReviewDismissedFor', 'balanceStart'];
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -103,6 +128,18 @@ export function mergeSettingsOnly(current, backup) {
         }
     }
 
+    // Pitfall: income sources no local income uses are replaced by the
+    // backup's list, which may be empty.
+    next.incomeSources = incoming.incomeSources ?? [];
+    for (const income of current.incomes) {
+        if (income.sourceId && !next.incomeSources.some(({ id }) => id === income.sourceId)) {
+            const local = (current.incomeSources ?? []).find(({ id }) => id === income.sourceId);
+            if (local !== undefined) {
+                next.incomeSources.push(clone(local));
+            }
+        }
+    }
+
     next.subscriptions = incoming.subscriptions;
     next.rules = incoming.rules ?? [];
     next.templates = incoming.templates ?? [];
@@ -119,5 +156,6 @@ export function countSettings(data) {
         rules: (data.rules ?? []).length,
         templates: (data.templates ?? []).length,
         goals: (data.goals ?? []).length,
+        incomeSources: (data.incomeSources ?? []).length,
     };
 }

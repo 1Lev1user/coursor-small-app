@@ -24,7 +24,7 @@ export function renderRightsSection() {
         element(
             'p',
             'muted',
-            'The fonts Onest and Unbounded are not his work. They are used under the '
+            'The fonts Golos Text and Literata are not his work. They are used under the '
                 + 'SIL Open Font License 1.1.',
         ),
         element('h3', 'category-name', 'Your data'),

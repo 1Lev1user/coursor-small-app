@@ -179,3 +179,7 @@ export function compareMonthKeys(a, b) {
 
     return first.month - second.month;
 }
+
+export function isMonthFinished(monthKey, now = new Date()) {
+    return compareMonthKeys(monthKey, currentMonthKey(now)) < 0;
+}

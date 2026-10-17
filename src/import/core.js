@@ -1,6 +1,7 @@
 import { createId, UNCATEGORISED_ID } from '../model.js';
 import { buildPlanSnapshot, freezeMonthPlan } from '../budget.js';
 import { compareMonthKeys, currentMonthKey, monthKeyOf } from '../months.js';
+import { subcategoryForMcc } from './mcc.js';
 
 export const KINDS = ['expense', 'income', 'refund', 'transfer', 'skip'];
 export const RULE_KINDS = ['expense', 'income', 'transfer', 'skip'];
@@ -47,6 +48,25 @@ export function fingerprint(row) {
     return [row.date, amountKey(row), row.direction, rowText(row)].join('|');
 }
 
+// The text part of a stored fingerprint (date|amount|direction|text, optional #n).
+// The text may contain '|', so only the first three are separators. Returns the
+// candidates to compare with a row's text, or [] when the fingerprint is not in that form.
+function storedTexts(fp) {
+    if (typeof fp !== 'string') return [];
+    let start = -1;
+    for (let i = 0; i < 3; i += 1) {
+        start = fp.indexOf('|', start + 1);
+        if (start === -1) return [];
+    }
+    const tail = fp.slice(start + 1);
+    return [tail, tail.replace(/#\d+$/, '')];
+}
+
+// A bank transaction id such as RF2026091400001; running numbers and short references are reused.
+function isStrongReference(ref) {
+    return ref.length >= 12 && !/^\d+$/.test(ref);
+}
+
 export function makeFingerprints(rows) {
     const seen = new Map();
     return rows.map((row) => {
@@ -82,7 +102,8 @@ function isManual(entry) {
 }
 
 /**
- * Exact: same non-empty bankRef or same stored fingerprint.
+ * Exact: same stored fingerprint, or same non-empty bankRef with the same amount and either a date
+ *   within 1 day, equal text, or a strong reference (not purely digits, 12+ characters) within 5 days.
  * Probable: a manual or subscription-logged entry (no importId) with the same date, amount and direction.
  * Weak: any stored entry with the same amount and direction within +-2 days.
  * Each stored entry is claimed by at most one row, so two identical rows against one stored entry
@@ -100,15 +121,20 @@ export function findDuplicates(data, rows) {
         }
         if (item.entry.fingerprint) byFingerprint.set(item.entry.fingerprint, item);
     }
-    // A bank reference only proves a duplicate together with the same amount
-    // and a date within a few days: some banks reuse references.
+    // A bank reference only proves a duplicate together with the same amount and
+    // a close date, the same text or a strong reference: some banks reuse references.
     const byReference = (row) => {
         if (!row.bankRef) return undefined;
         const day = dayNumber(row.date);
+        const text = rowText(row);
         return (byBankRef.get(`${row.direction}|${row.bankRef}`) ?? []).find(({ entry }) => {
             const entryDay = dayNumber(entry.date);
-            return (entry.amountCents === row.amountCents || entry.originalAmountCents === row.originalAmountCents)
-                && day !== null && entryDay !== null && Math.abs(day - entryDay) <= 5;
+            if (!(entry.amountCents === row.amountCents || entry.originalAmountCents === row.originalAmountCents)
+                || day === null || entryDay === null) return false;
+            const gap = Math.abs(day - entryDay);
+            return gap <= 1
+                || (text !== '' && storedTexts(entry.fingerprint).includes(text))
+                || (gap <= 5 && isStrongReference(row.bankRef));
         });
     };
 
@@ -190,19 +216,27 @@ function stripNoise(upper) {
         .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
 }
 
+function keepName(token) {
+    if (!/\d/.test(token)) return token;
+    const name = token.replace(/\d{4,}$/, '').replace(/[.'-]+$/g, '');
+    return name.replace(/[^\p{L}]/gu, '').length >= 2 ? name : '';
+}
+
 /**
  * Rule: take the first meaningful word. Leading noise words (POS, PIRKUMS, CARD) are skipped.
  * After a legal form (SIA, AS, UAB, OU) up to two name words are kept: 'SIA Circle K Latvia' -> 'CIRCLE K'.
  * After a payment processor (PAYPAL, SUMUP, SQ, IZ) the merchant is kept too: 'PAYPAL *SPOTIFY' -> 'PAYPAL SPOTIFY'.
- * Tokens with digits, card masks, dates, times, trailing Baltic cities and country codes are dropped.
+ * All-digit tokens are dropped. A name with digits is kept ('TELE2 SIA' -> 'TELE2'); a trailing run of
+ * 4 or more digits is cut ('BOLT.EUR2610011807' -> 'BOLT.EUR'). A legal form on its own gives ''.
+ * Card masks, dates, times, trailing Baltic cities and country codes are dropped.
  */
 export function extractPattern(description) {
     const cleaned = stripNoise(String(description ?? '').toUpperCase())
         .replace(/[^\p{L}\p{N}&'.-]+/gu, ' ');
     const tokens = cleaned
         .split(' ')
-        .map((token) => token.replace(/^[.'-]+|[.'-]+$/g, ''))
-        .filter((token) => token !== '' && !/\d/.test(token));
+        .map((token) => keepName(token.replace(/^[.'-]+|[.'-]+$/g, '')))
+        .filter((token) => token !== '');
 
     while (tokens.length > 0 && TRAILING_PLACES.has(tokens[tokens.length - 1])) {
         tokens.pop();
@@ -219,7 +253,7 @@ export function extractPattern(description) {
     if (PROCESSORS.has(first) && tokens.length > 1) {
         return tokens.slice(0, 2).join(' ');
     }
-    return first;
+    return LEGAL_FORMS.has(first) ? '' : first;
 }
 
 export function ruleKind(rule) {
@@ -347,19 +381,31 @@ function suggestedRule(rules, row) {
     return shop ? { rule: shop, kind: 'refund' } : { rule: null, kind: '' };
 }
 
+/** The category the card payment's MCC points to, when the row is money out and that subcategory still exists. */
+function mccSuggestion(data, row) {
+    const subcategoryId = row.direction === 'out' ? subcategoryForMcc(row.mcc) : '';
+    if (subcategoryId === '') return null;
+    const category = (data.categories ?? []).find(
+        ({ subcategories }) => (subcategories ?? []).some(({ id }) => id === subcategoryId),
+    );
+    return category ? { categoryId: category.id, subcategoryId } : null;
+}
+
 /**
- * Pre-filled decisions for the wizard: rules applied, exact duplicates excluded.
+ * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
+ * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
     return rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
+        const hint = rule ? null : mccSuggestion(data, row);
         const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
         return {
-            include: duplicates[index]?.level !== 'exact' && duplicates[index]?.level !== 'probable',
+            include: !duplicates[index]?.level,
             kind,
-            categoryId: rule?.categoryId || UNCATEGORISED_ID,
-            subcategoryId: rule?.subcategoryId ?? '',
+            categoryId: rule?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
+            subcategoryId: rule?.subcategoryId ?? hint?.subcategoryId ?? '',
             incomeCategoryId: rule?.incomeCategoryId || defaultIncomeCategoryId(data),
             remember: false,
             ruleId: rule?.id ?? '',
@@ -512,6 +558,10 @@ export function buildImport(data, decisions, meta) {
                 id: createId('inc'),
                 incomeCategoryId: decision.incomeCategoryId,
                 ...shared,
+                ...(decision.sourceId
+                    && (data.incomeSources ?? []).some(({ id }) => id === decision.sourceId)
+                    ? { sourceId: decision.sourceId }
+                    : {}),
             });
             counts.incomes += 1;
             totalInCents += amountCents;
@@ -526,6 +576,10 @@ export function buildImport(data, decisions, meta) {
             ...shared,
             refund,
             goalId: '',
+            ...(decision.kind === 'expense' && decision.subscriptionId
+                && (data.subscriptions ?? []).some(({ id }) => id === decision.subscriptionId)
+                ? { subscriptionId: decision.subscriptionId }
+                : {}),
         });
         if (refund) {
             counts.refunds += 1;

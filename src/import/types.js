@@ -8,9 +8,10 @@
  * @property {string} description
  * @property {string} counterparty
  * @property {string} bankRef
+ * @property {string} [mcc] four-digit merchant category code of a card payment; absent otherwise
  */
 
-export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'paste'];
+export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'xls', 'paste'];
 
 export function statementRow(fields) {
     const currency = typeof fields.currency === 'string' && /^[A-Z]{3}$/.test(fields.currency)
@@ -32,6 +33,7 @@ export function statementRow(fields) {
         description: String(fields.description ?? '').replace(/\s+/g, ' ').trim(),
         counterparty: String(fields.counterparty ?? '').replace(/\s+/g, ' ').trim(),
         bankRef: String(fields.bankRef ?? '').trim(),
+        ...(/^\d{4}$/.test(fields.mcc ?? '') ? { mcc: fields.mcc } : {}),
     };
 }
 

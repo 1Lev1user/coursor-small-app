@@ -18,6 +18,7 @@ export const state = {
     confirmSubKey: null,
     renameCategoryId: null,
     renameSubKey: null,
+    openCategoryId: null,
 
     confirmIncomeCategoryId: null,
     renameIncomeCategoryId: null,
@@ -33,11 +34,18 @@ export const state = {
     subscriptionEditError: '',
     focusSubscriptionEditError: false,
 
+    editTemplateId: null,
+    confirmTemplateId: null,
+    templateEditDraft: null,
+    templateEditError: '',
+
     pendingImportText: null,
     pendingImportCounts: null,
+    pendingImportIncoming: null,
     importError: '',
 
     confirmDeletePreUpdate: false,
+    confirmRestorePreUpdate: false,
     confirmDeleteRescue: false,
 };
 
@@ -53,6 +61,10 @@ export function closeTransientUi() {
     state.subscriptionEditDraft = null;
     state.subscriptionEditError = '';
     state.focusSubscriptionEditError = false;
+    state.editTemplateId = null;
+    state.confirmTemplateId = null;
+    state.templateEditDraft = null;
+    state.templateEditError = '';
     state.editIncomeId = null;
     state.confirmIncomeEntryId = null;
     state.incomeEntryDraft = null;
@@ -60,8 +72,10 @@ export function closeTransientUi() {
     state.focusIncomeEntryError = false;
     state.pendingImportText = null;
     state.pendingImportCounts = null;
+    state.pendingImportIncoming = null;
     state.importError = '';
     state.confirmDeletePreUpdate = false;
+    state.confirmRestorePreUpdate = false;
     state.confirmDeleteRescue = false;
     state.renameDrafts.clear();
     state.editPlanCategoryId = null;
@@ -163,7 +177,7 @@ export function buildLimitAmountField(id, labelText, draft, ctx, onInput) {
         const budget = ctx.data.settings.monthlyBudgetCents;
         const nextUnit = draft.limitUnit === 'euro' ? 'percent' : 'euro';
         if (nextUnit === 'euro' && budget <= 0) {
-            setError(field, 'Save a monthly spend budget first.');
+            setError(field, 'Save a monthly budget first.');
             return;
         }
 
@@ -354,7 +368,7 @@ export function saveCategoryPlan(ctx, category, draft, amountField) {
         refreshCurrentMonthPlan(ctx.data);
         closeTransientUi();
         if (persist(ctx)) {
-            ctx.toast('Plan updated');
+            ctx.toast('Limit updated');
         }
         return;
     }
@@ -367,14 +381,14 @@ export function saveCategoryPlan(ctx, category, draft, amountField) {
         refreshCurrentMonthPlan(ctx.data);
         closeTransientUi();
         if (persist(ctx)) {
-            ctx.toast('Plan updated');
+            ctx.toast('Limit updated');
         }
         return;
     }
 
     if (draft.limitUnit === 'euro') {
         if (budget <= 0) {
-            draft.error = 'Save a monthly spend budget first.';
+            draft.error = 'Save a monthly budget first.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;
@@ -393,7 +407,7 @@ export function saveCategoryPlan(ctx, category, draft, amountField) {
         }
 
         if (category.id === SAVINGS_ID && cents > budget) {
-            draft.error = 'Savings cannot exceed the monthly spend budget.';
+            draft.error = 'Savings cannot exceed the monthly budget.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;
@@ -413,7 +427,7 @@ export function saveCategoryPlan(ctx, category, draft, amountField) {
         }
 
         if (category.id === SAVINGS_ID && (percent < 0 || percent > 100)) {
-            draft.error = 'Savings must be from 0% to 100% of the monthly spend budget.';
+            draft.error = 'Savings must be from 0% to 100% of the monthly budget.';
             setError(amountField, draft.error);
             amountField.control.focus();
             return;
@@ -444,14 +458,14 @@ export function saveCategoryPlan(ctx, category, draft, amountField) {
     refreshCurrentMonthPlan(ctx.data);
     closeTransientUi();
     if (persist(ctx)) {
-        ctx.toast('Plan updated');
+        ctx.toast('Limit updated');
     }
 }
 
 export function renderCategoryPlanKindChoice(draft, amountField, ctx, { allowFlexible = true } = {}) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
-    legend.textContent = 'Share';
+    legend.textContent = 'Limit';
     fieldset.append(legend);
 
     const row = element('div', 'choice-row');

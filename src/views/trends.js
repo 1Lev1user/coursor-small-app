@@ -3,6 +3,7 @@ import { formatEuro } from '../money.js';
 import {
     addMonths,
     isInMonth,
+    isMonthFinished,
     monthLabel,
     shortMonthName,
 } from '../months.js';
@@ -284,7 +285,7 @@ function changeText(deltaCents) {
     return 'no change';
 }
 
-function renderChangeItems(list, changes) {
+function renderChangeItems(list, changes, noPrevious) {
     const visible = state.showAllChanges ? changes : changes.slice(0, TOP_CHANGES);
     list.replaceChildren(...visible.map((change) => {
         const item = element('li', 'changes-item');
@@ -296,7 +297,7 @@ function renderChangeItems(list, changes) {
         const values = element('div', 'changes-values');
         values.append(
             element('span', 'changes-current', formatEuro(change.currentCents)),
-            element('span', 'changes-delta', changeText(change.deltaCents)),
+            element('span', 'changes-delta', noPrevious ? 'nothing to compare' : changeText(change.deltaCents)),
         );
         item.append(text, values);
         return item;
@@ -304,17 +305,25 @@ function renderChangeItems(list, changes) {
 }
 
 function renderChanges(ctx) {
+    if (!isMonthFinished(ctx.monthKey, new Date())) {
+        return null;
+    }
+
     const section = element('section', 'card stack changes-card');
     section.append(element('h3', 'section-title', 'Changes vs last month'));
+
+    const previousLabel = monthLabel(addMonths(ctx.monthKey, -1));
+    const changes = categoryChanges(ctx.data, ctx.monthKey)
+        .filter(({ currentCents, previousCents }) => currentCents !== 0 || previousCents !== 0);
+    const noPrevious = changes.length > 0 && changes.every(({ previousCents }) => previousCents === 0);
     section.append(element(
         'p',
         'muted',
-        `${monthLabel(ctx.monthKey)} compared with ${monthLabel(addMonths(ctx.monthKey, -1))}. `
-            + 'Average covers up to 6 earlier months with spending.',
+        noPrevious
+            ? `No spending recorded in ${previousLabel} to compare with.`
+            : `${monthLabel(ctx.monthKey)} compared with ${previousLabel}. `
+                + 'Average covers up to 6 earlier months with spending.',
     ));
-
-    const changes = categoryChanges(ctx.data, ctx.monthKey)
-        .filter(({ currentCents, previousCents }) => currentCents !== 0 || previousCents !== 0);
     if (changes.length === 0) {
         section.append(element('p', 'muted', 'No spending in either month.'));
         return section;
@@ -322,7 +331,7 @@ function renderChanges(ctx) {
 
     const list = element('ul', 'changes-list');
     list.id = 'trends-changes-list';
-    renderChangeItems(list, changes);
+    renderChangeItems(list, changes, noPrevious);
     section.append(list);
 
     if (changes.length > TOP_CHANGES) {
@@ -335,7 +344,7 @@ function renderChanges(ctx) {
         };
         toggle.addEventListener('click', () => {
             state.showAllChanges = !state.showAllChanges;
-            renderChangeItems(list, changes);
+            renderChangeItems(list, changes, noPrevious);
             syncToggle();
         });
         syncToggle();
@@ -392,6 +401,10 @@ export function renderTrends(root, ctx) {
         `Average ${formatEuro(averageCents)} counts only the ${monthsWithData.length} ${monthsWord} with spending. `
             + 'Tap a bar for details.',
     ));
-    section.append(card, renderChanges(ctx));
+    section.append(card);
+    const changesCard = renderChanges(ctx);
+    if (changesCard !== null) {
+        section.append(changesCard);
+    }
     root.append(section);
 }

@@ -8,16 +8,21 @@ import { downloadText } from './files.js';
 import { currentMonthKey, monthKeyOf, todayISO } from './months.js';
 import { parseAmount, formatEuro, formatPlain } from './money.js';
 import { createId } from './model.js';
-import { freezeMonthPlan } from './budget.js';
-import { dueSubscriptions } from './subscriptions.js';
+import { freezeMonthPlan, freezeElapsedMonths } from './budget.js';
+import { dueSubscriptions, skipSubscriptionMonth } from './subscriptions.js';
 import { render as renderAdd, openAddPanel, addScreenTitle } from './views/add.js';
 import { render as renderMonth } from './views/month.js';
 import { render as renderChart } from './views/chartView.js';
 import { render as renderMore } from './views/more.js';
 import { render as renderSetup } from './views/setup.js';
+import { render as renderMoneySetup } from './views/moneySetup.js';
 import { render as renderImport } from './views/import.js';
+import { selectOnFocus } from './inputFocus.js';
+import { entryIdSet, findNewEntryId, runWithTransition, transitionKind } from './motion.js';
 
 const TOAST_MS = 2000;
+const UNDO_TOAST_MS = 8000;
+const TOAST_HIDE_FALLBACK_MS = 300;
 
 const views = {
     add: { render: renderAdd },
@@ -42,6 +47,12 @@ const tabbarElement = document.getElementById('tabbar');
 const tabButtons = [...tabbarElement.querySelectorAll('[data-tab]')];
 
 let toastTimer = null;
+let toastHideTimer = null;
+let toastSequence = 0;
+
+// Entry ids as of the last successful save; the one new id after a save is highlighted in Month.
+let knownEntryIds = entryIdSet(app.data);
+let highlightId = null;
 
 const duePrompt = {
     subscriptionId: null,
@@ -50,34 +61,98 @@ const duePrompt = {
     deleting: false,
 };
 
-function toast(message) {
-    let node = document.getElementById('toast');
+// "subscriptionId:monthKey" of reminders the owner chose Later for; cleared by a reload.
+const postponedDue = new Set();
 
-    if (node === null) {
-        node = document.createElement('div');
-        node.id = 'toast';
-        node.className = 'toast';
-        node.setAttribute('role', 'status');
-        node.setAttribute('aria-live', 'polite');
-        document.body.append(node);
+/** Runs `then` once the toast's fade-out ends (or after a fallback); a newer call supersedes it. */
+function afterToastHidden(node, then) {
+    const sequence = ++toastSequence;
+    clearTimeout(toastHideTimer);
+    const finish = () => {
+        node.removeEventListener('transitionend', onEnd);
+        if (sequence !== toastSequence) {
+            return;
+        }
+        clearTimeout(toastHideTimer);
+        then();
+    };
+    const onEnd = (event) => {
+        if (event.target === node && event.propertyName === 'opacity') {
+            finish();
+        }
+    };
+    node.addEventListener('transitionend', onEnd);
+    toastHideTimer = setTimeout(finish, TOAST_HIDE_FALLBACK_MS);
+}
+
+function hideToast(node) {
+    node.classList.remove('is-shown');
+    afterToastHidden(node, () => node.remove());
+}
+
+function fillToast(node, message, action) {
+    node.textContent = message;
+    if (action !== undefined) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'toast-action';
+        button.textContent = action.label;
+        button.addEventListener('click', () => {
+            clearTimeout(toastTimer);
+            hideToast(node);
+            action.onClick();
+        });
+        node.append(button);
+    }
+    toastTimer = setTimeout(
+        () => hideToast(node),
+        action === undefined ? TOAST_MS : UNDO_TOAST_MS,
+    );
+}
+
+function toast(message, action) {
+    let node = document.getElementById('toast');
+    clearTimeout(toastTimer);
+
+    if (node !== null) {
+        // Hide the toast on screen, then show the new one so the enter motion plays again.
+        node.classList.remove('is-shown');
+        afterToastHidden(node, () => {
+            fillToast(node, message, action);
+            node.classList.add('is-shown');
+        });
+        return;
     }
 
-    node.textContent = message;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => node.remove(), TOAST_MS);
+    node = document.createElement('div');
+    node.id = 'toast';
+    node.className = 'toast';
+    node.setAttribute('role', 'status');
+    node.setAttribute('aria-live', 'polite');
+    document.body.append(node);
+    fillToast(node, message, action);
+    void node.offsetWidth; // commit the hidden state so the enter transition runs
+    node.classList.add('is-shown');
 }
 
 function save() {
     const saved = saveToStorage(app.data);
-    if (!saved) {
-        if (storedIsNewer()) {
-            app.storageIssue = { status: 'newer' };
-        } else {
-            toast('Could not save to this device');
-        }
+    if (saved) {
+        highlightId = findNewEntryId(knownEntryIds, app.data) ?? highlightId;
+        knownEntryIds = entryIdSet(app.data);
+    } else if (storedIsNewer()) {
+        app.storageIssue = { status: 'newer' };
+    } else {
+        toast('Could not save to this device');
     }
     render();
     return saved;
+}
+
+function takeHighlightId() {
+    const id = highlightId;
+    highlightId = null;
+    return id;
 }
 
 function setMonthKey(key) {
@@ -93,11 +168,16 @@ function goTo(tab, options = {}) {
         return;
     }
 
+    const changed = tab !== app.tab;
+
     if (tab === 'add') {
         openAddPanel(options.panel ?? 'home');
     }
 
     app.tab = tab;
+    if (changed) {
+        window.scrollTo(0, 0);
+    }
     render();
 }
 
@@ -110,6 +190,7 @@ function context() {
         setMonthKey,
         goTo,
         toast,
+        takeHighlightId,
     };
 }
 
@@ -177,6 +258,33 @@ function confirmDueSubscription(subscription, amountField) {
     }
 
     toast('Subscription logged');
+}
+
+function postponeDueSubscription(subscription) {
+    postponedDue.add(`${subscription.id}:${currentMonthKey()}`);
+    render();
+}
+
+function skipDueSubscription(subscription, typedAmount) {
+    const monthKey = currentMonthKey();
+    const had = (subscription.skippedMonths ?? []).includes(monthKey);
+
+    skipSubscriptionMonth(app.data, subscription.id, monthKey);
+
+    if (save() === false) {
+        if (!had) {
+            const skipped = subscription.skippedMonths;
+            skipped.splice(skipped.indexOf(monthKey), 1);
+        }
+        duePrompt.subscriptionId = subscription.id;
+        duePrompt.amount = typedAmount;
+        duePrompt.error = '';
+        duePrompt.deleting = false;
+        render();
+        return;
+    }
+
+    toast('Skipped for this month');
 }
 
 function deleteDueSubscription(subscription) {
@@ -355,9 +463,21 @@ function renderDuePrompt(subscription) {
     confirmButton.className = 'btn btn-primary';
     confirmButton.textContent = 'Confirm';
 
+    const laterButton = document.createElement('button');
+    laterButton.type = 'button';
+    laterButton.className = 'btn btn-ghost';
+    laterButton.textContent = 'Later';
+    laterButton.addEventListener('click', () => postponeDueSubscription(subscription));
+
+    const skipButton = document.createElement('button');
+    skipButton.type = 'button';
+    skipButton.className = 'btn btn-ghost';
+    skipButton.textContent = 'Skip this month';
+    skipButton.addEventListener('click', () => skipDueSubscription(subscription, amountInput.value));
+
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
-    deleteButton.className = 'btn btn-danger';
+    deleteButton.className = 'btn btn-ghost-danger';
     deleteButton.textContent = 'Delete subscription';
     deleteButton.addEventListener('click', () => {
         duePrompt.amount = amountInput.value;
@@ -372,16 +492,15 @@ function renderDuePrompt(subscription) {
         confirmDueSubscription(subscription, amountField);
     });
 
-    actions.append(confirmButton, deleteButton);
+    actions.append(confirmButton, laterButton, skipButton, deleteButton);
     form.append(amountField.wrapper, actions);
     card.append(title, name, meta, form);
     overlay.append(card);
     document.body.append(overlay);
-    attachDueTrap(overlay, () => {
-        if (!duePrompt.deleting) return;
-        duePrompt.deleting = false;
-        render();
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) postponeDueSubscription(subscription);
     });
+    attachDueTrap(overlay, () => postponeDueSubscription(subscription));
     amountInput.focus();
     amountInput.select();
 }
@@ -448,7 +567,36 @@ function renderStorageIssue(issue) {
     viewElement.append(card);
 }
 
+// The screen last drawn, and whether a transition is queued (its callback draws the latest state).
+let shownScreen = null;
+let renderPending = false;
+
+const screenNow = () => ({
+    tab: app.tab,
+    title: app.tab === 'add' ? addScreenTitle() : null,
+    monthKey: app.monthKey,
+});
+
 function render() {
+    if (renderPending) {
+        return;
+    }
+    const plain = app.storageIssue !== null || app.data.settings.setupComplete !== true;
+    const kind = plain ? null : transitionKind(shownScreen, screenNow());
+    const update = () => {
+        renderPending = false;
+        renderNow();
+        shownScreen = screenNow();
+    };
+    if (kind === null) {
+        update();
+        return;
+    }
+    renderPending = true;
+    runWithTransition(kind, update);
+}
+
+function renderNow() {
     if (app.storageIssue !== null) {
         renderStorageIssue(app.storageIssue);
         return;
@@ -473,6 +621,22 @@ function render() {
         return;
     }
 
+    if (app.data.settings.balanceStart === null) {
+        removeDueOverlay();
+        resetDuePrompt();
+        document.body.classList.add('is-setup');
+        tabbarElement.hidden = true;
+        titleElement.textContent = 'Money setup';
+        document.title = 'Money setup - My Expenses';
+        renderMoneySetup(viewElement, context());
+        return;
+    }
+
+    // A failed write is ignored: the freeze is repeated on the next start.
+    if (freezeElapsedMonths(app.data) > 0) {
+        saveToStorage(app.data);
+    }
+
     const view = views[app.tab];
 
     titleElement.textContent = app.tab === 'add' ? addScreenTitle() : view.title;
@@ -490,12 +654,19 @@ function render() {
 
     view.render(viewElement, context());
 
-    const due = dueSubscriptions(app.data);
+    const monthKey = currentMonthKey();
+    const due = dueSubscriptions(app.data)
+        .filter(({ id }) => !postponedDue.has(`${id}:${monthKey}`));
     if (due.length > 0) {
         renderDuePrompt(due[0]);
     } else {
+        const overlay = document.getElementById('due-subscription-overlay');
+        const hadFocus = overlay?.contains(document.activeElement) === true;
         removeDueOverlay();
         resetDuePrompt();
+        if (hadFocus) {
+            viewElement.focus();
+        }
     }
 }
 
@@ -505,6 +676,8 @@ tabbarElement.addEventListener('click', (event) => {
         goTo(button.dataset.tab);
     }
 });
+
+document.addEventListener('focusin', selectOnFocus);
 
 requestPersistence();
 

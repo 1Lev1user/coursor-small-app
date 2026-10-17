@@ -1,4 +1,4 @@
-import { parseAmount } from '../../money.js';
+import { parseAmount, formatEuro } from '../../money.js';
 import {
     UNCATEGORISED_ID,
     SAVINGS_ID,
@@ -9,6 +9,7 @@ import {
 } from '../../model.js';
 import {
     canSetPinned,
+    previewAddCategory,
     refreshCurrentMonthPlan,
     syncCategoryPlanFields,
     percentFromEuroCents,
@@ -36,10 +37,13 @@ import {
     openCategoryPlanEditor,
     renderCategoryPlanEditor,
 } from './shared.js';
+import { renderWarnings } from './plan.js';
+
+export const DEFAULT_NEW_CATEGORY_KIND = 'none';
 
 const addDraft = {
     name: '',
-    kind: 'flexible',
+    kind: DEFAULT_NEW_CATEGORY_KIND,
     amount: '',
     limitUnit: 'percent',
     error: '',
@@ -47,7 +51,7 @@ const addDraft = {
 
 const addSubDrafts = new Map();
 
-function userCategories(data) {
+export function userCategories(data) {
     return data.categories.filter(
         (category) => (
             category.system !== true
@@ -178,7 +182,7 @@ function addCategory(ctx, nameField, amountField) {
         pinned = true;
         if (addDraft.limitUnit === 'euro') {
             if (budget <= 0) {
-                addDraft.error = 'Save a monthly spend budget first.';
+                addDraft.error = 'Save a monthly budget first.';
                 setError(amountField, addDraft.error);
                 amountField.control.focus();
                 return;
@@ -216,6 +220,11 @@ function addCategory(ctx, nameField, amountField) {
         }
     }
 
+    const changed = previewAddCategory(
+        ctx.data.categories,
+        budget,
+        { pinned, percent, limitMode, limitCents },
+    );
     ctx.data.categories.push({
         id: createId('cat'),
         name,
@@ -229,12 +238,14 @@ function addCategory(ctx, nameField, amountField) {
     syncCategoryPlanFields(ctx.data.categories, budget);
     refreshCurrentMonthPlan(ctx.data);
     addDraft.name = '';
-    addDraft.kind = 'flexible';
+    addDraft.kind = DEFAULT_NEW_CATEGORY_KIND;
     addDraft.amount = '';
     addDraft.limitUnit = 'percent';
     addDraft.error = '';
     if (persist(ctx)) {
-        ctx.toast('Category added');
+        ctx.toast(changed.length === 0
+            ? 'Category added'
+            : `Category added. Limits changed for ${categoryCount(changed.length)}.`);
     }
 }
 
@@ -322,21 +333,69 @@ function renderAddSubcategory(ctx, category) {
     return form;
 }
 
-function renderCategory(ctx, category, plan) {
-    const budgetCents = ctx.data.settings.monthlyBudgetCents;
-    const item = element('article', 'category-item more-category');
-    const head = element('div', 'more-category-head');
-    const titles = element('div', 'more-category-titles');
-    titles.append(
-        element('h3', 'category-name', category.name),
-        element('p', 'muted', shareLabel(category, plan, budgetCents)),
+export function subcategoryCountText(count) {
+    if (count === 0) {
+        return 'No subcategories';
+    }
+    return count === 1 ? '1 subcategory' : `${count} subcategories`;
+}
+
+export function isCategoryOpen(category) {
+    const prefix = `${category.id}:`;
+    return state.openCategoryId === category.id
+        || state.renameCategoryId === category.id
+        || state.editPlanCategoryId === category.id
+        || state.confirmCategoryId === category.id
+        || (typeof state.renameSubKey === 'string' && state.renameSubKey.startsWith(prefix))
+        || (typeof state.confirmSubKey === 'string' && state.confirmSubKey.startsWith(prefix));
+}
+
+function renderCategoryHead(ctx, category, plan, isOpen, bodyId) {
+    const toggleId = `more-category-toggle-${category.id}`;
+    const toggle = element('button', 'settings-row more-category-toggle');
+    toggle.type = 'button';
+    toggle.id = toggleId;
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    toggle.setAttribute('aria-controls', bodyId);
+    const chevron = element('span', 'settings-row-chevron', '›');
+    chevron.setAttribute('aria-hidden', 'true');
+    toggle.append(
+        element('span', 'settings-row-title category-name', category.name),
+        element(
+            'span',
+            'settings-row-summary',
+            `${shareLabel(category, plan, ctx.data.settings.monthlyBudgetCents)} · ${subcategoryCountText(category.subcategories.length)}`,
+        ),
+        chevron,
     );
-    head.append(titles);
+    toggle.addEventListener('click', () => {
+        closeTransientUi();
+        state.openCategoryId = isOpen ? null : category.id;
+        state.focusId = toggleId;
+        ctx.render();
+    });
+
+    const head = element('h3', 'category-name-row');
+    head.append(toggle);
+    return head;
+}
+
+function renderCategory(ctx, category, plan) {
+    const item = element('article', 'category-item more-category');
+    const isOpen = isCategoryOpen(category);
+    const bodyId = `more-category-body-${category.id}`;
+    item.append(renderCategoryHead(ctx, category, plan, isOpen, bodyId));
+    if (!isOpen) {
+        return item;
+    }
+
+    const body = element('div', 'more-category-body');
+    body.id = bodyId;
+    item.append(body);
 
     if (state.renameCategoryId === category.id) {
         const draft = state.renameDrafts.get(category.id) ?? { value: category.name, error: '' };
-        item.append(
-            head,
+        body.append(
             renderRenameForm(
                 `rename-cat-${category.id}`,
                 draft.value,
@@ -353,10 +412,9 @@ function renderCategory(ctx, category, plan) {
             ),
         );
     } else if (state.editPlanCategoryId === category.id) {
-        item.append(head, renderCategoryPlanEditor(ctx, category));
+        body.append(renderCategoryPlanEditor(ctx, category));
     } else if (state.confirmCategoryId === category.id) {
-        item.append(
-            head,
+        body.append(
             renderConfirm(
                 `Delete ${category.name}? Its expenses will move to Uncategorised.`,
                 () => confirmDeleteCategory(ctx, category),
@@ -368,10 +426,12 @@ function renderCategory(ctx, category, plan) {
         );
     } else {
         const actions = element('div', 'more-actions');
+        const limitButton = actionButton('btn btn-ghost', 'Limit', () => {
+            openCategoryPlanEditor(ctx, category);
+        });
+        limitButton.setAttribute('aria-label', `Edit limit for ${category.name}`);
         actions.append(
-            actionButton('btn btn-ghost', 'Edit plan', () => {
-                openCategoryPlanEditor(ctx, category);
-            }),
+            limitButton,
             actionButton('btn btn-ghost', 'Rename', () => {
                 closeTransientUi();
                 state.renameCategoryId = category.id;
@@ -389,8 +449,7 @@ function renderCategory(ctx, category, plan) {
                 }),
             );
         }
-        head.append(actions);
-        item.append(head);
+        body.append(actions);
     }
 
     const subs = element('ul', 'subcategory-list');
@@ -402,20 +461,54 @@ function renderCategory(ctx, category, plan) {
             subs.append(renderSubcategory(ctx, category, subcategory));
         }
     }
-    item.append(subs, renderAddSubcategory(ctx, category));
+    body.append(subs, renderAddSubcategory(ctx, category));
     return item;
+}
+
+function categoryCount(count) {
+    return count === 1 ? '1 category' : `${count} categories`;
+}
+
+function addNoticeText(changed) {
+    if (changed.length === 0) return '';
+    const shown = changed.slice(0, 3).map(
+        ({ name, beforeCents, afterCents }) => (
+            `${name} ${formatEuro(beforeCents)} → ${formatEuro(afterCents)}`
+        ),
+    ).join(', ');
+    const more = changed.length > 3 ? ` and ${changed.length - 3} more` : '';
+    return `This changes the limit of ${categoryCount(changed.length)} this month: ${shown}${more}.`;
+}
+
+/** Limits that would move if the category in the form were added now. */
+function addDraftChanges(ctx) {
+    const budget = ctx.data.settings.monthlyBudgetCents;
+    if (addDraft.kind === 'flexible') {
+        return previewAddCategory(ctx.data.categories, budget, {
+            pinned: false, percent: 0, limitMode: 'percent', limitCents: 0,
+        });
+    }
+    if (addDraft.kind !== 'pinned' || !(budget > 0)) return [];
+    const cents = addDraft.limitUnit === 'euro' ? parseAmount(addDraft.amount) : null;
+    const percent = addDraft.limitUnit === 'euro'
+        ? (cents === null ? null : percentFromEuroCents(cents, budget))
+        : parsePercent(addDraft.amount);
+    if (percent === null || !(percent >= 0 && percent <= 100)) return [];
+    return previewAddCategory(ctx.data.categories, budget, {
+        pinned: true, percent, limitMode: 'percent', limitCents: 0,
+    });
 }
 
 function renderKindChoice(amountField, ctx) {
     const fieldset = element('fieldset', 'choice-set');
     const legend = document.createElement('legend');
-    legend.textContent = 'Share';
+    legend.textContent = 'Limit';
     fieldset.append(legend);
 
     const row = element('div', 'choice-row');
     const options = [
-        { value: 'flexible', label: 'Flexible' },
         { value: 'none', label: 'No limit' },
+        { value: 'flexible', label: 'Flexible' },
         { value: 'pinned', label: 'Fixed' },
     ];
 
@@ -443,7 +536,7 @@ function renderKindChoice(amountField, ctx) {
         fieldset.append(element(
             'p',
             'muted',
-            'No planned share. Spending still counts and shows as % of your budget.',
+            'No limit: no other limit changes. Spending still counts and shows as % of your budget.',
         ));
     }
     return fieldset;
@@ -466,6 +559,12 @@ function renderAddCategory(ctx) {
         clearError(nameField);
     });
 
+    const notice = element('p', 'muted category-add-notice');
+    notice.setAttribute('role', 'status');
+    const refreshNotice = () => {
+        notice.textContent = addNoticeText(addDraftChanges(ctx));
+        notice.hidden = notice.textContent === '';
+    };
     const amountField = buildLimitAmountField(
         'add-category-amount',
         'Fixed amount',
@@ -473,8 +572,10 @@ function renderAddCategory(ctx) {
         ctx,
         () => {
             addDraft.error = '';
+            refreshNotice();
         },
     );
+    refreshNotice();
     amountField.wrapper.hidden = addDraft.kind !== 'pinned';
 
     if (addDraft.error !== '') {
@@ -496,6 +597,7 @@ function renderAddCategory(ctx) {
         nameField.wrapper,
         renderKindChoice(amountField, ctx),
         amountField.wrapper,
+        notice,
         submit,
     );
     return form;
@@ -505,6 +607,7 @@ export function renderCategoriesSection(ctx, plan) {
     const section = element('section', 'card stack');
     section.id = 'more-categories';
     section.append(element('h2', 'section-title', 'Categories'));
+    renderWarnings(section, plan);
 
     const list = element('div', 'category-list');
     for (const category of userCategories(ctx.data)) {
