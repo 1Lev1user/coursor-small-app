@@ -51,6 +51,7 @@ const CORE_ASSETS = [
     './src/import/detect.js',
     './src/import/core.js',
     './src/import/xlsx.js',
+    './src/import/xls.js',
     './src/import/xml.js',
     './src/views/add.js',
     './src/views/month.js',
