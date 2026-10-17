@@ -85,3 +85,35 @@ test('card date window: 0 and 60 days count, 61 days before or after do not', ()
         assert.equal(r.counterparty, 'CAFE PARAUGS');
     }
 });
+
+const LEAKS = /LV80BANK|010190|12345|\*|Jānis|Bērziņš/;
+const EXTRA_LINE = 'LV80BANK0000000000001 Jānis Bērziņš 010190-12345 411111******1111 01019012345';
+
+test('Swedbank card line with a second line: IBAN, personal codes and masks are scrubbed', () => {
+    const r = parts(`PIRKUMS 400000******0000 2026.09.28 12.34 5.00 EUR (123456) KAFEJNICA PARAUGS\n${EXTRA_LINE}`);
+    assert.equal(r.counterparty, 'KAFEJNICA PARAUGS');
+    assert.equal(r.date, '2026-09-28');
+    assert.doesNotMatch(r.description, /LV80BANK|010190|12345|\*/);
+    assert.doesNotMatch(r.counterparty, LEAKS);
+});
+
+test('SEB card line with a second line: IBAN, personal codes and masks are scrubbed', () => {
+    const r = parts(`28/09/2026 08:53 kortelė...000000 CAFE PARAUGS/VILNIUS/LTU #832000\n${EXTRA_LINE}`);
+    assert.equal(r.counterparty, 'CAFE PARAUGS');
+    assert.equal(r.date, '2026-09-28');
+    assert.doesNotMatch(r.description, /LV80BANK|010190|12345|\*/);
+    assert.doesNotMatch(r.counterparty, LEAKS);
+});
+
+test('a second card mask inside the merchant is removed', () => {
+    const swed = parts('PIRKUMS 400000******0000 2026.09.28 12.34 5.00 EUR (123456) SHOP 411111******1111');
+    assert.equal(swed.counterparty, 'SHOP');
+    const seb = parts('28/09/2026 08:53 kortelė...000000 SHOP 411111******1111/VILNIUS/LTU #832000');
+    assert.equal(seb.counterparty, 'SHOP');
+});
+
+test('a card shape that is not on the first line is not read as a card payment', () => {
+    const r = parts('NOTE\nPIRKUMS 400000******0000 2026.09.28 12.34 5.00 EUR (123456) SHOP PARAUGS');
+    assert.equal(r.counterparty, '');
+    assert.equal(r.date, '');
+});

@@ -125,22 +125,29 @@ function withOriginal(result, amountText, currency) {
     return currency !== 'EUR' && cents !== null ? { ...result, original: { cents, currency } } : result;
 }
 
-function splitSwedbankCard(m, bookingDate) {
-    return withOriginal({
-        description: '',
-        counterparty: collapse(m[6].replace(SWEDBANK_FX_TAIL, '')),
-        date: cardDate(m[3], m[2], m[1], bookingDate),
-        mcc: '',
-    }, m[4], m[5]);
+// Removes IBANs, personal codes and card masks from one line of text.
+function scrubLine(line) {
+    return scrubPersonalCodes11(line.replace(IBAN_ALL, ' ').replace(PERSONAL_CODE_ALL, ' ')).replace(CARD_MASK_ALL, ' ');
 }
 
-function splitSebCard(m, bookingDate) {
-    return withOriginal({
-        description: '',
-        counterparty: collapse(m[6].replace(SEB_CARD_END, '').replace(/\/[^/]+\/[A-Z]{3}$/, '')),
-        date: cardDate(m[1], m[2], m[3], bookingDate),
+// Lines after the card line are the description; the merchant and them are scrubbed.
+function cardResult(merchant, lines, date) {
+    return {
+        description: collapse(lines.slice(1).map(scrubLine).join(' ')),
+        counterparty: collapse(scrubLine(merchant)),
+        date,
         mcc: '',
-    }, m[4] ?? '', m[5]);
+    };
+}
+
+function splitSwedbankCard(m, lines, bookingDate) {
+    const result = cardResult(m[6].replace(SWEDBANK_FX_TAIL, ''), lines, cardDate(m[3], m[2], m[1], bookingDate));
+    return withOriginal(result, m[4], m[5]);
+}
+
+function splitSebCard(m, lines, bookingDate) {
+    const merchant = m[6].replace(SEB_CARD_END, '').replace(/\/[^/]+\/[A-Z]{3}$/, '');
+    return withOriginal(cardResult(merchant, lines, cardDate(m[1], m[2], m[3], bookingDate)), m[4] ?? '', m[5]);
 }
 
 function splitTransfer(lines) {
@@ -162,7 +169,7 @@ function splitTransfer(lines) {
 
     const description = lines
         .filter((line, index) => index !== partyIndex && !PAYER_REFERENCE.test(line))
-        .map((line) => scrubPersonalCodes11(line.replace(IBAN_ALL, ' ').replace(PERSONAL_CODE_ALL, ' ')).replace(CARD_MASK_ALL, ' '))
+        .map(scrubLine)
         .join(' ');
 
     return { description: collapse(description), counterparty: collapse(party.slice(0, end)), date: '', mcc: '' };
@@ -200,14 +207,14 @@ export function splitBankDetails(text, bookingDate) {
         return splitCardPayment(lines, card, bookingDate);
     }
 
-    const flat = collapse(lines.join(' '));
-    const swedbank = SWEDBANK_CARD.exec(flat);
+    const first = lines[0] ?? '';
+    const swedbank = SWEDBANK_CARD.exec(first);
     if (swedbank) {
-        return splitSwedbankCard(swedbank, bookingDate);
+        return splitSwedbankCard(swedbank, lines, bookingDate);
     }
-    const seb = SEB_CARD.exec(flat);
+    const seb = SEB_CARD.exec(first);
     if (seb) {
-        return splitSebCard(seb, bookingDate);
+        return splitSebCard(seb, lines, bookingDate);
     }
 
     const transfer = lines.length >= 2 ? splitTransfer(lines) : null;
