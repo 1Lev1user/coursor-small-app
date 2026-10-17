@@ -213,7 +213,10 @@ function stripNoise(upper) {
         .replace(/\*+\d{2,}/g, ' ')
         .replace(/\b\d{4}-\d{1,2}-\d{1,2}\b/g, ' ')
         .replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, ' ')
-        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
+        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])[A-Z]{2}\d{2}[A-Z0-9]{11,30}(?![\p{L}\p{N}])/gu, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])(?:EUR|USD|GBP|SEK|NOK|DKK|PLN|CHF|CZK|HUF|RON|BGN|TRY|UAH|RUB|JPY|CNY)\d+(?:[.,]\d+)?(?![\p{L}\p{N}])/gu, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])\d+(?:[.,]\d+)?(?:EUR|USD|GBP|SEK|NOK|DKK|PLN|CHF|CZK|HUF|RON|BGN|TRY|UAH|RUB|JPY|CNY)(?![\p{L}\p{N}])/gu, ' ');
 }
 
 function keepName(token) {
@@ -228,22 +231,31 @@ function keepName(token) {
  * After a payment processor (PAYPAL, SUMUP, SQ, IZ) the merchant is kept too: 'PAYPAL *SPOTIFY' -> 'PAYPAL SPOTIFY'.
  * All-digit tokens are dropped. A name with digits is kept ('TELE2 SIA' -> 'TELE2'); a trailing run of
  * 4 or more digits is cut ('BOLT.EUR2610011807' -> 'BOLT.EUR'). A legal form on its own gives ''.
- * Card masks, dates, times, trailing Baltic cities and country codes are dropped.
+ * Card masks, dates, times, trailing Baltic cities and country codes are dropped. IBANs, amounts glued to a currency
+ * and reference codes glued to digits (TERM1234, NR1234) are dropped too, unless they are the only tokens left.
  */
 export function extractPattern(description) {
     const cleaned = stripNoise(String(description ?? '').toUpperCase())
         .replace(/[^\p{L}\p{N}&'.-]+/gu, ' ');
-    const tokens = cleaned
+    const items = cleaned
         .split(' ')
-        .map((token) => keepName(token.replace(/^[.'-]+|[.'-]+$/g, '')))
-        .filter((token) => token !== '');
+        .map((raw) => {
+            const token = raw.replace(/^[.'-]+|[.'-]+$/g, '');
+            return { name: keepName(token), ref: /^(?:NR|NO|ID|TERM|TID|MID|TRN|TRX|DOC|REF)\d{4,}$/.test(token) };
+        })
+        .filter((item) => item.name !== '');
 
-    while (tokens.length > 0 && TRAILING_PLACES.has(tokens[tokens.length - 1])) {
-        tokens.pop();
+    while (items.length > 0 && TRAILING_PLACES.has(items[items.length - 1].name)) {
+        items.pop();
     }
-    while (tokens.length > 1 && LEADING_NOISE.has(tokens[0])) {
-        tokens.shift();
+    const named = items.filter((item) => !item.ref);
+    if (named.length > 0 && named.length < items.length) {
+        items.splice(0, items.length, ...named);
     }
+    while (items.length > 1 && LEADING_NOISE.has(items[0].name)) {
+        items.shift();
+    }
+    const tokens = items.map((item) => item.name);
     if (tokens.length === 0) return '';
 
     const first = tokens[0];
