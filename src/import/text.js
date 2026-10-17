@@ -1,4 +1,5 @@
 import { statementRow } from './types.js';
+import { splitBankDetails } from './details.js';
 
 const BOM_UTF8 = [0xef, 0xbb, 0xbf];
 const BOM_UTF16LE = [0xff, 0xfe];
@@ -992,18 +993,19 @@ export function rowsToStatement(rows, headerRow, layout) {
             euroCents = eur !== null && eur !== 0 ? Math.abs(eur) : null;
         }
 
-        const description = cellAt(row, columns.description);
+        const split = splitBankDetails(cellAt(row, columns.description), date);
         const bankRef = cellAt(row, columns.bankRef);
 
         statementRows.push(statementRow({
-            date,
+            date: split.date || date,
             amountCents: euroCents,
             direction,
             currency,
             originalAmountCents: amountCents,
-            description,
-            counterparty: '',
+            description: split.description,
+            counterparty: split.counterparty,
             bankRef,
+            mcc: split.mcc,
         }));
     }
 

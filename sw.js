@@ -48,6 +48,7 @@ const CORE_ASSETS = [
     './src/motion.js',
     './src/import/types.js',
     './src/import/text.js',
+    './src/import/details.js',
     './src/import/detect.js',
     './src/import/core.js',
     './src/import/xlsx.js',
