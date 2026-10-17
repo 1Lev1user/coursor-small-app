@@ -10,7 +10,7 @@
  * @property {string} bankRef
  */
 
-export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'paste'];
+export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'xls', 'paste'];
 
 export function statementRow(fields) {
     const currency = typeof fields.currency === 'string' && /^[A-Z]{3}$/.test(fields.currency)

@@ -17,6 +17,7 @@ import {
 } from '../import/text.js';
 import { parseCamt, parseFidavista } from '../import/xml.js';
 import { readXlsx } from '../import/xlsx.js';
+import { readXls } from '../import/xls.js';
 import {
     findDuplicates,
     defaultDecisions,
@@ -31,7 +32,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const PREVIEW_ROWS = 5;
 const GUESS_SAMPLE_ROWS = 20;
 const SKIPPED_SHOWN = 20;
-const TABULAR_FORMATS = ['csv', 'xlsx', 'paste'];
+const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'paste'];
 
 const KIND_LABELS = {
     expense: 'Expense',
@@ -552,7 +553,7 @@ function isOldExcel(bytes) {
 }
 
 const UNKNOWN_FILE = 'This file does not look like a bank statement.'
-    + ' Use a CSV, Excel (.xlsx), camt.053 or FiDAViSTA XML file.';
+    + ' Use a CSV, Excel (.xls or .xlsx), camt.053 or FiDAViSTA XML file.';
 
 const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT940 yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
@@ -572,9 +573,10 @@ export async function readStatementFile(file) {
         return { ok: false, reason: 'This file is empty.' };
     }
     if (isZip(bytes) || isOldExcel(bytes)) {
-        const sheet = await readXlsx(bytes);
+        const format = isZip(bytes) ? 'xlsx' : 'xls';
+        const sheet = await (format === 'xlsx' ? readXlsx(bytes) : readXls(bytes));
         if (!sheet.ok) return sheet;
-        return { ok: true, kind: 'table', format: 'xlsx', rows: sheet.rows, delimiter: '', encoding: '' };
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
     }
 
     const { text, encoding } = decodeBytes(bytes);
@@ -820,7 +822,7 @@ function renderLoad(ctx) {
     card.append(element(
         'p',
         '',
-        'Download a statement from your online bank as CSV, Excel (.xlsx) or XML (camt.053 or FiDAViSTA), then choose it here.',
+        'Download a statement from your online bank as CSV, Excel (.xls or .xlsx) or XML (camt.053 or FiDAViSTA), then choose it here.',
     ));
 
     const fileLabel = element('label', 'btn btn-primary imp-file-label');
