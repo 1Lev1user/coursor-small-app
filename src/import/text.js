@@ -352,6 +352,7 @@ const KEYWORDS = {
     bankRef: [
         'transaction id', 'transaction reference', 'bank reference', 'arhiva kods', 'arhiva numurs',
         'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
+        'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
     ],
     description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
 };
@@ -468,6 +469,16 @@ export function guessColumns(header, sampleRows) {
 
     for (const key of ['debit', 'credit']) {
         const samples = columnSamples(sampleRows, columns[key]);
+        // One column named after both sides ('Debets/Kredīts') with signed amounts is the Amount column.
+        if (columns[key] >= 0 && columns.amount === -1 && samples.length > 0
+            && KEYWORDS.debit.some((word) => normalizedHeader[columns[key]].includes(word))
+            && KEYWORDS.credit.some((word) => normalizedHeader[columns[key]].includes(word))
+            && samples.every(isAmountLikeValue) && !samples.every(isDirectionValue)) {
+            columns.amount = columns[key];
+            columns[key] = -1;
+            amountVia = 'keyword';
+            continue;
+        }
         if (columns[key] >= 0 && samples.length > 0 && samples.every(isDirectionValue)) {
             columns.direction = columns[key];
             columns[key] = -1;
@@ -551,7 +562,13 @@ export function guessColumns(header, sampleRows) {
         }
     }
 
-    const dateFormat = columns.date >= 0 ? inferDateFormat(columnSamples(sampleRows, columns.date)) : null;
+    const dateSamples = columns.date >= 0 ? columnSamples(sampleRows, columns.date) : [];
+    // Day-first is the only dotted order in the LV/EE/LT bank formats seen; UNVERIFIED for banks outside them.
+    // Slash and dash dates stay ambiguous (null) unless a day above 12 settles it.
+    const dateFormat = columns.date >= 0
+        ? inferDateFormat(dateSamples)
+            ?? (dateSamples.length > 0 && dateSamples.every((value) => /^\d{1,2}\.\d{1,2}\.\d{2,4}/.test(value)) ? 'DMY' : null)
+        : null;
     const decimalSeparator = guessDecimalSeparator(sampleRows, columns);
 
     let confidence = 0;
@@ -818,6 +835,7 @@ const SUMMARY_QUALIFIERS = [
     'sakuma', 'beigu', 'beigas', 'sakotnejais', 'galigais', 'konta', 'perioda', 'debets', 'kredits',
     'debit', 'credit', 'algus', 'lopp', 'pradinis', 'galutinis', 'laikotarpio',
     'brought', 'forward', 'carried',
+    'debeta', 'kredita', 'komisiju', 'kopeja', 'izejoso', 'ienakoso', 'maksajumu', 'bez', 'komisijam',
     'начальное', 'конечное', 'входящий', 'исходящий', 'за', 'период', 'на', 'по', 'счету',
 ].map(normalizeText);
 
@@ -827,12 +845,15 @@ function summaryWords(value) {
     return normalizeText(value).split(/[^\p{L}]+/u).filter((word) => word !== '');
 }
 
-/** The whole cell is a summary label such as 'Kopā', 'Closing balance' or 'Sākuma saldo'. */
-function isSummaryCell(value) {
+/**
+ * The whole cell is a summary label such as 'Kopā', 'Closing balance' or 'Sākuma saldo'.
+ * With footer true (a row without a date) the bare word 'summa' also counts, as in 'Komisiju summa'.
+ */
+function isSummaryCell(value, footer = false) {
     const words = summaryWords(value);
     return words.length > 0
-        && words.every((word) => SUMMARY_WORDS.has(word))
-        && words.some((word) => SUMMARY_CORE_WORDS.includes(word));
+        && words.every((word) => SUMMARY_WORDS.has(word) || (footer && word === 'summa'))
+        && words.some((word) => SUMMARY_CORE_WORDS.includes(word) || (footer && word === 'summa'));
 }
 
 function hasSummaryKeyword(row) {
@@ -847,7 +868,10 @@ function hasSummaryKeyword(row) {
  * or mentions a summary keyword and has no valid date. 'TotalEnergies' with a date stays a transaction.
  */
 function isSummaryRow(row, descriptionIndex, hasDate) {
-    if (row.some(isSummaryCell)) {
+    if (row.some((cell) => isSummaryCell(cell))) {
+        return true;
+    }
+    if (!hasDate && row.some((cell) => isSummaryCell(cell, true))) {
         return true;
     }
     return !hasDate && hasSummaryKeyword(row);
