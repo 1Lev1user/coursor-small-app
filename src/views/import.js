@@ -82,9 +82,14 @@ function samplesAt(sampleRows, index) {
         .filter((value) => value !== '');
 }
 
-/** A saved layout overrides the guess key by key; a guessed key the layout lacks (such as status) stays. */
+/**
+ * A saved layout overrides the guess key by key; a guessed key the layout lacks (such as status) stays.
+ * The fee is the exception: a guessed fee would silently change the amounts of a layout confirmed without it.
+ */
 export function mergeSavedColumns(guessedColumns, savedColumns) {
-    return { ...guessedColumns, ...savedColumns };
+    const merged = { ...guessedColumns, ...savedColumns };
+    if (savedColumns.fee === undefined && guessedColumns.fee !== undefined) merged.fee = -1;
+    return merged;
 }
 
 const DECIMAL_TAIL = /\d([.,])\d{1,2}\)?-?$/;
@@ -337,6 +342,19 @@ export function checkWarnings(summary, placement) {
     return warnings;
 }
 
+/** The Columns-step note on the fee, from the balance check of the guess; '' when there is nothing to say. */
+export function feeNoteText(feeIndex, feeCheck) {
+    if (!feeCheck) return '';
+    if (feeCheck.mode === 'included') {
+        return 'The Balance column suggests the amount already includes the fee, so adding it would count it twice.';
+    }
+    if (feeIndex < 0) return '';
+    if (feeCheck.mode === 'added') {
+        return `The Balance column fits Amount minus Fee on ${feeCheck.added} of ${feeCheck.checked} rows: the fee is added to money out.`;
+    }
+    return 'The fee is added to money out and taken off money in. Compare the totals with your bank.';
+}
+
 export function stepCountText(index, total, formatKnown) {
     return !formatKnown && index === 0 ? 'Step 1' : `Step ${index + 1} of ${total}`;
 }
@@ -378,6 +396,7 @@ function freshState() {
         fileLines: null,
         table: null,
         layout: null,
+        feeCheck: null,
         askDate: false,
         dateSample: '',
         savedLayoutName: '',
@@ -673,7 +692,8 @@ function startTable(ctx, result) {
     const header = headerRow >= 0 ? rows[headerRow] : [];
     const sample = rows.slice(headerRow + 1, headerRow + 1 + GUESS_SAMPLE_ROWS);
     const guess = guessColumns(header, sample);
-    const columns = { status: -1, ...guess.columns, eurAmount: -1 };
+    const columns = { fee: -1, status: -1, ...guess.columns, eurAmount: -1 };
+    state.feeCheck = guess.feeCheck ?? null;
     const signature = headerSignature(header);
 
     state.table = {
@@ -987,6 +1007,10 @@ function renderCheckPanel(summary, placement) {
             `${plural(summary.foreignCount, 'row is', 'rows are')} in another currency and not in these totals.`,
         ));
     }
+    const feeNote = placement === 'columns' ? feeNoteText(state.layout.columns.fee, state.feeCheck) : '';
+    if (feeNote !== '') {
+        panel.append(element('p', 'muted', feeNote));
+    }
     for (const warning of checkWarnings(summary, placement)) {
         panel.append(element('p', 'imp-strong', warning));
     }
@@ -1060,6 +1084,7 @@ function renderColumns(ctx) {
     }
     grid.append(columnSelect(ctx, 'bankRef', 'Bank reference (optional)', true));
     grid.append(columnSelect(ctx, 'status', 'Status (optional)', true, 'Rows marked pending, reverted or declined are skipped.'));
+    grid.append(columnSelect(ctx, 'fee', 'Fee (optional)', true, 'Added to money out and taken off money in. Leave empty if the amount already includes the fee.'));
 
     const decimal = selectOf(
         [['.', 'Dot (12.50)'], [',', 'Comma (12,50)']],

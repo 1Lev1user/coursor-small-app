@@ -370,6 +370,12 @@ const KIND_HINT_BY_TYPE = { TOPUP: 'transfer', EXCHANGE: 'transfer', 'CARD REFUN
 // Status words (normalised, lower case) of rows whose money did not move; any other value imports.
 const NOT_COMPLETED = ['pending', 'reverted', 'reversed', 'declined', 'failed', 'cancelled', 'canceled', 'rejected', 'rezervets'];
 
+// Exact words after normalisation: 'Fee type', 'Free text' and 'Total fees' (a breakdown) must not match.
+const FEE_HEADERS = ['fee', 'komisija', 'komisijas maksa', 'mokestis', 'tasu', 'комиссия'];
+// PayPal lists Gross, Fee and Net: Net is already the money moved.
+const NET_HEADERS = ['net'];
+const BALANCE_HEADERS = ['balance', 'running balance', 'saldo', 'atlikums', 'likutis', 'jaak', 'остаток', 'баланс'];
+
 function isStatusHeader(normalized) {
     return STATUS_HEADERS.includes(normalized) || normalized.startsWith('status ');
 }
@@ -434,6 +440,77 @@ function guessDecimalSeparator(sampleRows, columns) {
         }
     }
     return '.';
+}
+
+/** First unused column whose header is exactly one of the words and whose samples all look like amounts, or -1. */
+function findExactColumn(normalizedHeader, words, used, sampleRows) {
+    for (let i = 0; i < normalizedHeader.length; i += 1) {
+        if (!used.has(i) && words.includes(normalizedHeader[i]) && columnSamples(sampleRows, i).every(isAmountLikeValue)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Compares the Balance column with the amounts of neighbouring rows of one
+ * currency, to tell whether the fee is added to the amount (balance moves by
+ * amount minus fee) or already included in it (balance moves by the amount).
+ * Both row orders (oldest or newest first) are tried and the better one is
+ * used; only rows with a non-zero fee can tell the two apart. Only a signed
+ * single Amount column is checked. A tie keeps the fee ('added').
+ * @param {string[]} header
+ * @param {string[][]} sampleRows
+ * @param {object} columns
+ * @param {'.'|','} decimalSeparator
+ * @returns {{ mode: 'added'|'included'|'unknown', added: number, included: number, checked: number }}
+ */
+export function checkFeeAgainstBalance(header, sampleRows, columns, decimalSeparator) {
+    const unknown = { mode: 'unknown', added: 0, included: 0, checked: 0 };
+    if (columns.amount < 0 || columns.debit >= 0 || columns.credit >= 0 || columns.fee < 0) {
+        return unknown;
+    }
+    const normalizedHeader = header.map(normalizeText);
+    const balanceIndex = findExactColumn(normalizedHeader, BALANCE_HEADERS, usedIndexes(columns), sampleRows);
+    if (balanceIndex < 0) {
+        return unknown;
+    }
+
+    const points = [];
+    for (const row of sampleRows) {
+        const balance = parseAmountWith(cellAt(row, balanceIndex), decimalSeparator);
+        const amount = parseAmountWith(cellAt(row, columns.amount), decimalSeparator);
+        if (balance === null || amount === null) {
+            continue;
+        }
+        const fee = Math.abs(parseAmountWith(cellAt(row, columns.fee), decimalSeparator) ?? 0);
+        const currency = cellAt(row, columns.currency).trim().toUpperCase();
+        points.push({ balance, amount, fee, currency });
+    }
+
+    const oldestFirst = countBalanceFits(points, true);
+    const newestFirst = countBalanceFits(points, false);
+    const best = newestFirst.added + newestFirst.included > oldestFirst.added + oldestFirst.included ? newestFirst : oldestFirst;
+    if (best.added + best.included > 0) {
+        best.mode = best.included > best.added ? 'included' : 'added';
+    }
+    return best;
+}
+
+/** A row's balance moves by its own amount from the older row's balance; the rows are listed oldest or newest first. */
+function countBalanceFits(points, oldestFirst) {
+    const count = { mode: 'unknown', added: 0, included: 0, checked: 0 };
+    for (let i = 0; i + 1 < points.length; i += 1) {
+        const [older, newer] = oldestFirst ? [points[i], points[i + 1]] : [points[i + 1], points[i]];
+        if (older.currency !== newer.currency || newer.fee === 0) {
+            continue;
+        }
+        const delta = newer.balance - older.balance;
+        count.checked += 1;
+        if (delta === newer.amount - newer.fee) count.added += 1;
+        if (delta === newer.amount) count.included += 1;
+    }
+    return count;
 }
 
 /**
@@ -527,6 +604,18 @@ export function guessColumns(header, sampleRows) {
         }
     }
 
+    // Fee and Net: with a Net column (and no debit/credit) Net is the amount and no fee is added on top.
+    const netIndex = findExactColumn(normalizedHeader, NET_HEADERS, usedIndexes(columns), sampleRows);
+    if (netIndex >= 0 && columns.debit === -1 && columns.credit === -1) {
+        columns.amount = netIndex;
+        amountVia = 'keyword';
+    } else {
+        const feeIndex = findExactColumn(normalizedHeader, FEE_HEADERS, usedIndexes(columns), sampleRows);
+        if (feeIndex >= 0) {
+            columns.fee = feeIndex;
+        }
+    }
+
     if (columns.date === -1) {
         const used = usedIndexes(columns);
         for (let i = 0; i < (sampleRows[0] || []).length; i += 1) {
@@ -606,6 +695,11 @@ export function guessColumns(header, sampleRows) {
             ?? (dateSamples.length > 0 && dateSamples.every((value) => /^\d{1,2}\.\d{1,2}\.\d{2,4}/.test(value)) ? 'DMY' : null)
         : null;
     const decimalSeparator = guessDecimalSeparator(sampleRows, columns);
+    const feeCheck = columns.fee >= 0 ? checkFeeAgainstBalance(header, sampleRows, columns, decimalSeparator) : null;
+    if (feeCheck?.mode === 'included') {
+        // The balance moves by the amount alone: the amount already contains the fee.
+        delete columns.fee;
+    }
 
     let confidence = 0;
     if (dateVia === 'keyword') {
@@ -632,7 +726,11 @@ export function guessColumns(header, sampleRows) {
         confidence += 0.1;
     }
 
-    return { columns, dateFormat, decimalSeparator, confidence: Math.min(1, confidence) };
+    const result = { columns, dateFormat, decimalSeparator, confidence: Math.min(1, confidence) };
+    if (feeCheck) {
+        result.feeCheck = feeCheck;
+    }
+    return result;
 }
 
 function splitDateParts(value) {
@@ -925,6 +1023,8 @@ function cellAt(row, index) {
  * A row in another currency gets amountCents null (the UI asks for the EUR
  * charged) unless layout.columns.eurAmount points at a EUR amount column.
  * layout.reverse === true flips every row's direction (a bank that shows spending as positive).
+ * layout.columns.fee: the fee of a EUR row is added to money out and taken off money in (a fee above
+ * the money in turns it into money out of the difference; an equal fee skips the row as zero amount).
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
@@ -1023,6 +1123,22 @@ export function rowsToStatement(rows, headerRow, layout) {
             if (/^[A-Z]{3}$/.test(currencyValue)) {
                 currency = currencyValue;
             }
+        }
+
+        // A fee is part of the money moved: added to money out, taken off money in. Other currencies are left alone.
+        const feeCents = currency === 'EUR' && columns.fee >= 0
+            ? Math.abs(parseAmountWith(cellAt(row, columns.fee), decimalSeparator) ?? 0)
+            : 0;
+        if (feeCents > 0 && direction === 'out') {
+            amountCents += feeCents;
+        } else if (feeCents > 0) {
+            const net = amountCents - feeCents;
+            if (net === 0) {
+                skipped.push({ line, reason: 'zero amount' });
+                continue;
+            }
+            if (net < 0) direction = 'out';
+            amountCents = Math.abs(net);
         }
 
         let euroCents = amountCents;
