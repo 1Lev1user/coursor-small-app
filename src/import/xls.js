@@ -37,6 +37,8 @@ const viewOf = (bytes) => new DataView(bytes.buffer, bytes.byteOffset, bytes.byt
 const END_OF_CHAIN = 0xfffffffe;
 const FREE_SECTOR = 0xffffffff;
 const MINI_SECTOR_SIZE = 64;
+const MINI_STREAM_CUTOFF = 4096;
+const NO_STREAM = 0xffffffff;
 
 function hasOleSignature(bytes) {
     return bytes.length >= 8
@@ -81,6 +83,10 @@ function openCompoundFile(bytes) {
     const header = viewOf(bytes);
     const shift = header.getUint16(30, true);
     if (header.getUint16(28, true) !== 0xfffe || (shift !== 9 && shift !== 12) || header.getUint16(32, true) !== 6) {
+        fail(DAMAGED);
+    }
+    // [MS-CFB] fixes the mini stream cutoff at 4096; any other value is a crafted file.
+    if (header.getUint32(56, true) !== MINI_STREAM_CUTOFF) {
         fail(DAMAGED);
     }
     const sectorSize = 1 << shift;
@@ -139,10 +145,12 @@ function openCompoundFile(bytes) {
     };
 
     // Directory: 128-byte entries, UTF-16 names whose length counts the terminator.
-    const directory = [];
+    // Unused slots are skipped but still count: sibling and child ids are slot numbers.
+    const directory = new Map();
+    let slot = 0;
     for (const id of chainOf(fat, header.getUint32(48, true))) {
         const view = viewOf(sector(id));
-        for (let base = 0; base < sectorSize; base += 128) {
+        for (let base = 0; base < sectorSize; base += 128, slot += 1) {
             const type = view.getUint8(base + 66);
             if (type === 0) {
                 continue;
@@ -152,20 +160,48 @@ function openCompoundFile(bytes) {
             for (let k = 0; k + 2 < nameLength; k += 2) {
                 name += String.fromCharCode(view.getUint16(base + k, true));
             }
-            directory.push({ name, type, start: view.getUint32(base + 116, true), size: view.getUint32(base + 120, true) });
+            directory.set(slot, {
+                name,
+                type,
+                left: view.getUint32(base + 68, true),
+                right: view.getUint32(base + 72, true),
+                child: view.getUint32(base + 76, true),
+                start: view.getUint32(base + 116, true),
+                size: view.getUint32(base + 120, true),
+            });
         }
     }
-    const root = directory.find((entry) => entry.type === 5);
-    if (!root) {
+    const root = directory.get(0);
+    if (root?.type !== 5) {
         fail(DAMAGED);
     }
 
-    const cutoff = header.getUint32(56, true);
+    // The root storage's direct children: walk the sibling tree from its child id. A loop is damage.
+    const children = [];
+    const visited = new Set();
+    const pending = [root.child];
+    while (pending.length > 0) {
+        const id = pending.pop();
+        if (id === NO_STREAM) {
+            continue;
+        }
+        const entry = directory.get(id);
+        if (!entry || visited.has(id)) {
+            fail(DAMAGED);
+        }
+        visited.add(id);
+        children.push(entry);
+        pending.push(entry.left, entry.right);
+    }
+
     let miniFat = null;
     let miniStream = null;
     const readMini = (entry) => {
         miniFat ??= readTable(bytes, sectorSize, chainOf(fat, header.getUint32(60, true)), sectorOffset);
         miniStream ??= readSectors(root.start, root.size);
+        if (entry.size > miniStream.length) {
+            fail(DAMAGED);
+        }
         const ids = chainOf(miniFat, entry.start);
         const needed = Math.ceil(entry.size / MINI_SECTOR_SIZE);
         if (ids.length < needed) {
@@ -183,8 +219,8 @@ function openCompoundFile(bytes) {
     };
 
     return {
-        find: (name) => directory.find((entry) => entry.type === 2 && entry.name.toLowerCase() === name.toLowerCase()),
-        read: (entry) => (entry.size < cutoff ? readMini(entry) : readSectors(entry.start, entry.size)),
+        find: (name) => children.find((entry) => entry.type === 2 && entry.name.toLowerCase() === name.toLowerCase()),
+        read: (entry) => (entry.size < MINI_STREAM_CUTOFF ? readMini(entry) : readSectors(entry.start, entry.size)),
     };
 }
 
