@@ -10,6 +10,8 @@ export const PLAN_CHOICES = ['current', 'actualOnly'];
 const NOTE_MAX = 120;
 const WEAK_DAYS = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const OWN_TRANSFER_MIN_CENTS = 1000;
+const OWN_TRANSFER_DAYS = 1;
 
 const LEGAL_FORMS = new Set([
     'SIA', 'AS', 'UAB', 'OU', 'OÜ', 'AB', 'IK', 'MB', 'VSIA', 'PSIA', 'LTD', 'GMBH', 'LLC', 'INC',
@@ -410,15 +412,56 @@ function hintedKind(row) {
 }
 
 /**
+ * Indexes of eligible rows paired as money moved between own accounts: a money-out and a money-in row
+ * with the same currency and amount, at most OWN_TRANSFER_DAYS apart. Nearest date first, then lower row index.
+ */
+function ownTransferPairs(rows, eligible) {
+    const buckets = new Map();
+    rows.forEach((row, index) => {
+        if (!eligible[index]) return;
+        const key = `${row.currency}|${row.amountCents}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(index);
+    });
+
+    const candidates = [];
+    for (const indexes of buckets.values()) {
+        for (const out of indexes.filter((index) => rows[index].direction === 'out')) {
+            for (const inn of indexes.filter((index) => rows[index].direction === 'in')) {
+                const gap = Math.abs(dayNumber(rows[out].date) - dayNumber(rows[inn].date));
+                if (gap <= OWN_TRANSFER_DAYS) candidates.push({ out, inn, gap });
+            }
+        }
+    }
+    candidates.sort((a, b) => a.gap - b.gap
+        || Math.min(a.out, a.inn) - Math.min(b.out, b.inn)
+        || Math.max(a.out, a.inn) - Math.max(b.out, b.inn));
+
+    const paired = new Set();
+    for (const { out, inn } of candidates) {
+        if (paired.has(out) || paired.has(inn)) continue;
+        paired.add(out);
+        paired.add(inn);
+    }
+    return paired;
+}
+
+/**
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
  * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
+ * A money-out and a money-in row of the same amount a day apart, with no rule, hint or MCC, are both set to Transfer.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
-    return rows.map((row, index) => {
+    const eligible = [];
+    const decisions = rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
         const hint = rule ? null : mccSuggestion(data, row);
-        const kind = ruleKindName || hintedKind(row) || (row.direction === 'in' ? 'income' : 'expense');
+        const hinted = hintedKind(row);
+        eligible[index] = !rule && !hinted && !duplicates[index]?.level && !row.mcc
+            && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
+            && dayNumber(row.date) !== null;
+        const kind = ruleKindName || hinted || (row.direction === 'in' ? 'income' : 'expense');
         return {
             include: !duplicates[index]?.level,
             kind,
@@ -430,6 +473,8 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
             showAs: rule?.note ?? '',
         };
     });
+    for (const index of ownTransferPairs(rows, eligible)) decisions[index].kind = 'transfer';
+    return decisions;
 }
 
 /** The bank's own words for a row: counterparty and description, without repeats. */
