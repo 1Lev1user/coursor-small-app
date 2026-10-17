@@ -21,9 +21,11 @@ const IBAN = new RegExp(`\\b${IBAN_SOURCE}\\b`);
 const IBAN_ALL = new RegExp(`\\b${IBAN_SOURCE}\\b`, 'g');
 const PERSONAL_CODE_ALL = /\d{6}-\d{5}/g;
 // 11 digits without a hyphen are a personal code only when the line names one, or when
-// they have the shape of a Latvian code and no invoice or customer word stands before them.
-const PERSONAL_CODE_WORD = /personas?\s+kod\p{L}*|(?<![\p{L}\d])p\.\s?k\.?(?![\p{L}])|персональн\p{L}*\s+код\p{L}*/iu;
-const CODE_LABEL_BEFORE = /(?:rēķin\p{L}*|invoice|inv\.?|nr\.?|№|#|klient\p{L}*|customer|līgum\p{L}*|contract|konta?|account|ref\.?|reference|order|pasūtījum\p{L}*|счет\p{L}*|счёт\p{L}*|договор\p{L}*)\s*[:.]?\s*$/iu;
+// they have the shape of a Latvian code and no invoice or customer word stands within the
+// 3 words before them. "no" alone is no label: "Maksa no 01019012345" means "payment from".
+const PERSONAL_CODE_WORD = /personas?\s+kod\p{L}*|pers\.\s?kod\p{L}*|(?<![\p{L}\d])p\.\s?k\.?(?![\p{L}])|персональн\p{L}*\s+код\p{L}*/iu;
+const CODE_LABEL_WORD = /^(?:rēķin\p{L}*|invoice|inv\.?|nr\.?|№|#|klient\p{L}*|customer|līgum\p{L}*|contract|kont[as]|account|ref\.?|reference|order|pasūtījum\p{L}*|счет\p{L}*|счёт\p{L}*|договор\p{L}*|faktūr\p{L}*|faktur\p{L}*|pavadzīm\p{L}*|numur\p{L}*|номер\p{L}*|kvīt\p{L}*|čeks)[:.,;]*$/iu;
+const LABEL_WORDS_BEFORE = 3;
 const CARD_MASK_ALL = /\d{4,6}\*+\d{4}/g;
 
 const CARD_LINE = /^(\d{2})\/(\d{2})\/(\d{4})\s+\d{4,6}\*+\d{4}\s+MCC-(\d{4})\s+REF:\s*\S+/;
@@ -66,10 +68,15 @@ function isPersonalCode11(digits) {
     return utcDay(year, Number(digits.slice(2, 4)), Number(digits.slice(0, 2))) !== null;
 }
 
+function labelBefore(text) {
+    return text.split(/\s+/).filter((word) => word !== '').slice(-LABEL_WORDS_BEFORE)
+        .some((word) => CODE_LABEL_WORD.test(word.replace(/^[^\p{L}\p{N}№#]+/u, '')));
+}
+
 function scrubPersonalCodes11(line) {
     const named = PERSONAL_CODE_WORD.test(line);
     return line.replace(/\b\d{11}\b/g, (digits, offset, whole) => (
-        named || (isPersonalCode11(digits) && !CODE_LABEL_BEFORE.test(whole.slice(0, offset))) ? ' ' : digits
+        named || (isPersonalCode11(digits) && !labelBefore(whole.slice(0, offset))) ? ' ' : digits
     ));
 }
 

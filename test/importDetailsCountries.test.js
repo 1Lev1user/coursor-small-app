@@ -110,6 +110,28 @@ test('11 digits that are an invoice, customer or other number are kept', () => {
     }
 });
 
+test('11 digits are kept when a label stands within the 3 words before them', () => {
+    for (const purpose of [
+        'Faktūra 32123456789', 'Invoice No 32123456789', 'Order no 32123456789', 'Pavadzīme 32123456789',
+        'Klienta numurs 01019012345', 'Rēķins par 32123456789', 'Konts 01019012345',
+        'Kvīts 32123456789', 'Čeks 32123456789', 'Номер 32123456789',
+    ]) {
+        assert.equal(purposeResult(purpose).description, purpose, purpose);
+    }
+});
+
+test('11 digits are scrubbed when "no" is the only word before them, or the line names a personal code', () => {
+    const cases = [
+        ['Maksa no 01019012345', 'Maksa no'],
+        ['Pers. kods 01019012345 alga', 'Pers. kods alga'],
+        ['Pers.kods 32123456789', 'Pers.kods'],
+        ['Rēķins apmaksāts par preci no 32123456789', 'Rēķins apmaksāts par preci no'],
+    ];
+    for (const [purpose, expected] of cases) {
+        assert.equal(purposeResult(purpose).description, expected, purpose);
+    }
+});
+
 test('Citadele: the payee name still ends at the personal code or the 11 digits', () => {
     const salary = splitBankDetails(
         'Darba algas izmaksa\nJĀNIS ĶĒNIŅŠ 010190-12345 HABALV22XXX LV00HABA0000000000002\nMaksātāja reference: 12345',
