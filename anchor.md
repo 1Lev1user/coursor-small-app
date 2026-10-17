@@ -29,6 +29,8 @@ My Expenses lets one person track EUR expenses and income on their phone, plan t
 
 - 2026-10-17: the owner sent a real Citadele export (.xls, account number masked; never committed). Cards C-087 to C-090 written from it (.xls reader, signed Debets/Kredīts column and Trans. Nr. reference, details split with card purchase date, MCC category suggestion). The owner asked Claude to implement them autonomously (process/orchestration.md) and to publish 3.0 afterwards; that is the owner's go for the C-026 publishing step. C-064 to C-067 and C-069 stay deferred: the sample has no status, fee or payee column and is not camt. Planner decision: a card payment is dated on its card date, not its booking date.
 
+- 2026-10-17: owner: finish the bank import for every bank, not only Citadele: everything from research/3.0 (deferred C-064 to C-067, C-069, backlog C-095, C-096 and the whole 'Found but not carded' list); build from public descriptions and made-up data, look for public examples online, label unverified; release 3.1.0 to the site. Slice 4: cards C-095 to C-108 (C-097, C-106, C-107 follow after the sample research).
+
 ## Progress
 CHECKPOINT 3 - 2026-10-03
 Goal: the owner states wishes, Claude writes cards, the owner implements in Cursor and moves cards to In review, Claude reviews and closes.
