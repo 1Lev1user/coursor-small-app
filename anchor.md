@@ -27,6 +27,8 @@ My Expenses lets one person track EUR expenses and income on their phone, plan t
 - 2026-10-04: version 3.0 started; release 2.1.0 postponed and merged into 3.0. 3.0 owner decisions: current balance entered once and carried over month to month (editable); income on payday instead of from the 1st; salary may differ each month (forecast vs actual); several incomes per month; clearer Settings. Bank import: fixes after the owner's sample file (real bank format, made-up data). Playwright download approved; the user guide is redone in the execution phase (C-013, C-014).
 - 2026-10-04: 3.0 research by agents (code analysis, comparable apps, three exploratory testers, bank analysis with independent verification) in research/3.0/; cards C-029 to C-069 drafted from it, waiting for owner approval and the open decisions listed in research/3.0/cards-*.md.
 
+- 2026-10-17: the owner sent a real Citadele export (.xls, account number masked; never committed). Cards C-087 to C-090 written from it (.xls reader, signed Debets/Kredīts column and Trans. Nr. reference, details split with card purchase date, MCC category suggestion). The owner asked Claude to implement them autonomously (process/orchestration.md) and to publish 3.0 afterwards; that is the owner's go for the C-026 publishing step. C-064 to C-067 and C-069 stay deferred: the sample has no status, fee or payee column and is not camt. Planner decision: a card payment is dated on its card date, not its booking date.
+
 ## Progress
 CHECKPOINT 3 - 2026-10-03
 Goal: the owner states wishes, Claude writes cards, the owner implements in Cursor and moves cards to In review, Claude reviews and closes.
