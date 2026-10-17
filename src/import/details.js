@@ -29,6 +29,12 @@ const LABEL_WORDS_BEFORE = 3;
 const CARD_MASK_ALL = /\d{4,6}\*+\d{4}/g;
 
 const CARD_LINE = /^(\d{2})\/(\d{2})\/(\d{4})\s+\d{4,6}\*+\d{4}\s+MCC-(\d{4})\s+REF:\s*\S+/;
+// Swedbank LV: "PIRKUMS <card> <yyyy.mm.dd> [<hh.mm>] <amount> <CCY> (<auth>) <merchant>".
+const SWEDBANK_CARD = /^PIRKUMS\s+\d{4,6}\*+\d{4}\s+(\d{4})\.(\d{2})\.(\d{2})(?:\s+\d{2}[.:]\d{2})?\s+(\d[\d.,]*)\s+([A-Z]{3})\b[^()]*?\(\w+\)\s+(.+)$/;
+const SWEDBANK_FX_TAIL = /\s+(?:VALŪTAS KURSS|KONVERTĀCIJAS MAKSA|ATTIECĪBĀ PRET ECB)(?=\s|$).*$/;
+// SEB: "DD/MM/YYYY HH:MM [<amount> <CCY>(<EUR amount> EUR + fee EUR(<pct>))] <card word>...nnnn <merchant>/<city>/<country> #<id>, ...".
+const SEB_CARD = /^(\d{2})\/(\d{2})\/(\d{4})\s+\d{2}:\d{2}\s+(?:(\d+[.,]\d{2})\s+([A-Z]{3})\(\d+[.,]\d{2}\s+EUR\b[^)]*\([^)]*\)\)\s+)?\p{L}+\.{3}\d{4,6}\s+(.+)$/u;
+const SEB_CARD_END = /\s+#\d+(?:,.*)?$|,\s*dok\.\s*nr\..*$/;
 const PAYER_REFERENCE = /^Maksātāja reference:/i;
 const MAX_CARD_DATE_AGE_DAYS = 60;
 
@@ -104,6 +110,39 @@ function splitCardPayment(lines, card, bookingDate) {
     };
 }
 
+// "1,024.90" or "24.90" to cents; null when it is not an amount or is zero.
+function amountCents(text) {
+    const m = /^(\d{1,3}(?:[.,]\d{3})+|\d+)[.,](\d{2})$/.exec(text);
+    if (!m) {
+        return null;
+    }
+    const cents = Number(m[1].replace(/[.,]/g, '')) * 100 + Number(m[2]);
+    return cents > 0 ? cents : null;
+}
+
+function withOriginal(result, amountText, currency) {
+    const cents = amountCents(amountText);
+    return currency !== 'EUR' && cents !== null ? { ...result, original: { cents, currency } } : result;
+}
+
+function splitSwedbankCard(m, bookingDate) {
+    return withOriginal({
+        description: '',
+        counterparty: collapse(m[6].replace(SWEDBANK_FX_TAIL, '')),
+        date: cardDate(m[3], m[2], m[1], bookingDate),
+        mcc: '',
+    }, m[4], m[5]);
+}
+
+function splitSebCard(m, bookingDate) {
+    return withOriginal({
+        description: '',
+        counterparty: collapse(m[6].replace(SEB_CARD_END, '').replace(/\/[^/]+\/[A-Z]{3}$/, '')),
+        date: cardDate(m[1], m[2], m[3], bookingDate),
+        mcc: '',
+    }, m[4] ?? '', m[5]);
+}
+
 function splitTransfer(lines) {
     let partyIndex = -1;
     lines.forEach((line, index) => {
@@ -140,10 +179,15 @@ function splitTransfer(lines) {
  * are a valid Latvian code not labelled as an invoice, customer or contract number.
  * Only the payer
  * reference line is dropped. Anything else keeps the whole text as the description.
+ * Swedbank card text "PIRKUMS <card> <yyyy.mm.dd> ... <amount> <CCY> (<auth>) <merchant>" and
+ * SEB card text "DD/MM/YYYY HH:MM [<amount> <CCY>(...)] <card word>...nnnn <merchant>/<city>/<country> #..."
+ * give the merchant, the card date and no mask. For a currency other than EUR the result also
+ * has `original: { cents, currency }`; it is absent otherwise.
  * `date` is 'YYYY-MM-DD' only for a real card date 0 to 60 days before `bookingDate`.
  * @param {string} text
  * @param {string} bookingDate YYYY-MM-DD
- * @returns {{ description: string, counterparty: string, date: string, mcc: string }}
+ * @returns {{ description: string, counterparty: string, date: string, mcc: string,
+ *   original?: { cents: number, currency: string } }}
  */
 export function splitBankDetails(text, bookingDate) {
     const lines = String(text ?? '')
@@ -154,6 +198,16 @@ export function splitBankDetails(text, bookingDate) {
     const card = lines.length > 0 ? CARD_LINE.exec(lines[0]) : null;
     if (card) {
         return splitCardPayment(lines, card, bookingDate);
+    }
+
+    const flat = collapse(lines.join(' '));
+    const swedbank = SWEDBANK_CARD.exec(flat);
+    if (swedbank) {
+        return splitSwedbankCard(swedbank, bookingDate);
+    }
+    const seb = SEB_CARD.exec(flat);
+    if (seb) {
+        return splitSebCard(seb, bookingDate);
     }
 
     const transfer = lines.length >= 2 ? splitTransfer(lines) : null;
