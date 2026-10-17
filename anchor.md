@@ -37,6 +37,13 @@ Current state: `npm test` and `npm run check:kit` pass. Board: old Ready/Approve
 Next step: the owner takes the first card (suggested: C-004, then C-009, C-011, C-012, C-015, C-017, C-024).
 Unverified: C-010 waits for the owner's anonymised FiDAViSTA file (set Blocked = yes on the board).
 
+CHECKPOINT 4 - 2026-10-17
+Goal: 3.0 with a correct bank import for the owner's Citadele export, published.
+Steps done: cards C-087 to C-094 and C-091 built through planner, worker and reviewer agents (PRs #80 to #87), all merged; C-095 and C-096 written as P2 backlog from review findings. v1 published as 0c24c38 "Release 3.0.0" (Pages deploy success). Owner's .xls imported end to end in Chromium: 71 rows, in 1685.37 / out 1331.53 equal to the bank's turnover, 51 rows pre-categorised by MCC, no personal codes or IBANs in entry text. 2.0 data upgrades to schema 3 with the pre-update copy kept.
+Current state: npm test 1029/1029 on main 4d1352c; check:kit OK.
+Owner actions open: create GitHub Release v3.0.0 (the cloud session may not create releases; PDF and notes handed over), move cards C-087 to C-094 and C-091 to Done on the board and C-095, C-096 to Backlog (no GraphQL here), delete merged card branches (ref delete refused by the proxy), check the Manual items of the PRs on the iPhone.
+Next step: owner's Manual checks; C-064 to C-067, C-069, C-095, C-096 later.
+
 ## Open questions
 - Guide scripts dependencies undocumented (pypdf, reportlab, playwright).
 - `npm run serve` calls `python`.
