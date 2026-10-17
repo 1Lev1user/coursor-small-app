@@ -54,6 +54,8 @@ const CORE_ASSETS = [
     './src/import/xlsx.js',
     './src/import/xls.js',
     './src/import/xml.js',
+    './src/import/htmlTable.js',
+    './src/import/spreadsheetml.js',
     './src/import/mcc.js',
     './src/views/add.js',
     './src/views/month.js',
