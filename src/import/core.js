@@ -2,6 +2,7 @@ import { createId, UNCATEGORISED_ID } from '../model.js';
 import { buildPlanSnapshot, freezeMonthPlan } from '../budget.js';
 import { compareMonthKeys, currentMonthKey, monthKeyOf } from '../months.js';
 import { subcategoryForMcc } from './mcc.js';
+import { pairReversals } from './types.js';
 
 export const KINDS = ['expense', 'income', 'refund', 'transfer', 'skip'];
 export const RULE_KINDS = ['expense', 'income', 'transfer', 'skip'];
@@ -411,6 +412,11 @@ function hintedKind(row) {
     return row.kindHint === 'refund' && row.direction === 'in' ? 'refund' : '';
 }
 
+/** A reversal of money out comes back as money in: a refund. Money out stays a visible expense. */
+function reversalKind(row) {
+    return row.reversal === true && row.direction === 'in' ? 'refund' : '';
+}
+
 /**
  * Indexes of eligible rows paired as money moved between own accounts: a money-out and a money-in row
  * with the same currency and amount, at most OWN_TRANSFER_DAYS apart. Nearest date first, then lower row index.
@@ -451,17 +457,21 @@ function ownTransferPairs(rows, eligible) {
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
  * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
  * A money-out and a money-in row of the same amount a day apart, with no rule, hint or MCC, are both set to Transfer.
+ * A camt reversal and the payment it cancels (see pairReversals) are both set to Skip; a reversal of money out is a Refund.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
     const eligible = [];
+    const suggestions = rows.map((row) => suggestedRule(data.rules, row));
+    const reversalSkips = new Set(pairReversals(rows, (i) => !duplicates[i]?.level && !suggestions[i].rule).flat());
     const decisions = rows.map((row, index) => {
-        const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
+        const { rule, kind: ruleKindName } = suggestions[index];
         const hint = rule ? null : mccSuggestion(data, row);
         const hinted = hintedKind(row);
-        eligible[index] = !rule && !hinted && !duplicates[index]?.level && !row.mcc
+        eligible[index] = !rule && !hinted && !row.reversal && !reversalSkips.has(index) && !duplicates[index]?.level && !row.mcc
             && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
             && dayNumber(row.date) !== null;
-        const kind = ruleKindName || hinted || (row.direction === 'in' ? 'income' : 'expense');
+        const kind = ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
+            || (row.direction === 'in' ? 'income' : 'expense');
         return {
             include: !duplicates[index]?.level,
             kind,

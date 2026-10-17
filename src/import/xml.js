@@ -1,4 +1,4 @@
-import { statementRow, parserOk, parserFail } from './types.js';
+import { statementRow, pairReversals, parserOk, parserFail } from './types.js';
 
 const NOT_XML = 'The file is not valid XML.';
 
@@ -365,6 +365,16 @@ function skippedWarnings(counts) {
     if (counts.noDirection > 0) {
         warnings.push(`Skipped ${plural(counts.noDirection, 'entry', 'entries')} without a debit or credit mark.`);
     }
+    const reversals = counts.reversal ?? 0;
+    if (reversals > 0) {
+        warnings.push(`${plural(reversals, 'entry is a reversal', 'entries are reversals')} marked by the bank. Check ${reversals === 1 ? 'it' : 'them'}.`);
+    }
+    const pairs = counts.reversalPairs ?? 0;
+    if (pairs > 0) {
+        warnings.push(pairs === 1
+            ? '1 payment and its reversal are left out; they cancel out.'
+            : `${pairs} payments and their reversals are left out; they cancel out.`);
+    }
     return warnings;
 }
 
@@ -493,6 +503,7 @@ function camtEntry(entry, fallbackCurrency, counts) {
         counts.noAmount += 1;
         return null;
     }
+    const reversal = ['true', '1'].includes(textAt(entry, 'RvslInd').trim().toLowerCase());
     const entryCurrency = amount.currency || fallbackCurrency;
     const others = camtCounterAmounts(entry);
 
@@ -521,8 +532,10 @@ function camtEntry(entry, fallbackCurrency, counts) {
         currency,
         originalAmountCents,
         description: camtDescription(entry),
-        counterparty: camtParty(entry, direction),
+        // A reversal may list the party in the other role than its own direction suggests.
+        counterparty: camtParty(entry, direction) || (reversal ? camtParty(entry, direction === 'out' ? 'in' : 'out') : ''),
         bankRef: camtBankRef(entry),
+        reversal,
     });
 }
 
@@ -540,7 +553,7 @@ export function parseCamt(text) {
         return parserFail('This XML file is not a camt.052 or camt.053 bank statement.');
     }
 
-    const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0 };
+    const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0, reversal: 0, reversalPairs: 0 };
     const rows = [];
     let entryCount = 0;
 
@@ -558,6 +571,8 @@ export function parseCamt(text) {
     if (entryCount === 0) {
         return parserFail('The statement has no transactions.');
     }
+    counts.reversalPairs = pairReversals(rows).length;
+    counts.reversal = rows.filter(({ reversal }) => reversal === true).length - counts.reversalPairs;
     return parserOk('camt', rows, skippedWarnings(counts));
 }
 
