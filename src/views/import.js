@@ -52,6 +52,7 @@ const SKIP_REASONS = {
     'unparsable date': 'Date not recognised',
     'unparsable amount': 'Amount not recognised',
     'unknown direction': 'Direction not recognised',
+    'not completed': 'Not completed (pending, reverted or declined)',
 };
 
 export const DUPLICATE_GROUPS = [
@@ -79,6 +80,11 @@ function samplesAt(sampleRows, index) {
     return sampleRows
         .map((row) => String(row[index] ?? '').trim())
         .filter((value) => value !== '');
+}
+
+/** A saved layout overrides the guess key by key; a guessed key the layout lacks (such as status) stays. */
+export function mergeSavedColumns(guessedColumns, savedColumns) {
+    return { ...guessedColumns, ...savedColumns };
 }
 
 const DECIMAL_TAIL = /\d([.,])\d{1,2}\)?-?$/;
@@ -667,7 +673,7 @@ function startTable(ctx, result) {
     const header = headerRow >= 0 ? rows[headerRow] : [];
     const sample = rows.slice(headerRow + 1, headerRow + 1 + GUESS_SAMPLE_ROWS);
     const guess = guessColumns(header, sample);
-    const columns = { ...guess.columns, eurAmount: -1 };
+    const columns = { status: -1, ...guess.columns, eurAmount: -1 };
     const signature = headerSignature(header);
 
     state.table = {
@@ -696,7 +702,7 @@ function startTable(ctx, result) {
         state.layoutMismatch = saved.name;
         state.bankName = saved.name;
     } else if (saved) {
-        const savedColumns = { ...state.layout.columns, ...saved.columns };
+        const savedColumns = mergeSavedColumns(state.layout.columns, saved.columns);
         state.layout = {
             mode: savedColumns.debit >= 0 || savedColumns.credit >= 0 ? 'split' : 'single',
             columns: savedColumns,
@@ -1053,6 +1059,7 @@ function renderColumns(ctx) {
         grid.append(columnSelect(ctx, 'eurAmount', 'Amount in EUR (optional)', true, 'For rows in another currency.'));
     }
     grid.append(columnSelect(ctx, 'bankRef', 'Bank reference (optional)', true));
+    grid.append(columnSelect(ctx, 'status', 'Status (optional)', true, 'Rows marked pending, reverted or declined are skipped.'));
 
     const decimal = selectOf(
         [['.', 'Dot (12.50)'], [',', 'Comma (12,50)']],

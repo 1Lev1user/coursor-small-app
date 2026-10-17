@@ -9,6 +9,7 @@
  * @property {string} counterparty
  * @property {string} bankRef
  * @property {string} [mcc] four-digit merchant category code of a card payment; absent otherwise
+ * @property {'transfer'|'refund'} [kindHint] what the bank's own transaction type suggests; absent otherwise
  */
 
 export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'xls', 'paste'];
@@ -34,6 +35,7 @@ export function statementRow(fields) {
         counterparty: String(fields.counterparty ?? '').replace(/\s+/g, ' ').trim(),
         bankRef: String(fields.bankRef ?? '').trim(),
         ...(/^\d{4}$/.test(fields.mcc ?? '') ? { mcc: fields.mcc } : {}),
+        ...(fields.kindHint === 'transfer' || fields.kindHint === 'refund' ? { kindHint: fields.kindHint } : {}),
     };
 }
 

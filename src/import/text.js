@@ -358,7 +358,26 @@ const KEYWORDS = {
     description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
 };
 
-const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description'];
+const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'status'];
+
+// Exact words after normalisation: 'Statement details' must not match.
+const STATUS_HEADERS = ['status', 'state', 'statuss', 'statusas', 'olek', 'состояние', 'статус'];
+const TYPE_HEADER_WORDS = ['type', 'tips', 'veids', 'тип'];
+// Transaction types of a Revolut-style export; a type column is taken only when a sample is one of these.
+const REVOLUT_TYPES = ['CARD PAYMENT', 'TOPUP', 'EXCHANGE', 'CARD REFUND', 'ATM'];
+// TRANSFER is not hinted: it also covers payments to other people, which are real spending.
+const KIND_HINT_BY_TYPE = { TOPUP: 'transfer', EXCHANGE: 'transfer', 'CARD REFUND': 'refund' };
+// Status words (normalised, lower case) of rows whose money did not move; any other value imports.
+const NOT_COMPLETED = ['pending', 'reverted', 'reversed', 'declined', 'failed', 'cancelled', 'canceled', 'rejected', 'rezervets'];
+
+function isStatusHeader(normalized) {
+    return STATUS_HEADERS.includes(normalized) || normalized.startsWith('status ');
+}
+
+/** 'CARD_PAYMENT' and 'Card Payment' (older and newer exports) both become 'CARD PAYMENT'. */
+function typeKey(value) {
+    return String(value ?? '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+}
 
 function emptyColumns() {
     return { date: -1, amount: -1, description: -1, currency: -1, direction: -1, debit: -1, credit: -1, bankRef: -1 };
@@ -452,7 +471,10 @@ export function guessColumns(header, sampleRows) {
             ) {
                 continue;
             }
-            if (keywords.some((keyword) => normalizedHeader[i].includes(keyword))) {
+            const matches = category === 'status'
+                ? isStatusHeader(normalizedHeader[i])
+                : keywords.some((keyword) => normalizedHeader[i].includes(keyword));
+            if (matches) {
                 columns[category] = i;
                 if (category === 'date') {
                     dateVia = 'keyword';
@@ -489,6 +511,19 @@ export function guessColumns(header, sampleRows) {
         const samples = columnSamples(sampleRows, columns.direction);
         if (samples.length > 0 && !samples.every(isDirectionValue)) {
             columns.direction = -1;
+        }
+    }
+
+    // The bank's transaction type (Revolut: CARD_PAYMENT, TOPUP, ...), only with a known sample and never a direction column.
+    const usedByType = usedIndexes(columns);
+    for (let i = 0; i < normalizedHeader.length; i += 1) {
+        const words = normalizedHeader[i].split(/[^\p{L}]+/u);
+        const samples = columnSamples(sampleRows, i);
+        if (!usedByType.has(i) && words.some((word) => TYPE_HEADER_WORDS.includes(word))
+            && samples.some((value) => REVOLUT_TYPES.includes(typeKey(value)))
+            && !samples.every(isDirectionValue)) {
+            columns.type = i;
+            break;
         }
     }
 
@@ -925,6 +960,11 @@ export function rowsToStatement(rows, headerRow, layout) {
             continue;
         }
 
+        if (NOT_COMPLETED.includes(normalizeText(cellAt(row, columns.status)))) {
+            skipped.push({ line, reason: 'not completed' });
+            continue;
+        }
+
         let amountCents = null;
         let direction = null;
         let unknownDirection = false;
@@ -1006,6 +1046,7 @@ export function rowsToStatement(rows, headerRow, layout) {
             counterparty: split.counterparty,
             bankRef,
             mcc: split.mcc,
+            kindHint: KIND_HINT_BY_TYPE[typeKey(cellAt(row, columns.type))],
         }));
     }
 

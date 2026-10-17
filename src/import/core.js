@@ -403,6 +403,12 @@ function mccSuggestion(data, row) {
     return category ? { categoryId: category.id, subcategoryId } : null;
 }
 
+/** The kind the bank's own transaction type points to; a refund only makes sense for money in. */
+function hintedKind(row) {
+    if (row.kindHint === 'transfer') return 'transfer';
+    return row.kindHint === 'refund' && row.direction === 'in' ? 'refund' : '';
+}
+
 /**
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
@@ -412,7 +418,7 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
     return rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
         const hint = rule ? null : mccSuggestion(data, row);
-        const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
+        const kind = ruleKindName || hintedKind(row) || (row.direction === 'in' ? 'income' : 'expense');
         return {
             include: !duplicates[index]?.level,
             kind,
