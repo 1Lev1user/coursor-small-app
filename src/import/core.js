@@ -1,6 +1,7 @@
 import { createId, UNCATEGORISED_ID } from '../model.js';
 import { buildPlanSnapshot, freezeMonthPlan } from '../budget.js';
 import { compareMonthKeys, currentMonthKey, monthKeyOf } from '../months.js';
+import { subcategoryForMcc } from './mcc.js';
 
 export const KINDS = ['expense', 'income', 'refund', 'transfer', 'skip'];
 export const RULE_KINDS = ['expense', 'income', 'transfer', 'skip'];
@@ -372,19 +373,31 @@ function suggestedRule(rules, row) {
     return shop ? { rule: shop, kind: 'refund' } : { rule: null, kind: '' };
 }
 
+/** The category the card payment's MCC points to, when the row is money out and that subcategory still exists. */
+function mccSuggestion(data, row) {
+    const subcategoryId = row.direction === 'out' ? subcategoryForMcc(row.mcc) : '';
+    if (subcategoryId === '') return null;
+    const category = (data.categories ?? []).find(
+        ({ subcategories }) => (subcategories ?? []).some(({ id }) => id === subcategoryId),
+    );
+    return category ? { categoryId: category.id, subcategoryId } : null;
+}
+
 /**
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
+ * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
     return rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
+        const hint = rule ? null : mccSuggestion(data, row);
         const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
         return {
             include: !duplicates[index]?.level,
             kind,
-            categoryId: rule?.categoryId || UNCATEGORISED_ID,
-            subcategoryId: rule?.subcategoryId ?? '',
+            categoryId: rule?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
+            subcategoryId: rule?.subcategoryId ?? hint?.subcategoryId ?? '',
             incomeCategoryId: rule?.incomeCategoryId || defaultIncomeCategoryId(data),
             remember: false,
             ruleId: rule?.id ?? '',
