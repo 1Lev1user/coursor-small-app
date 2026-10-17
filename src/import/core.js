@@ -216,19 +216,27 @@ function stripNoise(upper) {
         .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
 }
 
+function keepName(token) {
+    if (!/\d/.test(token)) return token;
+    const name = token.replace(/\d{4,}$/, '').replace(/[.'-]+$/g, '');
+    return name.replace(/[^\p{L}]/gu, '').length >= 2 ? name : '';
+}
+
 /**
  * Rule: take the first meaningful word. Leading noise words (POS, PIRKUMS, CARD) are skipped.
  * After a legal form (SIA, AS, UAB, OU) up to two name words are kept: 'SIA Circle K Latvia' -> 'CIRCLE K'.
  * After a payment processor (PAYPAL, SUMUP, SQ, IZ) the merchant is kept too: 'PAYPAL *SPOTIFY' -> 'PAYPAL SPOTIFY'.
- * Tokens with digits, card masks, dates, times, trailing Baltic cities and country codes are dropped.
+ * All-digit tokens are dropped. A name with digits is kept ('TELE2 SIA' -> 'TELE2'); a trailing run of
+ * 4 or more digits is cut ('BOLT.EUR2610011807' -> 'BOLT.EUR'). A legal form on its own gives ''.
+ * Card masks, dates, times, trailing Baltic cities and country codes are dropped.
  */
 export function extractPattern(description) {
     const cleaned = stripNoise(String(description ?? '').toUpperCase())
         .replace(/[^\p{L}\p{N}&'.-]+/gu, ' ');
     const tokens = cleaned
         .split(' ')
-        .map((token) => token.replace(/^[.'-]+|[.'-]+$/g, ''))
-        .filter((token) => token !== '' && !/\d/.test(token));
+        .map((token) => keepName(token.replace(/^[.'-]+|[.'-]+$/g, '')))
+        .filter((token) => token !== '');
 
     while (tokens.length > 0 && TRAILING_PLACES.has(tokens[tokens.length - 1])) {
         tokens.pop();
@@ -245,7 +253,7 @@ export function extractPattern(description) {
     if (PROCESSORS.has(first) && tokens.length > 1) {
         return tokens.slice(0, 2).join(' ');
     }
-    return first;
+    return LEGAL_FORMS.has(first) ? '' : first;
 }
 
 export function ruleKind(rule) {
