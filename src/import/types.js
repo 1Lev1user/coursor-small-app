@@ -1,3 +1,5 @@
+import { monthKeyOf } from '../months.js';
+
 /**
  * @typedef {object} StatementRow
  * @property {string} date YYYY-MM-DD
@@ -10,6 +12,7 @@
  * @property {string} bankRef
  * @property {string} [mcc] four-digit merchant category code of a card payment; absent otherwise
  * @property {'transfer'|'refund'} [kindHint] what the bank's own transaction type suggests; absent otherwise
+ * @property {string} [bookedOn] YYYY-MM-DD the bank booked a card payment, when it differs from `date` (the purchase day); absent otherwise
  * @property {true} [reversal] the bank marks this entry as a reversal (camt only); absent otherwise
  */
 
@@ -45,6 +48,7 @@ export function statementRow(fields) {
         bankRef: String(fields.bankRef ?? '').trim(),
         ...(/^\d{4}$/.test(fields.mcc ?? '') ? { mcc: fields.mcc } : {}),
         ...(fields.kindHint === 'transfer' || fields.kindHint === 'refund' ? { kindHint: fields.kindHint } : {}),
+        ...(monthKeyOf(fields.bookedOn) !== null && fields.bookedOn !== fields.date ? { bookedOn: fields.bookedOn } : {}),
         ...(fields.reversal === true ? { reversal: true } : {}),
     };
 }

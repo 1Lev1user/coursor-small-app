@@ -1457,6 +1457,7 @@ export function rowsToStatement(rows, headerRow, layout) {
             bankRef,
             mcc: split.mcc,
             kindHint: KIND_HINT_BY_TYPE[typeKey(cellAt(row, columns.type))],
+            bookedOn: date,
         }));
     }
 

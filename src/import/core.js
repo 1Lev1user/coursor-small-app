@@ -701,7 +701,7 @@ export function buildImport(data, decisions, meta) {
                     id: createId('trf'),
                     direction: row.direction,
                     amountCents: row.amountCents,
-                    date: row.date,
+                    date: row.bookedOn || row.date,
                     note: noteFor(row, decision),
                     importId,
                     bankRef: row.bankRef ?? '',
@@ -725,6 +725,7 @@ export function buildImport(data, decisions, meta) {
             bankRef: row.bankRef ?? '',
             bankText: bankTextOf(row),
             fingerprint: fingerprints[index],
+            ...(row.bookedOn ? { bookedOn: row.bookedOn } : {}),
         };
 
         if (decision.kind === 'income') {
