@@ -152,7 +152,8 @@ export function findDuplicates(data, rows) {
     for (const item of stored) {
         if (item.entry.bankRef) {
             const key = `${item.direction}|${item.entry.bankRef}`;
-            byBankRef.set(key, [...(byBankRef.get(key) ?? []), item]);
+            if (!byBankRef.has(key)) byBankRef.set(key, []);
+            byBankRef.get(key).push(item);
         }
         if (item.entry.fingerprint) byFingerprint.set(item.entry.fingerprint, item);
     }
@@ -208,7 +209,8 @@ export function findDuplicates(data, rows) {
     const byAmount = new Map();
     for (const item of stored) {
         const key = `${item.direction}|${item.entry.amountCents}`;
-        byAmount.set(key, [...(byAmount.get(key) ?? []), item]);
+        if (!byAmount.has(key)) byAmount.set(key, []);
+        byAmount.get(key).push(item);
     }
     const sameAmount = (row) => byAmount.get(`${row.direction}|${row.amountCents}`) ?? [];
 
@@ -455,6 +457,10 @@ function reversalKind(row) {
 /**
  * Indexes of eligible rows paired as money moved between own accounts: a money-out and a money-in row
  * with the same currency and amount, at most OWN_TRANSFER_DAYS apart. Nearest date first, then lower row index.
+ *
+ * Same result as listing every out/in pair, sorting by (gap, lower index, higher index) and taking pairs greedily,
+ * without listing them: for one gap, the lowest-index row that still has a partner takes the lowest-index free
+ * row of the opposite direction on a day that far away. Rows are visited in index order, per bucket and per gap.
  */
 function ownTransferPairs(rows, eligible) {
     const buckets = new Map();
@@ -465,24 +471,41 @@ function ownTransferPairs(rows, eligible) {
         buckets.get(key).push(index);
     });
 
-    const candidates = [];
+    const paired = new Set();
     for (const indexes of buckets.values()) {
-        for (const out of indexes.filter((index) => rows[index].direction === 'out')) {
-            for (const inn of indexes.filter((index) => rows[index].direction === 'in')) {
-                const gap = Math.abs(dayNumber(rows[out].date) - dayNumber(rows[inn].date));
-                if (gap <= OWN_TRANSFER_DAYS) candidates.push({ out, inn, gap });
+        // Free rows by direction and day, in index order; `head` skips rows already paired.
+        const queues = { out: new Map(), in: new Map() };
+        for (const index of indexes) {
+            const { direction } = rows[index];
+            const day = dayNumber(rows[index].date);
+            if (!queues[direction]) continue;
+            if (!queues[direction].has(day)) queues[direction].set(day, { list: [], head: 0 });
+            queues[direction].get(day).list.push(index);
+        }
+        const firstFree = (direction, day) => {
+            const queue = queues[direction].get(day);
+            if (!queue) return -1;
+            while (queue.head < queue.list.length && paired.has(queue.list[queue.head])) queue.head += 1;
+            return queue.head < queue.list.length ? queue.list[queue.head] : -1;
+        };
+
+        for (let gap = 0; gap <= OWN_TRANSFER_DAYS; gap += 1) {
+            const offsets = gap === 0 ? [0] : [-gap, gap];
+            for (const index of indexes) {
+                if (paired.has(index)) continue;
+                const { direction, date } = rows[index];
+                if (!queues[direction]) continue;
+                const day = dayNumber(date);
+                let partner = -1;
+                for (const offset of offsets) {
+                    const free = firstFree(direction === 'out' ? 'in' : 'out', day + offset);
+                    if (free !== -1 && (partner === -1 || free < partner)) partner = free;
+                }
+                if (partner === -1) continue;
+                paired.add(index);
+                paired.add(partner);
             }
         }
-    }
-    candidates.sort((a, b) => a.gap - b.gap
-        || Math.min(a.out, a.inn) - Math.min(b.out, b.inn)
-        || Math.max(a.out, a.inn) - Math.max(b.out, b.inn));
-
-    const paired = new Set();
-    for (const { out, inn } of candidates) {
-        if (paired.has(out) || paired.has(inn)) continue;
-        paired.add(out);
-        paired.add(inn);
     }
     return paired;
 }
@@ -799,8 +822,8 @@ export function applyImport(data, built, planChoices = {}) {
             freezeMonthPlan(data, monthKey);
         }
     }
-    data.expenses.push(...built.expenses.map((entry) => ({ ...entry })));
-    data.incomes.push(...built.incomes.map((entry) => ({ ...entry })));
+    for (const entry of built.expenses) data.expenses.push({ ...entry });
+    for (const entry of built.incomes) data.incomes.push({ ...entry });
     for (const rule of cleanedRules) {
         upsertRule(data, rule);
     }
