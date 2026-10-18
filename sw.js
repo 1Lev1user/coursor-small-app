@@ -3,7 +3,7 @@
  * VERSION must match package.json; a test checks it. Changing it renames
  * the cache, which makes installed apps fetch the new files.
  */
-const VERSION = '3.0.0';
+const VERSION = '3.1.0';
 const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [

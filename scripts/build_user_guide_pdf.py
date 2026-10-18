@@ -169,7 +169,7 @@ def build():
         str(OUT), pagesize=A4,
         leftMargin=12 * mm, rightMargin=12 * mm,
         topMargin=10 * mm, bottomMargin=12 * mm,
-        title="My Expenses - Illustrated User Guide (version 3.0)",
+        title="My Expenses - Illustrated User Guide (version 3.1)",
         author=AUTHOR,
         subject="Install steps and screen-by-screen guide",
         creator=f"My Expenses guide by {AUTHOR}",
@@ -178,7 +178,7 @@ def build():
 
     # Cover
     story.append(Paragraph("My Expenses", s["title"]))
-    story.append(Paragraph("User guide - version 3.0: install &amp; every screen", s["sub"]))
+    story.append(Paragraph("User guide - version 3.1: install &amp; every screen", s["sub"]))
     story.append(HRFlowable(width="100%", thickness=0.8, color=LINE, spaceBefore=1, spaceAfter=6))
     story.append(Paragraph("App link (tap to open)", s["link_label"]))
     story.append(Paragraph(link_tag(), s["link_hero"]))
