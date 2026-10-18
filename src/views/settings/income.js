@@ -1,6 +1,7 @@
 import { parseAmount, formatEuro, formatPlain } from '../../money.js';
 import { monthKeyOf, fullDate } from '../../months.js';
 import { freezeMonthPlan } from '../../budget.js';
+import { markEdited, restoreEditedAt } from '../../model.js';
 import {
     element,
     buildField,
@@ -72,6 +73,7 @@ function saveIncomeEntryEdit(ctx, income, fields) {
         amountCents: income.amountCents,
         note: income.note,
         date: income.date,
+        editedAt: income.editedAt,
     };
     const oldMonthKey = monthKeyOf(snapshot.date);
     const newMonthKey = monthKeyOf(date);
@@ -82,6 +84,7 @@ function saveIncomeEntryEdit(ctx, income, fields) {
     income.amountCents = amountCents;
     income.note = fields.note.control.value.trim();
     income.date = date;
+    markEdited(income, snapshot);
     if (monthChanged) {
         freezeMonthPlan(ctx.data, newMonthKey);
     }
@@ -91,6 +94,7 @@ function saveIncomeEntryEdit(ctx, income, fields) {
         income.amountCents = snapshot.amountCents;
         income.note = snapshot.note;
         income.date = snapshot.date;
+        restoreEditedAt(income, snapshot);
         if (monthChanged && !planWasAlreadyFrozen) {
             delete ctx.data.monthPlans[newMonthKey];
         }
