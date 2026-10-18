@@ -1,7 +1,8 @@
-import { createId, UNCATEGORISED_ID } from '../model.js';
+import { createId, markEdited, UNCATEGORISED_ID } from '../model.js';
 import { buildPlanSnapshot, freezeMonthPlan } from '../budget.js';
 import { compareMonthKeys, currentMonthKey, monthKeyOf } from '../months.js';
 import { subcategoryForMcc } from './mcc.js';
+import { pairReversals } from './types.js';
 
 export const KINDS = ['expense', 'income', 'refund', 'transfer', 'skip'];
 export const RULE_KINDS = ['expense', 'income', 'transfer', 'skip'];
@@ -10,6 +11,8 @@ export const PLAN_CHOICES = ['current', 'actualOnly'];
 const NOTE_MAX = 120;
 const WEAK_DAYS = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const OWN_TRANSFER_MIN_CENTS = 1000;
+const OWN_TRANSFER_DAYS = 1;
 
 const LEGAL_FORMS = new Set([
     'SIA', 'AS', 'UAB', 'OU', 'OÜ', 'AB', 'IK', 'MB', 'VSIA', 'PSIA', 'LTD', 'GMBH', 'LLC', 'INC',
@@ -32,6 +35,38 @@ function matchText(value) {
         .toUpperCase()
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+const STOP_WORDS = new Set([
+    ...LEGAL_FORMS,
+    'POS', 'PAR', 'UN', 'AR', 'NO', 'UZ', 'MAKSAJUMS', 'MAKSĀJUMS', 'PAYMENT', 'PIRKUMS', 'CARD', 'KARTE',
+    'SIA', 'AS', 'OU', 'UAB', 'LTD', 'LLC', 'GMBH',
+].map(matchText));
+const MIN_KEYWORD_LENGTH = 3;
+
+/** The normalised keyword, or '' when it is a stop word or has under 3 characters other than spaces. */
+function usableKeyword(value) {
+    const keyword = matchText(value);
+    if (STOP_WORDS.has(keyword)) return '';
+    return keyword.replace(/ /g, '').length >= MIN_KEYWORD_LENGTH ? keyword : '';
+}
+
+/**
+ * True when keyword occurs in text (both already matchText-normalised) on word boundaries: the characters
+ * around it are not letters or digits. One exception: after a keyword that does not end in a digit, a glued
+ * reference code is allowed: up to 2 letters and then 4 or more digits ('BOLT.EU' and 'BOLT.EUR' in
+ * 'BOLT.EUR2610011807'), the shape extractPattern cuts.
+ */
+function hasKeyword(text, keyword) {
+    if (keyword === '') return false;
+    const glued = /\P{N}$/u.test(keyword);
+    for (let at = text.indexOf(keyword); at !== -1; at = text.indexOf(keyword, at + 1)) {
+        if (/[\p{L}\p{N}]$/u.test(text.slice(0, at))) continue;
+        const after = text.slice(at + keyword.length);
+        if (!/^[\p{L}\p{N}]/u.test(after)) return true;
+        if (glued && /^\p{L}{0,2}\d{4,}(?![\p{L}\p{N}])/u.test(after)) return true;
+    }
+    return false;
 }
 
 function rowText(row) {
@@ -117,7 +152,8 @@ export function findDuplicates(data, rows) {
     for (const item of stored) {
         if (item.entry.bankRef) {
             const key = `${item.direction}|${item.entry.bankRef}`;
-            byBankRef.set(key, [...(byBankRef.get(key) ?? []), item]);
+            if (!byBankRef.has(key)) byBankRef.set(key, []);
+            byBankRef.get(key).push(item);
         }
         if (item.entry.fingerprint) byFingerprint.set(item.entry.fingerprint, item);
     }
@@ -173,7 +209,8 @@ export function findDuplicates(data, rows) {
     const byAmount = new Map();
     for (const item of stored) {
         const key = `${item.direction}|${item.entry.amountCents}`;
-        byAmount.set(key, [...(byAmount.get(key) ?? []), item]);
+        if (!byAmount.has(key)) byAmount.set(key, []);
+        byAmount.get(key).push(item);
     }
     const sameAmount = (row) => byAmount.get(`${row.direction}|${row.amountCents}`) ?? [];
 
@@ -213,7 +250,10 @@ function stripNoise(upper) {
         .replace(/\*+\d{2,}/g, ' ')
         .replace(/\b\d{4}-\d{1,2}-\d{1,2}\b/g, ' ')
         .replace(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/g, ' ')
-        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
+        .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])[A-Z]{2}\d{2}[A-Z0-9]{11,30}(?![\p{L}\p{N}])/gu, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])(?:EUR|USD|GBP|SEK|NOK|DKK|PLN|CHF|CZK|HUF|RON|BGN|TRY|UAH|RUB|JPY|CNY)\d+(?:[.,]\d+)?(?![\p{L}\p{N}])/gu, ' ')
+        .replace(/(?<![\p{L}\p{N}.'&-])\d+(?:[.,]\d+)?(?:EUR|USD|GBP|SEK|NOK|DKK|PLN|CHF|CZK|HUF|RON|BGN|TRY|UAH|RUB|JPY|CNY)(?![\p{L}\p{N}])/gu, ' ');
 }
 
 function keepName(token) {
@@ -228,32 +268,44 @@ function keepName(token) {
  * After a payment processor (PAYPAL, SUMUP, SQ, IZ) the merchant is kept too: 'PAYPAL *SPOTIFY' -> 'PAYPAL SPOTIFY'.
  * All-digit tokens are dropped. A name with digits is kept ('TELE2 SIA' -> 'TELE2'); a trailing run of
  * 4 or more digits is cut ('BOLT.EUR2610011807' -> 'BOLT.EUR'). A legal form on its own gives ''.
- * Card masks, dates, times, trailing Baltic cities and country codes are dropped.
+ * Card masks, dates, times, trailing Baltic cities and country codes are dropped. IBANs, amounts glued to a currency
+ * and reference codes glued to digits (TERM1234, NR1234) are dropped too, unless they are the only tokens left.
+ * A stop word (POS, PAR, SIA...) or a keyword under 3 characters gives ''.
  */
 export function extractPattern(description) {
     const cleaned = stripNoise(String(description ?? '').toUpperCase())
         .replace(/[^\p{L}\p{N}&'.-]+/gu, ' ');
-    const tokens = cleaned
+    const items = cleaned
         .split(' ')
-        .map((token) => keepName(token.replace(/^[.'-]+|[.'-]+$/g, '')))
-        .filter((token) => token !== '');
+        .map((raw) => {
+            const token = raw.replace(/^[.'-]+|[.'-]+$/g, '');
+            return { name: keepName(token), ref: /^(?:NR|NO|ID|TERM|TID|MID|TRN|TRX|DOC|REF)\d{4,}$/.test(token) };
+        })
+        .filter((item) => item.name !== '');
 
-    while (tokens.length > 0 && TRAILING_PLACES.has(tokens[tokens.length - 1])) {
-        tokens.pop();
+    while (items.length > 0 && TRAILING_PLACES.has(items[items.length - 1].name)) {
+        items.pop();
     }
-    while (tokens.length > 1 && LEADING_NOISE.has(tokens[0])) {
-        tokens.shift();
+    const named = items.filter((item) => !item.ref);
+    if (named.length > 0 && named.length < items.length) {
+        items.splice(0, items.length, ...named);
     }
+    while (items.length > 1 && LEADING_NOISE.has(items[0].name)) {
+        items.shift();
+    }
+    const tokens = items.map((item) => item.name);
     if (tokens.length === 0) return '';
 
     const first = tokens[0];
+    let pattern;
     if (LEGAL_FORMS.has(first) && tokens.length > 1) {
-        return tokens.slice(1, 3).join(' ');
+        pattern = tokens.slice(1, 3).join(' ');
+    } else if (PROCESSORS.has(first) && tokens.length > 1) {
+        pattern = tokens.slice(0, 2).join(' ');
+    } else {
+        pattern = LEGAL_FORMS.has(first) ? '' : first;
     }
-    if (PROCESSORS.has(first) && tokens.length > 1) {
-        return tokens.slice(0, 2).join(' ');
-    }
-    return LEGAL_FORMS.has(first) ? '' : first;
+    return usableKeyword(pattern) === '' ? '' : pattern;
 }
 
 export function ruleKind(rule) {
@@ -278,10 +330,10 @@ export function applyRules(rules, row) {
     let best = null;
     let bestLength = 0;
     for (const rule of rules ?? []) {
-        const pattern = matchText(rule.pattern);
+        const pattern = usableKeyword(rule.pattern);
         if (
             pattern === ''
-            || !haystack.includes(pattern)
+            || !hasKeyword(haystack, pattern)
             || !ruleFitsDirection(rule, row.direction)
         ) continue;
         if (pattern.length > bestLength) {
@@ -391,16 +443,93 @@ function mccSuggestion(data, row) {
     return category ? { categoryId: category.id, subcategoryId } : null;
 }
 
+/** The kind the bank's own transaction type points to; a refund only makes sense for money in. */
+function hintedKind(row) {
+    if (row.kindHint === 'transfer') return 'transfer';
+    return row.kindHint === 'refund' && row.direction === 'in' ? 'refund' : '';
+}
+
+/** A reversal of money out comes back as money in: a refund. Money out stays a visible expense. */
+function reversalKind(row) {
+    return row.reversal === true && row.direction === 'in' ? 'refund' : '';
+}
+
+/**
+ * Indexes of eligible rows paired as money moved between own accounts: a money-out and a money-in row
+ * with the same currency and amount, at most OWN_TRANSFER_DAYS apart. Nearest date first, then lower row index.
+ *
+ * Same result as listing every out/in pair, sorting by (gap, lower index, higher index) and taking pairs greedily,
+ * without listing them: for one gap, the lowest-index row that still has a partner takes the lowest-index free
+ * row of the opposite direction on a day that far away. Rows are visited in index order, per bucket and per gap.
+ */
+function ownTransferPairs(rows, eligible) {
+    const buckets = new Map();
+    rows.forEach((row, index) => {
+        if (!eligible[index]) return;
+        const key = `${row.currency}|${row.amountCents}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(index);
+    });
+
+    const paired = new Set();
+    for (const indexes of buckets.values()) {
+        // Free rows by direction and day, in index order; `head` skips rows already paired.
+        const queues = { out: new Map(), in: new Map() };
+        for (const index of indexes) {
+            const { direction } = rows[index];
+            const day = dayNumber(rows[index].date);
+            if (!queues[direction]) continue;
+            if (!queues[direction].has(day)) queues[direction].set(day, { list: [], head: 0 });
+            queues[direction].get(day).list.push(index);
+        }
+        const firstFree = (direction, day) => {
+            const queue = queues[direction].get(day);
+            if (!queue) return -1;
+            while (queue.head < queue.list.length && paired.has(queue.list[queue.head])) queue.head += 1;
+            return queue.head < queue.list.length ? queue.list[queue.head] : -1;
+        };
+
+        for (let gap = 0; gap <= OWN_TRANSFER_DAYS; gap += 1) {
+            const offsets = gap === 0 ? [0] : [-gap, gap];
+            for (const index of indexes) {
+                if (paired.has(index)) continue;
+                const { direction, date } = rows[index];
+                if (!queues[direction]) continue;
+                const day = dayNumber(date);
+                let partner = -1;
+                for (const offset of offsets) {
+                    const free = firstFree(direction === 'out' ? 'in' : 'out', day + offset);
+                    if (free !== -1 && (partner === -1 || free < partner)) partner = free;
+                }
+                if (partner === -1) continue;
+                paired.add(index);
+                paired.add(partner);
+            }
+        }
+    }
+    return paired;
+}
+
 /**
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
  * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
+ * A money-out and a money-in row of the same amount a day apart, with no rule, hint or MCC, are both set to Transfer.
+ * A camt reversal and the payment it cancels (see pairReversals) are both set to Skip; a reversal of money out is a Refund.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
-    return rows.map((row, index) => {
-        const { rule, kind: ruleKindName } = suggestedRule(data.rules, row);
+    const eligible = [];
+    const suggestions = rows.map((row) => suggestedRule(data.rules, row));
+    const reversalSkips = new Set(pairReversals(rows, (i) => !duplicates[i]?.level && !suggestions[i].rule).flat());
+    const decisions = rows.map((row, index) => {
+        const { rule, kind: ruleKindName } = suggestions[index];
         const hint = rule ? null : mccSuggestion(data, row);
-        const kind = ruleKindName || (row.direction === 'in' ? 'income' : 'expense');
+        const hinted = hintedKind(row);
+        eligible[index] = !rule && !hinted && !row.reversal && !reversalSkips.has(index) && !duplicates[index]?.level && !row.mcc
+            && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
+            && dayNumber(row.date) !== null;
+        const kind = ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
+            || (row.direction === 'in' ? 'income' : 'expense');
         return {
             include: !duplicates[index]?.level,
             kind,
@@ -412,6 +541,8 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
             showAs: rule?.note ?? '',
         };
     });
+    for (const index of ownTransferPairs(rows, eligible)) decisions[index].kind = 'transfer';
+    return decisions;
 }
 
 /** The bank's own words for a row: counterparty and description, without repeats. */
@@ -691,8 +822,8 @@ export function applyImport(data, built, planChoices = {}) {
             freezeMonthPlan(data, monthKey);
         }
     }
-    data.expenses.push(...built.expenses.map((entry) => ({ ...entry })));
-    data.incomes.push(...built.incomes.map((entry) => ({ ...entry })));
+    for (const entry of built.expenses) data.expenses.push({ ...entry });
+    for (const entry of built.incomes) data.incomes.push({ ...entry });
     for (const rule of cleanedRules) {
         upsertRule(data, rule);
     }
@@ -709,10 +840,12 @@ export function applyImport(data, built, planChoices = {}) {
     return { ok: true, importId: record.id, counts: { ...record.counts } };
 }
 
-function removeByIds(list, ids) {
+const isEdited = (entry) => typeof entry.editedAt === 'string' && entry.editedAt !== '';
+
+function removeByIds(list, ids, keepEdited = false) {
     let removed = 0;
     for (let index = list.length - 1; index >= 0; index -= 1) {
-        if (ids.has(list[index].id)) {
+        if (ids.has(list[index].id) && !(keepEdited && isEdited(list[index]))) {
             list.splice(index, 1);
             removed += 1;
         }
@@ -720,13 +853,32 @@ function removeByIds(list, ids) {
     return removed;
 }
 
-/** Returns the number of entries removed; 0 when unknown or already undone. */
-export function undoImport(data, importId, now = new Date()) {
+/**
+ * How many entries of an import are still present (`total`) and how many of
+ * them were changed after the import (`edited`). 0 and 0 when unknown or undone.
+ */
+export function importEditInfo(data, importId) {
+    const record = (data.imports ?? []).find(({ id }) => id === importId);
+    if (!record || record.undoneAt) return { total: 0, edited: 0 };
+    const expenseIds = new Set(record.expenseIds);
+    const incomeIds = new Set(record.incomeIds);
+    const present = [
+        ...(data.expenses ?? []).filter(({ id }) => expenseIds.has(id)),
+        ...(data.incomes ?? []).filter(({ id }) => incomeIds.has(id)),
+    ];
+    return { total: present.length, edited: present.filter(isEdited).length };
+}
+
+/**
+ * Returns the number of entries removed; 0 when unknown or already undone.
+ * With `keepEdited`, entries changed after the import stay.
+ */
+export function undoImport(data, importId, now = new Date(), { keepEdited = false } = {}) {
     const record = (data.imports ?? []).find(({ id }) => id === importId);
     if (!record || record.undoneAt) return 0;
 
-    const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds))
-        + removeByIds(data.incomes ?? [], new Set(record.incomeIds));
+    const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds), keepEdited)
+        + removeByIds(data.incomes ?? [], new Set(record.incomeIds), keepEdited);
     // Plans this import created go too, unless the month has other entries now.
     for (const monthKey of record.createdPlans ?? []) {
         const used = [...(data.expenses ?? []), ...(data.incomes ?? [])]
@@ -742,16 +894,18 @@ export function undoImport(data, importId, now = new Date()) {
 /**
  * Undoes an import and saves; if saving fails, puts every list back as it was.
  * `save` returns false on failure (like ctx.save / persist).
+ * With `keepEdited` the result also says how many changed entries were kept.
  */
-export function undoImportAndSave(data, importId, save) {
+export function undoImportAndSave(data, importId, save, options = {}) {
     const keys = ['expenses', 'incomes', 'monthPlans', 'imports'];
     const before = JSON.parse(JSON.stringify(Object.fromEntries(keys.map((key) => [key, data[key]]))));
-    const removed = undoImport(data, importId);
+    const { total } = importEditInfo(data, importId);
+    const removed = undoImport(data, importId, new Date(), options);
     if (save() === false) {
         Object.assign(data, before);
         return { ok: false, removed: 0 };
     }
-    return { ok: true, removed };
+    return options.keepEdited ? { ok: true, removed, kept: total - removed } : { ok: true, removed };
 }
 
 export function summarise(built) {
@@ -770,7 +924,7 @@ export function summarise(built) {
  * sets the category (and subcategory) and, when the rule has one, the "Show as" note.
  * Manual entries are never touched. Returns how many entries changed.
  */
-export function applyRuleToExisting(data, ruleId) {
+export function applyRuleToExisting(data, ruleId, now = new Date()) {
     const rule = (data.rules ?? []).find(({ id }) => id === ruleId);
     if (!rule) return 0;
     if (rule.kind === 'expense' && !(data.categories ?? []).some(({ id }) => id === rule.categoryId)) {
@@ -779,26 +933,30 @@ export function applyRuleToExisting(data, ruleId) {
     if (rule.kind === 'income' && !(data.incomeCategories ?? []).some(({ id }) => id === rule.incomeCategoryId)) {
         return 0;
     }
-    const pattern = matchText(rule.pattern);
+    const pattern = usableKeyword(rule.pattern);
     if (pattern === '') return 0;
 
     let changed = 0;
     const matches = (entry) => entry.importId
-        && matchText(entry.bankText || entry.note || '').includes(pattern);
+        && hasKeyword(matchText(entry.bankText || entry.note || ''), pattern);
 
     if (rule.kind === 'expense') {
         for (const expense of data.expenses ?? []) {
             if (!matches(expense) || expense.refund !== (rule.refund === true)) continue;
+            const before = { categoryId: expense.categoryId, subcategoryId: expense.subcategoryId, note: expense.note };
             expense.categoryId = rule.categoryId || expense.categoryId;
             expense.subcategoryId = rule.categoryId ? (rule.subcategoryId ?? '') : expense.subcategoryId;
             if (rule.note) expense.note = rule.note;
+            markEdited(expense, before, now);
             changed += 1;
         }
     } else if (rule.kind === 'income') {
         for (const income of data.incomes ?? []) {
             if (!matches(income)) continue;
+            const before = { incomeCategoryId: income.incomeCategoryId, note: income.note };
             income.incomeCategoryId = rule.incomeCategoryId || income.incomeCategoryId;
             if (rule.note) income.note = rule.note;
+            markEdited(income, before, now);
             changed += 1;
         }
     }

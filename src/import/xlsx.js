@@ -320,6 +320,15 @@ function cellValue(cell, context) {
     }
 }
 
+const UNCALCULATED = 'This file has formulas that were never calculated. Open it in Excel and save it again.';
+
+/** A formula with no stored result; an empty text result (t="str") is a real value. */
+function isUncalculated(cell) {
+    const value = child(cell, 'v');
+    return child(cell, 'f') !== null
+        && (value === null || (value.text.trim() === '' && (cell.attrs.t ?? 'n') !== 'str'));
+}
+
 function readRows(sheet, context) {
     const rows = [];
     for (const row of children(child(sheet, 'sheetData'), 'row')) {
@@ -332,6 +341,9 @@ function readRows(sheet, context) {
                 values.push('');
             }
             values[index] = cellValue(cell, context);
+            if (isUncalculated(cell)) {
+                context.uncalculated += 1;
+            }
             next = index + 1;
         }
         while (values.length > 0 && values[values.length - 1] === '') {
@@ -342,6 +354,15 @@ function readRows(sheet, context) {
         }
     }
     return rows;
+}
+
+/** The rows of one sheet, with the warning only when that sheet has formulas without a result. */
+function sheetResult(sheet, context) {
+    const sheetContext = { ...context, uncalculated: 0 };
+    const rows = readRows(sheet, sheetContext);
+    return sheetContext.uncalculated === 0
+        ? { ok: true, rows }
+        : { ok: true, rows, warnings: [UNCALCULATED] };
 }
 
 // ---------------------------------------------------------------------------
@@ -386,7 +407,8 @@ function toBytes(input) {
  * sheet (of the first 10) with at least 3 rows and a date-like cell, else the
  * first visible sheet, else the first sheet.
  * @param {Uint8Array} input
- * @returns {Promise<{ ok: true, rows: string[][] } | { ok: false, reason: string }>}
+ * Formulas without a stored result add `warnings` (absent otherwise).
+ * @returns {Promise<{ ok: true, rows: string[][], warnings?: string[] } | { ok: false, reason: string }>}
  */
 export async function readXlsx(input) {
     const bytes = toBytes(input);
@@ -435,21 +457,21 @@ export async function readXlsx(input) {
             if (!sheet) {
                 continue;
             }
-            const rows = readRows(sheet, context);
-            if (looksLikeTransactions(rows)) {
-                return { ok: true, rows };
+            const result = sheetResult(sheet, context);
+            if (looksLikeTransactions(result.rows)) {
+                return result;
             }
-            fallback ??= rows;
+            fallback ??= result;
         }
         if (fallback) {
-            return { ok: true, rows: fallback };
+            return fallback;
         }
 
         const sheet = await readXml('xl/worksheets/sheet1.xml');
         if (!sheet) {
             return { ok: false, reason: NOT_EXCEL };
         }
-        return { ok: true, rows: readRows(sheet, context) };
+        return sheetResult(sheet, context);
     } catch (error) {
         if (error instanceof NoUnzipError) {
             return { ok: false, reason: NO_UNZIP };

@@ -1,6 +1,6 @@
 import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
-import { monthKeyOf, monthLabel } from '../months.js';
+import { monthKeyOf, monthLabel, todayISO } from '../months.js';
 import { createId } from '../model.js';
 import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
 import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
@@ -12,18 +12,22 @@ import {
     findHeaderRow,
     guessColumns,
     parseDateWith,
+    parseAmountWith,
     rowsToStatement,
     stripAmountDecoration,
 } from '../import/text.js';
 import { parseCamt, parseFidavista } from '../import/xml.js';
 import { readXlsx } from '../import/xlsx.js';
 import { readXls } from '../import/xls.js';
+import { readHtmlTable } from '../import/htmlTable.js';
+import { readSpreadsheetMl } from '../import/spreadsheetml.js';
 import {
     findDuplicates,
     defaultDecisions,
     extractPattern,
     buildImport,
     applyImport,
+    importEditInfo,
     undoImportAndSave,
     summarise,
 } from '../import/core.js';
@@ -32,7 +36,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const PREVIEW_ROWS = 5;
 const GUESS_SAMPLE_ROWS = 20;
 const SKIPPED_SHOWN = 20;
-const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'paste'];
+const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'html', 'spreadsheetml', 'paste'];
 
 const KIND_LABELS = {
     expense: 'Expense',
@@ -47,11 +51,13 @@ const KIND_HINTS = {
     skip: 'This row will not be imported.',
 };
 
-const SKIP_REASONS = {
+export const SKIP_REASONS = {
     'summary row': 'Summary or balance line',
+    'zero amount': 'Amount is zero',
     'unparsable date': 'Date not recognised',
     'unparsable amount': 'Amount not recognised',
     'unknown direction': 'Direction not recognised',
+    'not completed': 'Not completed (pending, reverted or declined)',
 };
 
 export const DUPLICATE_GROUPS = [
@@ -79,6 +85,18 @@ function samplesAt(sampleRows, index) {
     return sampleRows
         .map((row) => String(row[index] ?? '').trim())
         .filter((value) => value !== '');
+}
+
+/**
+ * A saved layout overrides the guess key by key; a guessed key the layout lacks (such as status) stays.
+ * The fee is the exception: a guessed fee would silently change the amounts of a layout confirmed without it.
+ * So is the payee: it is part of the row fingerprint, and a guessed one would break matching with earlier imports.
+ */
+export function mergeSavedColumns(guessedColumns, savedColumns) {
+    const merged = { ...guessedColumns, ...savedColumns };
+    if (savedColumns.fee === undefined && guessedColumns.fee !== undefined) merged.fee = -1;
+    if (savedColumns.counterparty === undefined && guessedColumns.counterparty !== undefined) merged.counterparty = -1;
+    return merged;
 }
 
 const DECIMAL_TAIL = /\d([.,])\d{1,2}\)?-?$/;
@@ -208,6 +226,30 @@ export function rememberHint(data, decision) {
     return `Next time: ${pattern} \u2192 ${target}${suffix}`;
 }
 
+function knownLabel(data, decision) {
+    if (decision.kind === 'transfer') return 'Transfer';
+    if (decision.kind === 'skip') return 'Skip';
+    if (decision.kind === 'income') {
+        return (data.incomeCategories ?? []).find(({ id }) => id === decision.incomeCategoryId)?.name ?? 'Income';
+    }
+    const category = (data.categories ?? []).find(({ id }) => id === decision.categoryId);
+    const sub = category?.subcategories?.find(({ id }) => id === decision.subcategoryId);
+    const name = sub?.name ?? category?.name ?? 'Uncategorised';
+    return decision.kind === 'refund' ? `Refund ${name}` : name;
+}
+
+/** 'N rows sorted by your rules: Groceries 5, Transport 3' for the rows in Known; '' when there are none. */
+export function knownSummaryText(data, decisions, indexes) {
+    if (indexes.length === 0) return '';
+    const counts = new Map();
+    for (const index of indexes) {
+        const label = knownLabel(data, decisions[index]);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const parts = [...counts].sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label} ${count}`);
+    return `${plural(indexes.length, 'row', 'rows')} sorted by your rules: ${parts.join(', ')}`;
+}
+
 export function bankTextOf(row) {
     return String(row.counterparty || row.description || '').replace(/\s+/g, ' ').trim();
 }
@@ -281,8 +323,29 @@ export function dateQuestion(sample) {
     return `Is ${sample} the ${ordinal(dd)} of ${MONTH_NAMES[dm - 1]} or ${MONTH_NAMES[mm - 1]} ${ordinal(md)}?`;
 }
 
+export const DATE_FORMAT_OPTIONS = [
+    ['', 'Choose'],
+    ['DMY', 'Day first (day.month.year)'],
+    ['MDY', 'Month first (month.day.year)'],
+    ['YMD', 'Year first (year.month.day)'],
+    ['TEXT', 'Day and month name (17 Sep 2026)'],
+];
+
+/** Indexes of rows dated more than 1 year after today or more than 15 years before it; none without `now`. */
+export function outOfRangeIndexes(rows, now = null) {
+    const late = new Set();
+    if (!now) return late;
+    const [year, month, day] = todayISO(now).split('-').map(Number);
+    const latest = new Date(Date.UTC(year, month - 1, day + 365)).toISOString().slice(0, 10);
+    const earliest = new Date(Date.UTC(year - 15, month - 1, day)).toISOString().slice(0, 10);
+    rows.forEach((row, index) => {
+        if (row.date > latest || row.date < earliest) late.add(index);
+    });
+    return late;
+}
+
 /** What was actually read, for a person to compare with the bank's own figures. */
-export function checkSummary(rows, skipped, { fileLines = null, tableRows = null } = {}) {
+export function checkSummary(rows, skipped, { fileLines = null, tableRows = null, now = null } = {}) {
     let totalInCents = 0;
     let totalOutCents = 0;
     let foreignCount = 0;
@@ -294,6 +357,8 @@ export function checkSummary(rows, skipped, { fileLines = null, tableRows = null
         if (row.direction === 'in') totalInCents += row.amountCents;
         else totalOutCents += row.amountCents;
     }
+    const late = [...outOfRangeIndexes(rows, now)];
+    const futureCount = late.filter((index) => rows[index].date > todayISO(now)).length;
     const mismatch = Number.isFinite(fileLines) && Number.isFinite(tableRows) && fileLines !== tableRows;
     return {
         read: rows.length,
@@ -305,6 +370,8 @@ export function checkSummary(rows, skipped, { fileLines = null, tableRows = null
         sample: rows.length > 4 ? [...rows.slice(0, 3), rows[rows.length - 1]] : rows,
         mostlyIn: rows.length >= 5 && inCount * 10 >= rows.length * 9,
         lineMismatch: mismatch ? { fileLines, tableRows } : null,
+        futureCount,
+        pastCount: late.length - futureCount,
     };
 }
 
@@ -328,7 +395,25 @@ export function checkWarnings(summary, placement) {
         const { fileLines, tableRows } = summary.lineMismatch;
         warnings.push(`The file has ${fileLines} lines but ${tableRows} rows were read. Some lines may have been joined together; look for a stray quote mark.`);
     }
+    for (const [count, where] of [[summary.futureCount, 'a year ahead'], [summary.pastCount, '15 years back']]) {
+        if (count > 0) {
+            warnings.push(`${plural(count, 'row is', 'rows are')} dated more than ${where}. ${count === 1 ? 'It is not imported unless you tick it.' : 'They are not imported unless you tick them.'}`);
+        }
+    }
     return warnings;
+}
+
+/** The Columns-step note on the fee, from the balance check of the guess; '' when there is nothing to say. */
+export function feeNoteText(feeIndex, feeCheck) {
+    if (!feeCheck) return '';
+    if (feeCheck.mode === 'included') {
+        return 'The Balance column suggests the amount already includes the fee, so adding it would count it twice.';
+    }
+    if (feeIndex < 0) return '';
+    if (feeCheck.mode === 'added') {
+        return `The Balance column fits Amount minus Fee on ${feeCheck.added} of ${feeCheck.checked} rows: the fee is added to money out.`;
+    }
+    return 'The fee is added to money out and taken off money in. Compare the totals with your bank.';
 }
 
 export function stepCountText(index, total, formatKnown) {
@@ -372,6 +457,7 @@ function freshState() {
         fileLines: null,
         table: null,
         layout: null,
+        feeCheck: null,
         askDate: false,
         dateSample: '',
         savedLayoutName: '',
@@ -394,6 +480,8 @@ function freshState() {
         applyError: '',
         result: null,
         undoneCount: null,
+        keptCount: 0,
+        confirmUndo: false,
         focusId: '',
         focusStep: false,
     };
@@ -555,13 +643,33 @@ function isOldExcel(bytes) {
 const UNKNOWN_FILE = 'This file does not look like a bank statement.'
     + ' Use a CSV, Excel (.xls or .xlsx), camt.053 or FiDAViSTA XML file.';
 
-const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT940 yet.'
+export const HEADER_ONLY_FILE = 'This file has a header but no transactions. Check the period you exported.';
+
+const MT940_FILE ='This looks like an MT940 statement. The app cannot read MT940 yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
 const OFX_FILE = 'This looks like an OFX/QFX statement. The app cannot read OFX/QFX yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
 
 function countLines(text) {
     return text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '').length;
+}
+
+const looksLikeValue = (cell) => {
+    const text = String(cell ?? '').trim();
+    return text !== '' && (['YMD', 'DMY', 'MDY'].some((format) => parseDateWith(text, format) !== null)
+        || parseAmountWith(text, '.') !== null || parseAmountWith(text, ',') !== null);
+};
+
+/**
+ * True when the table is a header (with a date column) as its last non-blank row,
+ * and only text above it, so there is nothing to import.
+ */
+export function isHeaderOnly(rows) {
+    const filled = rows.filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''));
+    const last = filled.length - 1;
+    return last >= 0 && findHeaderRow(filled) === last
+        && guessColumns(filled[last], []).columns.date >= 0
+        && !filled.slice(0, last).some((row) => row.some(looksLikeValue));
 }
 
 export async function readStatementFile(file) {
@@ -576,7 +684,8 @@ export async function readStatementFile(file) {
         const format = isZip(bytes) ? 'xlsx' : 'xls';
         const sheet = await (format === 'xlsx' ? readXlsx(bytes) : readXls(bytes));
         if (!sheet.ok) return sheet;
-        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
+        if (isHeaderOnly(sheet.rows)) return { ok: false, reason: HEADER_ONLY_FILE };
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '', warnings: sheet.warnings ?? [] };
     }
 
     const { text, encoding } = decodeBytes(bytes);
@@ -588,9 +697,23 @@ export async function readStatementFile(file) {
         if (!parsed.ok) return parsed;
         return { ok: true, kind: 'statement', format, rows: parsed.rows, warnings: parsed.warnings ?? [] };
     }
+    if (format === 'html' || format === 'spreadsheetml') {
+        const sheet = format === 'html' ? readHtmlTable(text) : readSpreadsheetMl(text);
+        if (!sheet.ok) return sheet;
+        if (isHeaderOnly(sheet.rows)) return { ok: false, reason: HEADER_ONLY_FILE };
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
+    }
     if (format === 'csv') {
         const { delimiter, rows } = parseDelimited(text);
+        if (isHeaderOnly(rows)) return { ok: false, reason: HEADER_ONLY_FILE };
         return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding, lineCount: countLines(text) };
+    }
+    // A single header line is too short for detectFormat to call it CSV.
+    if (!text.trimStart().startsWith('<')) {
+        const { rows } = parseDelimited(text);
+        if (rows.length === 1 && rows[0].length >= 2 && guessColumns(rows[0], []).columns.date >= 0) {
+            return { ok: false, reason: HEADER_ONLY_FILE };
+        }
     }
     return { ok: false, reason: UNKNOWN_FILE };
 }
@@ -632,6 +755,11 @@ function loadPaste(ctx) {
         refresh(ctx, 'imp-paste');
         return;
     }
+    if (isHeaderOnly(rows)) {
+        state.loadError = HEADER_ONLY_FILE;
+        refresh(ctx, 'imp-paste');
+        return;
+    }
     state.loadError = '';
     state.fileName = 'Pasted text';
     acceptLoaded(ctx, { ok: true, kind: 'table', format: 'paste', rows, delimiter, encoding: '', lineCount: countLines(text) });
@@ -667,7 +795,8 @@ function startTable(ctx, result) {
     const header = headerRow >= 0 ? rows[headerRow] : [];
     const sample = rows.slice(headerRow + 1, headerRow + 1 + GUESS_SAMPLE_ROWS);
     const guess = guessColumns(header, sample);
-    const columns = { ...guess.columns, eurAmount: -1 };
+    const columns = { fee: -1, status: -1, counterparty: -1, ...guess.columns, eurAmount: -1 };
+    state.feeCheck = guess.feeCheck ?? null;
     const signature = headerSignature(header);
 
     state.table = {
@@ -676,6 +805,7 @@ function startTable(ctx, result) {
         headerRow,
         header,
         delimiter: result.delimiter ?? '',
+        warnings: result.warnings ?? [],
         signature,
     };
     state.layout = {
@@ -696,7 +826,7 @@ function startTable(ctx, result) {
         state.layoutMismatch = saved.name;
         state.bankName = saved.name;
     } else if (saved) {
-        const savedColumns = { ...state.layout.columns, ...saved.columns };
+        const savedColumns = mergeSavedColumns(state.layout.columns, saved.columns);
         state.layout = {
             mode: savedColumns.debit >= 0 || savedColumns.credit >= 0 ? 'split' : 'single',
             columns: savedColumns,
@@ -709,7 +839,7 @@ function startTable(ctx, result) {
         const parsed = parseTable();
         if (parsed.rows.length > 0) {
             state.savedLayoutName = saved.name;
-            enterReview(ctx, parsed.rows, parsed.skipped, []);
+            enterReview(ctx, parsed.rows, parsed.skipped, state.table.warnings);
             return;
         }
     }
@@ -763,9 +893,11 @@ function enterReview(ctx, rows, skipped, warnings) {
         state.rowsKey = key;
         state.rows = rows;
         state.duplicates = findDuplicates(ctx.data, rows);
+        const late = outOfRangeIndexes(rows, new Date());
         state.decisions = defaultDecisions(ctx.data, rows, state.duplicates)
             .map((decision, index) => ({
                 ...decision,
+                include: decision.include && !late.has(index),
                 pattern: patternFor(rows[index]),
                 ...suggestSalary(ctx.data, rows[index], decision),
             }));
@@ -874,8 +1006,17 @@ function renderLoad(ctx) {
     return card;
 }
 
+/** The length of the longest row; a loop, because spreading 130 000 rows into Math.max overflows the stack. */
+export function widestRow(rows) {
+    let width = 0;
+    for (const row of rows) {
+        if (row.length > width) width = row.length;
+    }
+    return width;
+}
+
 function columnOptions(includeUnused) {
-    const width = Math.max(...state.table.rows.map((row) => row.length));
+    const width = widestRow(state.table.rows);
     const items = includeUnused ? [[-1, 'Not used']] : [[-1, 'Choose a column']];
     for (let index = 0; index < width; index += 1) {
         const name = String(state.table.header[index] ?? '').trim();
@@ -886,7 +1027,7 @@ function columnOptions(includeUnused) {
 
 function previewTable() {
     const { rows, headerRow, header } = state.table;
-    const width = Math.max(...rows.map((row) => row.length));
+    const width = widestRow(rows);
     const data = rows.slice(headerRow + 1, headerRow + 1 + PREVIEW_ROWS);
 
     const wrap = element('div', 'imp-table-wrap');
@@ -981,6 +1122,10 @@ function renderCheckPanel(summary, placement) {
             `${plural(summary.foreignCount, 'row is', 'rows are')} in another currency and not in these totals.`,
         ));
     }
+    const feeNote = placement === 'columns' ? feeNoteText(state.layout.columns.fee, state.feeCheck) : '';
+    if (feeNote !== '') {
+        panel.append(element('p', 'muted', feeNote));
+    }
     for (const warning of checkWarnings(summary, placement)) {
         panel.append(element('p', 'imp-strong', warning));
     }
@@ -1033,6 +1178,7 @@ function renderColumns(ctx) {
         grid.append(columnSelect(ctx, 'amount', 'Amount', false));
     }
     grid.append(
+        columnSelect(ctx, 'counterparty', 'Payee or sender (optional)', true, 'The shop or person. Used for the entry text and for rules.'),
         columnSelect(ctx, 'description', 'Description', true),
         columnSelect(ctx, 'currency', 'Currency (optional)', true),
     );
@@ -1053,6 +1199,8 @@ function renderColumns(ctx) {
         grid.append(columnSelect(ctx, 'eurAmount', 'Amount in EUR (optional)', true, 'For rows in another currency.'));
     }
     grid.append(columnSelect(ctx, 'bankRef', 'Bank reference (optional)', true));
+    grid.append(columnSelect(ctx, 'status', 'Status (optional)', true, 'Rows marked pending, reverted or declined are skipped.'));
+    grid.append(columnSelect(ctx, 'fee', 'Fee (optional)', true, 'Added to money out and taken off money in. Leave empty if the amount already includes the fee.'));
 
     const decimal = selectOf(
         [['.', 'Dot (12.50)'], [',', 'Comma (12,50)']],
@@ -1067,7 +1215,7 @@ function renderColumns(ctx) {
 
     if (state.askDate) {
         const dateSelect = selectOf(
-            [['', 'Choose'], ['DMY', 'Day first (day.month.year)'], ['MDY', 'Month first (month.day.year)'], ['YMD', 'Year first (year.month.day)']],
+            DATE_FORMAT_OPTIONS,
             state.layout.dateFormat ?? '',
             (value) => {
                 state.layout.dateFormat = value === '' ? null : value;
@@ -1098,6 +1246,7 @@ function renderColumns(ctx) {
         const summary = checkSummary(parsed.rows, parsed.skipped, {
             fileLines: state.fileLines,
             tableRows: state.table.parsedRows,
+            now: new Date(),
         });
         card.append(renderCheckPanel(summary, 'columns'));
     }
@@ -1124,7 +1273,7 @@ function renderColumns(ctx) {
         const again = parseTable();
         if (again.rows.length === 0) return;
         state.savedLayoutName = '';
-        enterReview(ctx, again.rows, again.skipped, []);
+        enterReview(ctx, again.rows, again.skipped, state.table.warnings);
     });
     next.disabled = parsed.rows.length === 0;
     card.append(actions(
@@ -1166,6 +1315,7 @@ function renderDuplicates(ctx) {
         const summary = checkSummary(state.rows, state.skipped, {
             fileLines: state.fileLines,
             tableRows: state.table?.parsedRows ?? null,
+            now: new Date(),
         });
         card.append(renderCheckPanel(summary, placement));
     }
@@ -1239,6 +1389,29 @@ function renderDuplicates(ctx) {
             group.append(list);
             card.append(group);
         }
+    }
+
+    const far = [...outOfRangeIndexes(state.rows, new Date())].filter((index) => !state.duplicates[index].level);
+    if (far.length > 0) {
+        const group = element('section', 'stack imp-group');
+        group.append(
+            element('h3', 'category-name', `Dated far from today (${far.length})`),
+            element('p', 'muted', 'More than a year ahead or more than 15 years back. Not imported unless you tick them.'),
+        );
+        const list = element('ul', 'entry-list imp-list');
+        for (const index of far) {
+            const row = state.rows[index];
+            const item = element('li', 'entry-item stack imp-dup');
+            item.append(
+                entrySummary('In the file', row.date, amountText(row), describeRow(row)),
+                checkRow(`imp-dup-${index}`, 'Import anyway', state.decisions[index].include === true, (checked) => {
+                    state.decisions[index].include = checked;
+                }),
+            );
+            list.append(item);
+        }
+        group.append(list);
+        card.append(group);
     }
 
     card.append(actions(
@@ -1560,7 +1733,7 @@ function renderCategorise(ctx) {
         toggle.setAttribute('aria-expanded', String(state.knownOpen));
         toggle.setAttribute('aria-controls', 'imp-known-list');
         head.append(toggle);
-        group.append(head, element('p', 'muted', `${plural(known.length, 'row was', 'rows were')} sorted by your rules.`));
+        group.append(head, element('p', 'muted', knownSummaryText(ctx.data, state.decisions, known)));
         if (state.knownOpen) {
             const list = element('ul', 'entry-list imp-list');
             list.id = 'imp-known-list';
@@ -1669,6 +1842,8 @@ function applyBuilt(ctx) {
         saved: saved !== false,
     };
     state.undoneCount = null;
+    state.keptCount = 0;
+    state.confirmUndo = false;
     if (saved !== false) ctx.toast(`Imported ${entryCountText(count)}`);
     goStep(ctx, 'done');
 }
@@ -1716,6 +1891,42 @@ function renderConfirm(ctx) {
     return card;
 }
 
+function undoFromDone(ctx, options) {
+    const undone = undoImportAndSave(ctx.data, state.result.importId, () => ctx.save(), options);
+    state.confirmUndo = false;
+    if (!undone.ok) {
+        ctx.render();
+        return;
+    }
+    state.undoneCount = undone.removed;
+    state.keptCount = undone.kept ?? 0;
+    ctx.toast(state.keptCount > 0
+        ? `Import undone, ${plural(state.keptCount, 'changed entry', 'changed entries')} kept`
+        : 'Import undone');
+    state.focusStep = true;
+    ctx.render();
+}
+
+function undoConfirmBox(ctx, { total, edited }) {
+    const noun = total === 1 ? 'entry' : 'entries';
+    const verb = edited === 1 ? 'was' : 'were';
+    const cancel = button('btn', 'Cancel', () => {
+        state.confirmUndo = false;
+        state.focusId = 'imp-undo-start';
+        ctx.render();
+    });
+    cancel.id = 'imp-undo-cancel';
+    const box = element('div', 'confirm-box');
+    box.setAttribute('role', 'group');
+    box.append(
+        element('p', 'confirm-copy', `${edited} of ${total} ${noun} ${verb} changed after the import. Remove all of them, or keep the changed ones? Rules you saved stay.`),
+        cancel,
+        button('btn btn-danger', 'Remove all', () => undoFromDone(ctx)),
+        button('btn', `Keep the ${edited} changed`, () => undoFromDone(ctx, { keepEdited: true })),
+    );
+    return box;
+}
+
 function renderDone(ctx) {
     const card = element('section', 'card stack');
     card.setAttribute('role', 'status');
@@ -1731,7 +1942,8 @@ function renderDone(ctx) {
     });
 
     if (state.undoneCount !== null) {
-        card.append(element('p', '', `${entryCountText(state.undoneCount)} removed. Rules you saved stay.`));
+        const kept = state.keptCount > 0 ? ` ${plural(state.keptCount, 'changed entry', 'changed entries')} kept.` : '';
+        card.append(element('p', '', `${entryCountText(state.undoneCount)} removed.${kept} Rules you saved stay.`));
         card.append(actions(toSettings));
         return card;
     }
@@ -1740,6 +1952,21 @@ function renderDone(ctx) {
     if (!result.saved) {
         card.append(alertText('The import is in memory but could not be saved on this device.'));
     }
+    const info = importEditInfo(ctx.data, result.importId);
+    if (state.confirmUndo && info.edited > 0) {
+        card.append(undoConfirmBox(ctx, info));
+        state.focusId = 'imp-undo-cancel';
+        return card;
+    }
+    const undo = button('btn', 'Undo this import', () => {
+        if (importEditInfo(ctx.data, result.importId).edited > 0) {
+            state.confirmUndo = true;
+            ctx.render();
+            return;
+        }
+        undoFromDone(ctx);
+    });
+    undo.id = 'imp-undo-start';
     card.append(actions(
         button('btn btn-primary', 'Go to Month', () => {
             const monthKey = monthKeyOf(result.periodTo);
@@ -1747,17 +1974,7 @@ function renderDone(ctx) {
             if (monthKey) ctx.setMonthKey(monthKey);
             ctx.goTo('month');
         }),
-        button('btn', 'Undo this import', () => {
-            const undone = undoImportAndSave(ctx.data, result.importId, () => ctx.save());
-            if (!undone.ok) {
-                ctx.render();
-                return;
-            }
-            state.undoneCount = undone.removed;
-            ctx.toast('Import undone');
-            state.focusStep = true;
-            ctx.render();
-        }),
+        undo,
         toSettings,
     ));
     return card;

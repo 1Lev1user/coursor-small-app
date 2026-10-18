@@ -13,7 +13,9 @@ import {
 import {
     SAVINGS_ID,
     UNCATEGORISED_ID,
+    markEdited,
     removeEntry,
+    restoreEditedAt,
     restoreEntry,
 } from '../model.js';
 import { describeForeign } from '../currency.js';
@@ -424,6 +426,7 @@ function saveExpenseEdit(ctx, expense, fields, currency, refundInput) {
         currency: expense.currency,
         originalAmountCents: expense.originalAmountCents,
         refund: expense.refund,
+        editedAt: expense.editedAt,
     };
     const oldMonthKey = monthKeyOf(snapshot.date);
     const newMonthKey = monthKeyOf(date);
@@ -438,6 +441,7 @@ function saveExpenseEdit(ctx, expense, fields, currency, refundInput) {
     expense.currency = amounts.currency;
     expense.originalAmountCents = amounts.originalAmountCents;
     expense.refund = refund;
+    markEdited(expense, snapshot);
     if (monthChanged) {
         freezeMonthPlan(ctx.data, newMonthKey);
     }
@@ -451,6 +455,7 @@ function saveExpenseEdit(ctx, expense, fields, currency, refundInput) {
         expense.currency = snapshot.currency;
         expense.originalAmountCents = snapshot.originalAmountCents;
         expense.refund = snapshot.refund;
+        restoreEditedAt(expense, snapshot);
         if (monthChanged && !planWasAlreadyFrozen) {
             delete ctx.data.monthPlans[newMonthKey];
         }
@@ -514,6 +519,7 @@ function saveIncomeEdit(ctx, income, fields, currency) {
         date: income.date,
         currency: income.currency,
         originalAmountCents: income.originalAmountCents,
+        editedAt: income.editedAt,
     };
     const oldMonthKey = monthKeyOf(snapshot.date);
     const newMonthKey = monthKeyOf(date);
@@ -526,6 +532,7 @@ function saveIncomeEdit(ctx, income, fields, currency) {
     income.date = date;
     income.currency = amounts.currency;
     income.originalAmountCents = amounts.originalAmountCents;
+    markEdited(income, snapshot);
     if (monthChanged) {
         freezeMonthPlan(ctx.data, newMonthKey);
     }
@@ -537,6 +544,7 @@ function saveIncomeEdit(ctx, income, fields, currency) {
         income.date = snapshot.date;
         income.currency = snapshot.currency;
         income.originalAmountCents = snapshot.originalAmountCents;
+        restoreEditedAt(income, snapshot);
         if (monthChanged && !planWasAlreadyFrozen) {
             delete ctx.data.monthPlans[newMonthKey];
         }

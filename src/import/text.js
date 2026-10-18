@@ -1,5 +1,6 @@
 import { statementRow } from './types.js';
 import { splitBankDetails } from './details.js';
+import { excelSerialToDate } from './xlsx.js';
 
 const BOM_UTF8 = [0xef, 0xbb, 0xbf];
 const BOM_UTF16LE = [0xff, 0xfe];
@@ -17,13 +18,70 @@ function hasBom(bytes, bom) {
     return true;
 }
 
+const SNIFF_LIMIT = 4096;
+const NUL_SHARE = 0.3;
+const MIN_CYRILLIC = 20;
+// Cyrillic letters needed per Baltic letter: Russian text reads as about 2 Latvian letters
+// per 1 in 1257 (measured 1.85-2.1), a Latvian file as about 1.
+const CYRILLIC_PER_BALTIC = 1.5;
+const CYRILLIC_LETTER = /[\u0400-\u04ff]/g;
+const LATIN_LETTER = /[A-Za-z]/g;
+const BALTIC_LETTER = /[āčēģīķļņšūžĀČĒĢĪĶĻŅŠŪŽ]/g;
+
+// UTF-16 text without a BOM is mostly ASCII, so every other byte is 0x00.
+function sniffUtf16WithoutBom(bytes) {
+    const sample = bytes.subarray(0, SNIFF_LIMIT);
+    if (sample.length < 2) {
+        return null;
+    }
+    let oddZeros = 0;
+    let evenZeros = 0;
+    for (let i = 0; i < sample.length; i += 1) {
+        if (sample[i] === 0) {
+            if (i % 2 === 1) {
+                oddZeros += 1;
+            } else {
+                evenZeros += 1;
+            }
+        }
+    }
+    const le = oddZeros / Math.floor(sample.length / 2);
+    const be = evenZeros / Math.ceil(sample.length / 2);
+    if (le >= NUL_SHARE && le >= be) {
+        return 'utf-16le';
+    }
+    return be >= NUL_SHARE ? 'utf-16be' : null;
+}
+
+function countMatches(text, pattern) {
+    return (text.match(pattern) ?? []).length;
+}
+
+// Both legacy codepages are single-byte. Pick 1251 only when its reading is
+// mostly Cyrillic and clearly beats the Baltic letters of the 1257 reading, so
+// a Latvian file with one foreign letter (Café, Strauß) stays windows-1257.
+function looksLikeWindows1251(bytes) {
+    try {
+        const sample = bytes.subarray(0, SNIFF_LIMIT);
+        const as1251 = new TextDecoder('windows-1251').decode(sample);
+        const cyrillic = countMatches(as1251, CYRILLIC_LETTER);
+        const latin = countMatches(as1251, LATIN_LETTER);
+        const baltic = countMatches(new TextDecoder('windows-1257').decode(sample), BALTIC_LETTER);
+        return cyrillic >= MIN_CYRILLIC && cyrillic >= latin && cyrillic >= CYRILLIC_PER_BALTIC * baltic;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Decodes raw file bytes into text, working out the encoding.
- * Strips a BOM (UTF-8 or UTF-16) when present. Tries strict UTF-8 first,
- * then falls back to windows-1257 (Baltic) for legacy bank exports, and
- * to windows-1252 if this runtime has no windows-1257 label at all.
+ * Strips a BOM (UTF-8 or UTF-16) when present. Without a BOM, UTF-16 is
+ * recognised by the share of 0x00 bytes. Then tries strict UTF-8, then
+ * windows-1251 (Russian) when the bytes read as Cyrillic, else windows-1257
+ * (Baltic) for legacy bank exports, and windows-1252 if this runtime has no
+ * windows-1257 label at all.
  * @param {Uint8Array} bytes
- * @returns {{ text: string, encoding: 'utf-8'|'utf-16le'|'utf-16be'|'windows-1257'|'windows-1252' }}
+ * @returns {{ text: string, encoding: 'utf-8'|'utf-16le'|'utf-16be'|'windows-1251'|'windows-1257'|'windows-1252' }}
  */
 export function decodeBytes(bytes) {
     if (hasBom(bytes, BOM_UTF16LE)) {
@@ -35,10 +93,19 @@ export function decodeBytes(bytes) {
 
     const body = hasBom(bytes, BOM_UTF8) ? bytes.subarray(3) : bytes;
 
+    const utf16 = sniffUtf16WithoutBom(body);
+    if (utf16) {
+        return { text: new TextDecoder(utf16).decode(body), encoding: utf16 };
+    }
+
     try {
         return { text: new TextDecoder('utf-8', { fatal: true }).decode(body), encoding: 'utf-8' };
     } catch {
-        // not valid UTF-8, fall through to the Baltic legacy codepage
+        // not valid UTF-8, fall through to the legacy codepages
+    }
+
+    if (looksLikeWindows1251(body)) {
+        return { text: new TextDecoder('windows-1251').decode(body), encoding: 'windows-1251' };
     }
 
     try {
@@ -344,7 +411,7 @@ export function findHeaderRow(rows) {
 
 const KEYWORDS = {
     date: ['datums', 'дата', 'kuupaev', 'data', 'date', 'laikas'],
-    debit: ['debit', 'debets', 'дебет', 'deebet', 'исходящ'],
+    debit: ['debit', 'debets', 'debetas', 'дебет', 'deebet', 'исходящ'],
     credit: ['credit', 'kredit', 'кредит', 'kreedit'],
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
     direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'zime', 'sign', 'тип', 'type'],
@@ -354,11 +421,48 @@ const KEYWORDS = {
         'transaction id', 'transaction reference', 'bank reference', 'arhiva kods', 'arhiva numurs',
         'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
         'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
+        'arhiveerimistunnus', 'archiving code', 'kande viide', 'transakcijos kodas', 'transferwise id',
     ],
-    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
+    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars', 'informacija'],
+    counterparty: ['payee', 'counterparty', 'beneficiary', 'partneris', 'nosaukums', 'sanemejs', 'maksatajs', 'получатель', 'плательщик', 'saaja', 'saaja/maksja nimi', 'partner name', 'gavejo pavadinimas', 'sender/receiver name'],
 };
 
-const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description'];
+// An account's name or number is not the shop or person ('Konta nosaukums', 'Account name').
+const NOT_COUNTERPARTY_WORDS = ['account', 'konta', 'konto', 'konts', 'iban', 'kods', 'code', 'number', 'saskaita'];
+const NOT_COUNTERPARTY_TOKENS = ['nr'];
+// The details header only when no other header names them ('Payment Reference' in N26).
+const FALLBACK_DESCRIPTION_WORD = 'payment reference';
+const NOT_SIDE_WORDS = ['istaig', 'original'];
+
+const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'counterparty', 'status'];
+
+// Exact words after normalisation: 'Statement details' must not match.
+const STATUS_HEADERS = ['status', 'state', 'statuss', 'statusas', 'olek', 'состояние', 'статус'];
+const TYPE_HEADER_WORDS = ['type', 'tips', 'veids', 'тип'];
+// Transaction types of a Revolut-style export; a type column is taken only when a sample is one of these.
+const REVOLUT_TYPES = ['CARD PAYMENT', 'TOPUP', 'EXCHANGE', 'CARD REFUND', 'ATM'];
+// TRANSFER is not hinted: it also covers payments to other people, which are real spending.
+const KIND_HINT_BY_TYPE = { TOPUP: 'transfer', EXCHANGE: 'transfer', 'CARD REFUND': 'refund' };
+// Swedbank record type column: 20 is a transaction; 10, 82, 86 and 900 are balance and turnover lines.
+const RECORD_TYPE_HEADERS = ['ieraksta tips', 'reatuup', 'kirje tuup', 'record type'];
+const RECORD_TYPE_CODES = ['10', '20', '82', '86', '900'];
+// Status words (normalised, lower case) of rows whose money did not move; any other value imports.
+const NOT_COMPLETED = ['pending', 'reverted', 'reversed', 'declined', 'failed', 'cancelled', 'canceled', 'rejected', 'rezervets'];
+
+// Exact words after normalisation: 'Fee type', 'Free text' and 'Total fees' (a breakdown) must not match.
+const FEE_HEADERS = ['fee', 'komisija', 'komisijas maksa', 'mokestis', 'tasu', 'комиссия'];
+// PayPal lists Gross, Fee and Net: Net is already the money moved.
+const NET_HEADERS = ['net'];
+const BALANCE_HEADERS = ['balance', 'running balance', 'saldo', 'atlikums', 'likutis', 'jaak', 'остаток', 'баланс'];
+
+function isStatusHeader(normalized) {
+    return STATUS_HEADERS.includes(normalized) || normalized.startsWith('status ');
+}
+
+/** 'CARD_PAYMENT' and 'Card Payment' (older and newer exports) both become 'CARD PAYMENT'. */
+function typeKey(value) {
+    return String(value ?? '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+}
 
 function emptyColumns() {
     return { date: -1, amount: -1, description: -1, currency: -1, direction: -1, debit: -1, credit: -1, bankRef: -1 };
@@ -417,6 +521,77 @@ function guessDecimalSeparator(sampleRows, columns) {
     return '.';
 }
 
+/** First unused column whose header is exactly one of the words and whose samples all look like amounts, or -1. */
+function findExactColumn(normalizedHeader, words, used, sampleRows) {
+    for (let i = 0; i < normalizedHeader.length; i += 1) {
+        if (!used.has(i) && words.includes(normalizedHeader[i]) && columnSamples(sampleRows, i).every(isAmountLikeValue)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Compares the Balance column with the amounts of neighbouring rows of one
+ * currency, to tell whether the fee is added to the amount (balance moves by
+ * amount minus fee) or already included in it (balance moves by the amount).
+ * Both row orders (oldest or newest first) are tried and the better one is
+ * used; only rows with a non-zero fee can tell the two apart. Only a signed
+ * single Amount column is checked. A tie keeps the fee ('added').
+ * @param {string[]} header
+ * @param {string[][]} sampleRows
+ * @param {object} columns
+ * @param {'.'|','} decimalSeparator
+ * @returns {{ mode: 'added'|'included'|'unknown', added: number, included: number, checked: number }}
+ */
+export function checkFeeAgainstBalance(header, sampleRows, columns, decimalSeparator) {
+    const unknown = { mode: 'unknown', added: 0, included: 0, checked: 0 };
+    if (columns.amount < 0 || columns.debit >= 0 || columns.credit >= 0 || columns.fee < 0) {
+        return unknown;
+    }
+    const normalizedHeader = header.map(normalizeText);
+    const balanceIndex = findExactColumn(normalizedHeader, BALANCE_HEADERS, usedIndexes(columns), sampleRows);
+    if (balanceIndex < 0) {
+        return unknown;
+    }
+
+    const points = [];
+    for (const row of sampleRows) {
+        const balance = parseAmountWith(cellAt(row, balanceIndex), decimalSeparator);
+        const amount = parseAmountWith(cellAt(row, columns.amount), decimalSeparator);
+        if (balance === null || amount === null) {
+            continue;
+        }
+        const fee = Math.abs(parseAmountWith(cellAt(row, columns.fee), decimalSeparator) ?? 0);
+        const currency = cellAt(row, columns.currency).trim().toUpperCase();
+        points.push({ balance, amount, fee, currency });
+    }
+
+    const oldestFirst = countBalanceFits(points, true);
+    const newestFirst = countBalanceFits(points, false);
+    const best = newestFirst.added + newestFirst.included > oldestFirst.added + oldestFirst.included ? newestFirst : oldestFirst;
+    if (best.added + best.included > 0) {
+        best.mode = best.included > best.added ? 'included' : 'added';
+    }
+    return best;
+}
+
+/** A row's balance moves by its own amount from the older row's balance; the rows are listed oldest or newest first. */
+function countBalanceFits(points, oldestFirst) {
+    const count = { mode: 'unknown', added: 0, included: 0, checked: 0 };
+    for (let i = 0; i + 1 < points.length; i += 1) {
+        const [older, newer] = oldestFirst ? [points[i], points[i + 1]] : [points[i + 1], points[i]];
+        if (older.currency !== newer.currency || newer.fee === 0) {
+            continue;
+        }
+        const delta = newer.balance - older.balance;
+        count.checked += 1;
+        if (delta === newer.amount - newer.fee) count.added += 1;
+        if (delta === newer.amount) count.included += 1;
+    }
+    return count;
+}
+
 /**
  * Guesses which column holds what, by keyword (EN/LV/RU/ET/LT, case and
  * diacritics insensitive), then by content when no header word matches:
@@ -424,11 +599,12 @@ function guessDecimalSeparator(sampleRows, columns) {
  * description falls back to the longest text column with the most distinct
  * values.
  * @param {string[]} header
- * @param {string[][]} sampleRows
+ * @param {string[][]} allSampleRows rows under the header; repeats of the header line are ignored
  * @returns {{ columns: object, dateFormat: string|null, decimalSeparator: string, confidence: number }}
  */
-export function guessColumns(header, sampleRows) {
+export function guessColumns(header, allSampleRows) {
     const normalizedHeader = header.map(normalizeText);
+    const sampleRows = allSampleRows.filter((row) => !isHeaderRepeat(row, header));
     const columns = emptyColumns();
     let dateVia = null;
     let amountVia = null;
@@ -452,7 +628,19 @@ export function guessColumns(header, sampleRows) {
             ) {
                 continue;
             }
-            if (keywords.some((keyword) => normalizedHeader[i].includes(keyword))) {
+            const matches = category === 'status'
+                ? isStatusHeader(normalizedHeader[i])
+                : keywords.some((keyword) => normalizedHeader[i].includes(keyword));
+            if (matches && category === 'counterparty'
+                && (NOT_COUNTERPARTY_WORDS.some((word) => normalizedHeader[i].includes(word))
+                    || normalizedHeader[i].split(/[^\p{L}]+/u).some((word) => NOT_COUNTERPARTY_TOKENS.includes(word)))) {
+                continue;
+            }
+            if (matches && ['debit', 'credit', 'currency'].includes(category)
+                && NOT_SIDE_WORDS.some((word) => normalizedHeader[i].includes(word))) {
+                continue;
+            }
+            if (matches) {
                 columns[category] = i;
                 if (category === 'date') {
                     dateVia = 'keyword';
@@ -466,6 +654,19 @@ export function guessColumns(header, sampleRows) {
                 break;
             }
         }
+    }
+
+    if (columns.description === -1) {
+        const used = usedIndexes(columns);
+        const index = normalizedHeader.findIndex((h, i) => !used.has(i) && h.includes(FALLBACK_DESCRIPTION_WORD));
+        if (index >= 0) {
+            columns.description = index;
+            descriptionVia = 'keyword';
+        }
+    }
+
+    if (normalizedHeader.includes('payer name') && normalizedHeader.includes('payee name')) {
+        delete columns.counterparty;
     }
 
     for (const key of ['debit', 'credit']) {
@@ -489,6 +690,47 @@ export function guessColumns(header, sampleRows) {
         const samples = columnSamples(sampleRows, columns.direction);
         if (samples.length > 0 && !samples.every(isDirectionValue)) {
             columns.direction = -1;
+        }
+    }
+
+    // The bank's transaction type (Revolut: CARD_PAYMENT, TOPUP, ...), only with a known sample and never a direction column.
+    const usedByType = usedIndexes(columns);
+    for (let i = 0; i < normalizedHeader.length; i += 1) {
+        const words = normalizedHeader[i].split(/[^\p{L}]+/u);
+        const samples = columnSamples(sampleRows, i);
+        if (!usedByType.has(i) && words.some((word) => TYPE_HEADER_WORDS.includes(word))
+            && samples.some((value) => REVOLUT_TYPES.includes(typeKey(value)))
+            && !samples.every(isDirectionValue)) {
+            columns.type = i;
+            break;
+        }
+    }
+
+    // Swedbank record type: a named column whose samples are all known codes, or an unnamed one that also holds a 20.
+    const usedByRecordType = usedIndexes(columns);
+    const hasMoneyColumn = columns.amount >= 0 || columns.debit >= 0 || columns.credit >= 0;
+    for (let i = 0; i < header.length; i += 1) {
+        const named = RECORD_TYPE_HEADERS.includes(normalizedHeader[i]);
+        if (usedByRecordType.has(i) || !(named || normalizedHeader[i] === '')) {
+            continue;
+        }
+        const samples = columnSamples(sampleRows, i);
+        if (samples.length > 0 && samples.every((value) => RECORD_TYPE_CODES.includes(value))
+            && (named || (hasMoneyColumn && samples.includes('20')))) {
+            columns.recordType = i;
+            break;
+        }
+    }
+
+    // Fee and Net: with a Net column (and no debit/credit) Net is the amount and no fee is added on top.
+    const netIndex = findExactColumn(normalizedHeader, NET_HEADERS, usedIndexes(columns), sampleRows);
+    if (netIndex >= 0 && columns.debit === -1 && columns.credit === -1) {
+        columns.amount = netIndex;
+        amountVia = 'keyword';
+    } else {
+        const feeIndex = findExactColumn(normalizedHeader, FEE_HEADERS, usedIndexes(columns), sampleRows);
+        if (feeIndex >= 0) {
+            columns.fee = feeIndex;
         }
     }
 
@@ -571,6 +813,11 @@ export function guessColumns(header, sampleRows) {
             ?? (dateSamples.length > 0 && dateSamples.every((value) => /^\d{1,2}\.\d{1,2}\.\d{2,4}/.test(value)) ? 'DMY' : null)
         : null;
     const decimalSeparator = guessDecimalSeparator(sampleRows, columns);
+    const feeCheck = columns.fee >= 0 ? checkFeeAgainstBalance(header, sampleRows, columns, decimalSeparator) : null;
+    if (feeCheck?.mode === 'included') {
+        // The balance moves by the amount alone: the amount already contains the fee.
+        delete columns.fee;
+    }
 
     let confidence = 0;
     if (dateVia === 'keyword') {
@@ -597,7 +844,11 @@ export function guessColumns(header, sampleRows) {
         confidence += 0.1;
     }
 
-    return { columns, dateFormat, decimalSeparator, confidence: Math.min(1, confidence) };
+    const result = { columns, dateFormat, decimalSeparator, confidence: Math.min(1, confidence) };
+    if (feeCheck) {
+        result.feeCheck = feeCheck;
+    }
+    return result;
 }
 
 function splitDateParts(value) {
@@ -605,17 +856,33 @@ function splitDateParts(value) {
     return match ? [match[1], match[2], match[3]] : null;
 }
 
+const SERIAL_MIN = 20000;
+const SERIAL_MAX = 80000;
+
+function isSerialDay(value) {
+    return /^\d{5}$/.test(value) && Number(value) >= SERIAL_MIN && Number(value) <= SERIAL_MAX;
+}
+
 /**
  * Looks at the whole column to decide DMY vs MDY vs YMD. A value is only
  * decisive when one of its day/month parts is > 12. Returns null when
  * nothing in the column decides (ambiguous, the UI should ask).
+ * 'SERIAL' means every value is an Excel day number (a date stored as a plain number).
  * @param {string[]} values
- * @returns {'DMY'|'MDY'|'YMD'|null}
+ * @returns {'DMY'|'MDY'|'YMD'|'TEXT'|'SERIAL'|null}
  */
 export function inferDateFormat(values) {
     const nonEmpty = (values || []).map((value) => String(value ?? '').trim()).filter((value) => value !== '');
     if (nonEmpty.length === 0) {
         return null;
+    }
+    if (nonEmpty.every(isSerialDay)) {
+        return 'SERIAL';
+    }
+
+    const named = nonEmpty.filter((value) => parseTextDate(value) !== null).length;
+    if (named > 0) {
+        return named === nonEmpty.length ? 'TEXT' : null;
     }
 
     let sawYmd = false;
@@ -666,12 +933,77 @@ function isValidCalendarDate(year, month, day) {
     return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
+const MONTH_WORDS = {
+    1: 'jan january janvaris janvara январь января янв',
+    2: 'feb february februaris februara febr февраль февраля февр фев',
+    3: 'mar march marts marta март марта мар',
+    4: 'apr april aprilis aprila апрель апреля апр',
+    5: 'may maijs maija май мая',
+    6: 'jun june junijs junija июнь июня июн',
+    7: 'jul july julijs julija июль июля июл',
+    8: 'aug august augusts augusta август августа авг',
+    9: 'sep sept september septembris septembra сентябрь сентября сент сен',
+    10: 'oct october okt oktobris oktobra октябрь октября окт',
+    11: 'nov november novembris novembra ноябрь ноября нояб ноя',
+    12: 'dec december decembris decembra декабрь декабря дек',
+};
+
+const MONTH_BY_WORD = new Map(
+    Object.entries(MONTH_WORDS).flatMap(([month, words]) => words.split(' ').map((word) => [normalizeText(word), Number(month)])),
+);
+
+const TEXT_DATE_TIME_RE = /[ T]\d{1,2}:\d{2}(:\d{2}([.,]\d+)?)?$/;
+
+/**
+ * Reads a day, a month name (English, Latvian or Russian) and a year in any of
+ * the usual orders ('17 Sep 2026', 'Sep 17, 2026', '17-Sep-26', '17. septembris 2026').
+ * A trailing time is ignored; a 2-digit year means 20xx.
+ * @param {string} value
+ * @returns {string|null} 'YYYY-MM-DD'
+ */
+function parseTextDate(value) {
+    const words = normalizeText(String(value ?? '').replace(TEXT_DATE_TIME_RE, ''))
+        .split(/[\s.,\-/]+/)
+        .filter((word) => word !== '' && word !== 'г' && word !== 'gada');
+    if (words.length !== 3) {
+        return null;
+    }
+    const at = words.findIndex((word) => MONTH_BY_WORD.has(word));
+    if (at < 0) {
+        return null;
+    }
+    const numbers = words.filter((_, index) => index !== at);
+    if (!numbers.every((word) => /^\d+$/.test(word))) {
+        return null;
+    }
+    const month = MONTH_BY_WORD.get(words[at]);
+    let year;
+    let day;
+    if (at === 0) {
+        [day, year] = numbers;
+    } else if (at === 1) {
+        [day, year] = numbers[0].length === 4 ? [numbers[1], numbers[0]] : numbers;
+    } else {
+        [year, day] = numbers;
+    }
+    if (day.length > 2 || (year.length !== 2 && year.length !== 4)) {
+        return null;
+    }
+    if (year.length === 2) {
+        year = `20${year}`;
+    }
+    return isValidCalendarDate(year, month, day)
+        ? `${year}-${String(month).padStart(2, '0')}-${day.padStart(2, '0')}`
+        : null;
+}
+
 /**
  * Parses a single date value with a known format into 'YYYY-MM-DD'.
  * Supports separators . / -, 2-digit years (assumed 20xx), and ISO with a
- * time part ('2026-09-17 10:22').
+ * time part ('2026-09-17 10:22'). 'TEXT' reads a month name ('17 Sep 2026');
+ * 'SERIAL' reads an Excel day number ('46296').
  * @param {string} value
- * @param {'DMY'|'MDY'|'YMD'} format
+ * @param {'DMY'|'MDY'|'YMD'|'TEXT'|'SERIAL'} format
  * @returns {string|null}
  */
 export function parseDateWith(value, format) {
@@ -679,11 +1011,17 @@ export function parseDateWith(value, format) {
     if (trimmed === '') {
         return null;
     }
+    if (format === 'SERIAL') {
+        return isSerialDay(trimmed) ? excelSerialToDate(Number(trimmed)) : null;
+    }
 
-    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})([ T]\d{2}:\d{2}(:\d{2})?)?$/);
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})([ T]\d{1,2}:\d{2}(:\d{2}([.,]\d+)?)?)?$/);
     if (isoMatch) {
         const [, y, mo, d] = isoMatch;
         return isValidCalendarDate(y, mo, d) ? `${y}-${mo}-${d}` : null;
+    }
+    if (format === 'TEXT') {
+        return parseTextDate(trimmed);
     }
 
     const match = trimmed.match(/^(\d{1,4})[.\-/](\d{1,2})[.\-/](\d{1,4})/);
@@ -878,6 +1216,12 @@ function isSummaryRow(row, descriptionIndex, hasDate) {
     return !hasDate && hasSummaryKeyword(row);
 }
 
+function isHeaderRepeat(row, header) {
+    const length = trimmedLength(header);
+    return length >= 2 && trimmedLength(row) === length
+        && header.slice(0, length).every((cell, index) => normalizeText(cell) === normalizeText(row[index]));
+}
+
 function cellAt(row, index) {
     return index >= 0 && index < row.length ? String(row[index] ?? '') : '';
 }
@@ -890,6 +1234,8 @@ function cellAt(row, index) {
  * A row in another currency gets amountCents null (the UI asks for the EUR
  * charged) unless layout.columns.eurAmount points at a EUR amount column.
  * layout.reverse === true flips every row's direction (a bank that shows spending as positive).
+ * layout.columns.fee: the fee of a EUR row is added to money out and taken off money in (a fee above
+ * the money in turns it into money out of the difference; an equal fee skips the row as zero amount).
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
@@ -904,11 +1250,27 @@ export function rowsToStatement(rows, headerRow, layout) {
     const statementRows = [];
     const skipped = [];
 
+    // A record type column that another field also reads is not one (a saved layout may use that column for the amount).
+    const recordTypeIndex = (columns.recordType ?? -1) >= 0
+        && !Object.entries(columns).some(([key, index]) => key !== 'recordType' && index === columns.recordType)
+        ? columns.recordType : -1;
+
     for (let i = dataStart; i < rows.length; i += 1) {
         const row = rows[i];
         const line = i + 1;
 
         if (row.every((cell) => cell.trim() === '')) {
+            continue;
+        }
+
+        if (headerRow >= 0 && isHeaderRepeat(row, rows[headerRow])) {
+            skipped.push({ line, reason: 'summary row' });
+            continue;
+        }
+
+        const recordType = cellAt(row, recordTypeIndex).trim();
+        if (recordType !== '' && recordType !== '20') {
+            skipped.push({ line, reason: 'summary row' });
             continue;
         }
 
@@ -922,6 +1284,11 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         if (!date) {
             skipped.push({ line, reason: 'unparsable date' });
+            continue;
+        }
+
+        if (NOT_COMPLETED.includes(normalizeText(cellAt(row, columns.status)))) {
+            skipped.push({ line, reason: 'not completed' });
             continue;
         }
 
@@ -985,6 +1352,22 @@ export function rowsToStatement(rows, headerRow, layout) {
             }
         }
 
+        // A fee is part of the money moved: added to money out, taken off money in. Other currencies are left alone.
+        const feeCents = currency === 'EUR' && columns.fee >= 0
+            ? Math.abs(parseAmountWith(cellAt(row, columns.fee), decimalSeparator) ?? 0)
+            : 0;
+        if (feeCents > 0 && direction === 'out') {
+            amountCents += feeCents;
+        } else if (feeCents > 0) {
+            const net = amountCents - feeCents;
+            if (net === 0) {
+                skipped.push({ line, reason: 'zero amount' });
+                continue;
+            }
+            if (net < 0) direction = 'out';
+            amountCents = Math.abs(net);
+        }
+
         let euroCents = amountCents;
         if (currency !== 'EUR') {
             const eurIndex = columns.eurAmount ?? -1;
@@ -995,17 +1378,22 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         const split = splitBankDetails(cellAt(row, columns.description), date);
         const bankRef = cellAt(row, columns.bankRef);
+        const payee = cellAt(row, columns.counterparty);
+
+        // A foreign card payment booked in EUR: show the original currency, keep the EUR amount charged.
+        const original = currency === 'EUR' && split.original ? split.original : null;
 
         statementRows.push(statementRow({
             date: split.date || date,
             amountCents: euroCents,
             direction,
-            currency,
-            originalAmountCents: amountCents,
+            currency: original ? original.currency : currency,
+            originalAmountCents: original ? original.cents : amountCents,
             description: split.description,
-            counterparty: split.counterparty,
+            counterparty: payee.trim() !== '' ? payee : split.counterparty,
             bankRef,
             mcc: split.mcc,
+            kindHint: KIND_HINT_BY_TYPE[typeKey(cellAt(row, columns.type))],
         }));
     }
 

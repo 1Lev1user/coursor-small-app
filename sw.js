@@ -3,7 +3,7 @@
  * VERSION must match package.json; a test checks it. Changing it renames
  * the cache, which makes installed apps fetch the new files.
  */
-const VERSION = '3.0.0';
+const VERSION = '3.1.0';
 const CACHE_NAME = `my-expenses-${VERSION}`;
 
 const CORE_ASSETS = [
@@ -54,6 +54,8 @@ const CORE_ASSETS = [
     './src/import/xlsx.js',
     './src/import/xls.js',
     './src/import/xml.js',
+    './src/import/htmlTable.js',
+    './src/import/spreadsheetml.js',
     './src/import/mcc.js',
     './src/views/add.js',
     './src/views/month.js',

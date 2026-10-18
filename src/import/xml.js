@@ -1,4 +1,4 @@
-import { statementRow, parserOk, parserFail } from './types.js';
+import { statementRow, pairReversals, parserOk, parserFail } from './types.js';
 
 const NOT_XML = 'The file is not valid XML.';
 
@@ -240,7 +240,7 @@ function stripQualified(root) {
     while (pending.length > 0) {
         const node = pending.pop();
         delete node.qualified;
-        pending.push(...node.children);
+        for (const kid of node.children) pending.push(kid);
     }
 }
 
@@ -351,6 +351,8 @@ function plural(count, one, many) {
     return `${count} ${count === 1 ? one : many}`;
 }
 
+const PAIR_NOTE = 'they cancel out and start as Skip unless a rule or an earlier import decides otherwise.';
+
 function skippedWarnings(counts) {
     const warnings = [];
     if (counts.pending > 0) {
@@ -364,6 +366,26 @@ function skippedWarnings(counts) {
     }
     if (counts.noDirection > 0) {
         warnings.push(`Skipped ${plural(counts.noDirection, 'entry', 'entries')} without a debit or credit mark.`);
+    }
+    const unsplit = counts.batchUnsplit ?? 0;
+    if (unsplit > 0) {
+        warnings.push(unsplit === 1
+            ? '1 batch entry could not be split into its payments; it is imported as one row.'
+            : `${unsplit} batch entries could not be split into their payments; they are imported as one row each.`);
+    }
+    const partDirection = counts.partDirection ?? 0;
+    if (partDirection > 0) {
+        warnings.push(`${plural(partDirection, 'batch payment has', 'batch payments have')} a debit or credit mark that differs from its entry; the entry's mark is used.`);
+    }
+    const reversals = counts.reversal ?? 0;
+    if (reversals > 0) {
+        warnings.push(`${plural(reversals, 'entry is a reversal', 'entries are reversals')} marked by the bank. Check ${reversals === 1 ? 'it' : 'them'}.`);
+    }
+    const pairs = counts.reversalPairs ?? 0;
+    if (pairs > 0) {
+        warnings.push(pairs === 1
+            ? `1 payment and its reversal were found; ${PAIR_NOTE}`
+            : `${pairs} payments and their reversals were found; ${PAIR_NOTE}`);
     }
     return warnings;
 }
@@ -418,12 +440,12 @@ function camtDate(entry) {
     return '';
 }
 
-function camtCounterAmounts(entry) {
+function camtCounterAmounts(node, bases = ['AmtDtls', 'NtryDtls/TxDtls/AmtDtls']) {
     const found = [];
-    for (const base of ['AmtDtls', 'NtryDtls/TxDtls/AmtDtls']) {
-        for (const kind of ['InstdAmt', 'TxAmt', 'CntrValAmt', 'AnncdPstngAmt', 'PrtryAmt']) {
-            for (const node of pathAll(entry, `${base}/${kind}/Amt`)) {
-                const amount = amountWithCurrency(node);
+    for (const base of bases) {
+        for (const kind of ['InstdAmt', 'TxAmt', 'CntrValAmt']) {
+            for (const item of pathAll(node, `${base}/${kind}/Amt`)) {
+                const amount = amountWithCurrency(item);
                 if (amount && amount.currency) {
                     found.push({ ...amount, kind });
                 }
@@ -433,25 +455,29 @@ function camtCounterAmounts(entry) {
     return found;
 }
 
-function camtParty(entry, direction) {
+// `prefix` is the route from `node` to the payment details: an entry reaches them through
+// NtryDtls/TxDtls, a single payment of a batch is the TxDtls node itself.
+const CAMT_ENTRY_DETAILS = 'NtryDtls/TxDtls/';
+
+function camtParty(node, direction, prefix = CAMT_ENTRY_DETAILS) {
     const role = direction === 'out' ? 'Cdtr' : 'Dbtr';
     const ultimate = direction === 'out' ? 'UltmtCdtr' : 'UltmtDbtr';
-    return firstText(entry, [
-        `NtryDtls/TxDtls/RltdPties/${role}/Nm`,
-        `NtryDtls/TxDtls/RltdPties/${role}/Pty/Nm`,
-        `NtryDtls/TxDtls/RltdPties/${ultimate}/Nm`,
-        `NtryDtls/TxDtls/RltdPties/${ultimate}/Pty/Nm`,
+    return firstText(node, [
+        `${prefix}RltdPties/${role}/Nm`,
+        `${prefix}RltdPties/${role}/Pty/Nm`,
+        `${prefix}RltdPties/${ultimate}/Nm`,
+        `${prefix}RltdPties/${ultimate}/Pty/Nm`,
     ]);
 }
 
-function camtDescription(entry) {
-    const lines = pathAll(entry, 'NtryDtls/TxDtls/RmtInf/Ustrd')
-        .map((node) => node.text.trim())
+function camtDescription(node, prefix = CAMT_ENTRY_DETAILS, fallbacks = ['AddtlNtryInf', 'NtryDtls/TxDtls/AddtlTxInf']) {
+    const lines = pathAll(node, `${prefix}RmtInf/Ustrd`)
+        .map((item) => item.text.trim())
         .filter(Boolean);
     if (lines.length > 0) {
         return lines.join(' ');
     }
-    return firstText(entry, ['AddtlNtryInf', 'NtryDtls/TxDtls/AddtlTxInf']);
+    return firstText(node, fallbacks);
 }
 
 function camtBankRef(entry) {
@@ -467,6 +493,70 @@ function camtBankRef(entry) {
         }
     }
     return '';
+}
+
+// Amounts of one row: the booked amount, and the foreign one when the counter amounts show it.
+function camtAmounts(entryCurrency, cents, others) {
+    let amountCents = Math.abs(cents);
+    let currency = 'EUR';
+    let originalAmountCents = amountCents;
+
+    if (entryCurrency === 'EUR') {
+        const foreign = others.find((item) => item.kind === 'InstdAmt' && item.currency !== 'EUR')
+            ?? others.find((item) => item.currency !== 'EUR');
+        if (foreign) {
+            currency = foreign.currency;
+            originalAmountCents = Math.abs(foreign.cents);
+        }
+    } else {
+        const euro = others.find((item) => item.currency === 'EUR');
+        currency = entryCurrency;
+        originalAmountCents = Math.abs(cents);
+        amountCents = euro ? Math.abs(euro.cents) : null;
+    }
+    return { amountCents, currency, originalAmountCents };
+}
+
+// Cents of a payment inside a batch, or null when it has no usable amount in the entry currency.
+function camtPartAmount(part, entryCurrency) {
+    const amount = amountWithCurrency(path(part, 'AmtDtls/TxAmt/Amt') ?? child(part, 'Amt'));
+    if (!amount || amount.cents <= 0 || (amount.currency || entryCurrency) !== entryCurrency) {
+        return null;
+    }
+    return amount.cents;
+}
+
+/**
+ * One row per payment of a batch entry, or null when the payments do not add up to the entry.
+ * Date, direction and reversal mark come from the entry; payee, text and reference from the payment.
+ */
+function camtSplit(entry, parts, { date, direction, reversal, entryCurrency, total }, counts) {
+    const cents = parts.map((part) => camtPartAmount(part, entryCurrency));
+    if (cents.includes(null) || cents.reduce((sum, value) => sum + value, 0) !== total) {
+        return null;
+    }
+    const own = parts.map((part) => cleanRef(textAt(part, 'Refs/AcctSvcrRef')) || cleanRef(textAt(part, 'Refs/EndToEndId')));
+    const entryRef = cleanRef(textAt(entry, 'AcctSvcrRef')) || cleanRef(textAt(entry, 'NtryRef'));
+    const indicator = direction === 'in' ? 'CRDT' : 'DBIT';
+    const other = direction === 'out' ? 'in' : 'out';
+
+    return parts.map((part, index) => {
+        const partIndicator = textAt(part, 'CdtDbtInd').toUpperCase();
+        if (partIndicator && partIndicator !== indicator) {
+            counts.partDirection += 1;
+        }
+        // A reference shared by several payments (a bank may repeat the entry's) cannot tell them apart.
+        const unique = own[index] && own.filter((value) => value === own[index]).length === 1;
+        return statementRow({
+            date,
+            direction,
+            reversal,
+            ...camtAmounts(entryCurrency, cents[index], camtCounterAmounts(part, ['AmtDtls'])),
+            description: camtDescription(part, '', ['AddtlTxInf']),
+            counterparty: camtParty(part, direction, '') || (reversal ? camtParty(part, other, '') : ''),
+            bankRef: unique ? own[index] : entryRef ? `${entryRef}-${index + 1}` : '',
+        });
+    });
 }
 
 function camtEntry(entry, fallbackCurrency, counts) {
@@ -493,35 +583,27 @@ function camtEntry(entry, fallbackCurrency, counts) {
         counts.noAmount += 1;
         return null;
     }
+    const reversal = ['true', '1'].includes(textAt(entry, 'RvslInd').trim().toLowerCase());
     const entryCurrency = amount.currency || fallbackCurrency;
-    const others = camtCounterAmounts(entry);
+    const total = Math.abs(amount.cents);
+    const parts = pathAll(entry, 'NtryDtls/TxDtls');
+    const common = { date, direction, reversal };
 
-    let amountCents = Math.abs(amount.cents);
-    let currency = 'EUR';
-    let originalAmountCents = amountCents;
-
-    if (entryCurrency === 'EUR') {
-        const foreign = others.find((item) => item.kind === 'InstdAmt' && item.currency !== 'EUR')
-            ?? others.find((item) => item.currency !== 'EUR');
-        if (foreign) {
-            currency = foreign.currency;
-            originalAmountCents = Math.abs(foreign.cents);
+    if (parts.length >= 2) {
+        const rows = camtSplit(entry, parts, { ...common, entryCurrency, total }, counts);
+        if (rows) {
+            return rows;
         }
-    } else {
-        const euro = others.find((item) => item.currency === 'EUR');
-        currency = entryCurrency;
-        originalAmountCents = Math.abs(amount.cents);
-        amountCents = euro ? Math.abs(euro.cents) : null;
+        counts.batchUnsplit += 1;
     }
 
     return statementRow({
-        date,
-        amountCents,
-        direction,
-        currency,
-        originalAmountCents,
+        ...common,
+        ...camtAmounts(entryCurrency, amount.cents, camtCounterAmounts(entry)),
         description: camtDescription(entry),
-        counterparty: camtParty(entry, direction),
+        // A reversal may list the party in the other role than its own direction suggests.
+        // The first payee of a batch that could not be split must not speak for all of it.
+        counterparty: parts.length >= 2 ? '' : camtParty(entry, direction) || (reversal ? camtParty(entry, direction === 'out' ? 'in' : 'out') : ''),
         bankRef: camtBankRef(entry),
     });
 }
@@ -540,7 +622,7 @@ export function parseCamt(text) {
         return parserFail('This XML file is not a camt.052 or camt.053 bank statement.');
     }
 
-    const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0 };
+    const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0, batchUnsplit: 0, partDirection: 0, reversal: 0, reversalPairs: 0 };
     const rows = [];
     let entryCount = 0;
 
@@ -548,9 +630,9 @@ export function parseCamt(text) {
         const accountCurrency = (textAt(statement, 'Acct/Ccy') || 'EUR').toUpperCase();
         for (const entry of children(statement, 'Ntry')) {
             entryCount += 1;
-            const row = camtEntry(entry, accountCurrency, counts);
-            if (row) {
-                rows.push(row);
+            const result = camtEntry(entry, accountCurrency, counts);
+            if (result) {
+                rows.push(...[].concat(result));
             }
         }
     }
@@ -558,6 +640,8 @@ export function parseCamt(text) {
     if (entryCount === 0) {
         return parserFail('The statement has no transactions.');
     }
+    counts.reversalPairs = pairReversals(rows).length;
+    counts.reversal = rows.filter(({ reversal }) => reversal === true).length - counts.reversalPairs;
     return parserOk('camt', rows, skippedWarnings(counts));
 }
 

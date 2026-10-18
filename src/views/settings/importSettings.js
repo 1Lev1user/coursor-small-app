@@ -1,4 +1,5 @@
 import {
+    importEditInfo,
     undoImportAndSave,
     upsertRule,
     deleteRule,
@@ -98,7 +99,7 @@ function selectField(id, labelText, items, value, onChange) {
     return wrapper;
 }
 
-function confirmBox(message, confirmLabel, onConfirm, onCancel) {
+function confirmBox(message, confirmLabel, onConfirm, onCancel, extra = null) {
     const box = element('div', 'confirm-box');
     box.setAttribute('role', 'group');
     const cancel = actionButton('btn', 'Cancel', onCancel);
@@ -107,6 +108,7 @@ function confirmBox(message, confirmLabel, onConfirm, onCancel) {
         cancel,
         actionButton('btn btn-danger', confirmLabel, onConfirm),
     );
+    if (extra !== null) box.append(actionButton('btn', extra.label, extra.onClick));
     queueMicrotask(() => cancel.focus({ preventScroll: true }));
     return box;
 }
@@ -138,20 +140,36 @@ function importItem(ctx, record) {
     if (!record.undoneAt) {
         const entries = (record.expenseIds?.length ?? 0) + (record.incomeIds?.length ?? 0);
         if (local.confirmUndoId === record.id) {
-            item.append(confirmBox(
-                `Remove the ${plural(entries, 'entry', 'entries')} added by this import? Rules you saved stay.`,
-                'Undo import',
-                () => {
-                    local.confirmUndoId = null;
-                    if (undoImportAndSave(ctx.data, record.id, () => persist(ctx)).ok) {
-                        ctx.toast('Import undone');
-                    }
-                },
-                () => {
-                    local.confirmUndoId = null;
-                    rerender(ctx, `imp-undo-${record.id}`);
-                },
-            ));
+            const { total, edited } = importEditInfo(ctx.data, record.id);
+            const undo = (options) => {
+                local.confirmUndoId = null;
+                const result = undoImportAndSave(ctx.data, record.id, () => persist(ctx), options);
+                if (result.ok) {
+                    ctx.toast(result.kept > 0
+                        ? `Import undone, ${plural(result.kept, 'changed entry', 'changed entries')} kept`
+                        : 'Import undone');
+                }
+            };
+            const cancel = () => {
+                local.confirmUndoId = null;
+                rerender(ctx, `imp-undo-${record.id}`);
+            };
+            const noun = total === 1 ? 'entry' : 'entries';
+            const verb = edited === 1 ? 'was' : 'were';
+            item.append(edited > 0
+                ? confirmBox(
+                    `${edited} of ${total} ${noun} ${verb} changed after the import. Remove all of them, or keep the changed ones? Rules you saved stay.`,
+                    'Remove all',
+                    () => undo(),
+                    cancel,
+                    { label: `Keep the ${edited} changed`, onClick: () => undo({ keepEdited: true }) },
+                )
+                : confirmBox(
+                    `Remove the ${plural(entries, 'entry', 'entries')} added by this import? Rules you saved stay.`,
+                    'Undo import',
+                    () => undo(),
+                    cancel,
+                ));
         } else {
             const undo = actionButton('btn btn-ghost-danger', 'Undo', () => {
                 local.confirmUndoId = record.id;
