@@ -54,7 +54,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S4.7 | Owner | Imports bank statement | Sees a check of what was read (sample rows, totals in and out, line count) before continuing | Errors are caught by eye | P0 | planned |
 | S4.8 | Owner | Imports bank statement | Balance lines, pending or reversed rows, fees and batch entries are not counted as ordinary money | Only real money is imported | P1 | planned |
 | S4.9 | Owner | Imports bank statement | A new payment is not hidden as an already-imported duplicate | No missing payments | P1 | planned |
-| S4.10 | Owner | Imports bank statement | After an import, Money now matches the bank's balance; transfers between own accounts move Money now but not the budget | The app shows the real money on the card | P0 | planned |
+| S4.10 | Owner | Imports bank statement | After an import, Money now matches the bank's balance; transfers between own accounts move Money now but not the budget | The app shows the real money on the card | P0 | done |
 | S4.11 | Owner | Imports bank statement | A shop's category is suggested from earlier imports even without "Remember", marked as a suggestion | Fewer clicks from the first imports | P1 | planned |
 | S4.12 | Owner | Imports bank statement | A saved rule does not silently sort a row whose amount is far outside the shop's usual range | Unusual payments are seen | P1 | planned |
 | S4.13 | Owner | Imports bank statement | The city and country of a card payment are kept with the entry | Trips can be found later | P2 | planned |
@@ -74,7 +74,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 - Slice 3 (planned, release 3.0): money model C-029 to C-039, Settings and usability C-040 to C-054, bank import C-055 to C-069, input fields C-070, visual design and motion C-071 to C-077. Owner decisions: research/3.0/decisions-3.0.md; execution plan: research/3.0/plan-3.0.md.
 
 - Slice 4 (done, release 3.1.0): bank import for every researched bank, cards C-064 to C-069, C-095 to C-112.
-- Slice 5 (planned, release 3.1.1): S4.10, cards C-113 to C-117 and C-124 (booking date for Money now, found on the owner's statement). Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
+- Slice 5 (done, release 3.1.1 published 2026-10-18, v1 b2f2be8): S4.10, cards C-113 to C-117 and C-124 (booking date for Money now, found on the owner's statement). Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
 - Slice 6 (planned, release 3.2): S4.11 to S4.13, cards C-118 to C-120 (owner choice 2026-10-18 after reviewing an external "Adaptive Financial Engine" prompt: items 1-3 now). Backlog: C-121 (S4.14 trip), C-122 (S3.14 month-end forecast), C-123 (S3.15 facts after an import), only with 3+ months of history.
 
 ## Rules
