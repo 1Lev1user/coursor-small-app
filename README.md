@@ -37,18 +37,48 @@ Change your name under Settings > Profile and about, and the budget under Settin
 
 Settings > Bank import (advanced) > Import a bank statement. The file is read on this device and nothing is uploaded.
 
-- Formats: CSV, text pasted from internet banking, Excel .xls and .xlsx, ISO 20022 camt.052/053/054 XML and FiDAViSTA XML (Latvian banks).
+- Formats: CSV, text pasted from internet banking, Excel .xls and .xlsx (also an ".xls" that is really a web page table or an Excel 2003 XML workbook), ISO 20022 camt.052/053/054 XML and FiDAViSTA XML (Latvian banks). Text files in UTF-8, UTF-16, windows-1257 (Baltic) and windows-1251 (Russian) are read.
 - CSV, Excel and pasted text: the app guesses the columns and shows the first rows. Correct them once; the layout is remembered under the bank name.
+- Dates: day-first, month-first and year-first dates are read, and so are dates with a month name, such as "17 Sep 2026" (choose "Day and month name (17 Sep 2026)" if the app asks for the date format). A date column that Excel stores as plain day numbers is read as dates.
+- Rows dated more than a year ahead or more than 15 years back are listed under "Dated far from today" and start unticked; tick "Import anyway" to bring one back.
 - Duplicates: rows already in the app are found by the bank reference, by an exact match of the same file, or by the same amount on the same or a nearby date. Nothing is merged or deleted without your choice.
 - Before importing, "Check what was read" shows the totals money in and money out. If your bank shows spending as positive numbers, tick "Reverse money in and out".
 - Possible duplicates are not imported unless you tick "Import anyway".
-- Each row can be an expense, a refund, income, a transfer between your own accounts (not counted) or skipped. "Remember" turns the choice into a rule, so the next import only asks about new shops. Rules are listed in the same Settings group.
+- Each row can be an expense, a refund, income, a transfer between your own accounts (not counted) or skipped. "Remember" turns the choice into a rule, so the next import only asks about new shops. Rules are listed in the same Settings group. A rule matches whole words only (the rule RIMI does not catch RIMINI). Rows your rules sorted are folded into a "Known" group that shows how many went to which category.
+- Status column: rows marked pending, reverted or declined (for example Revolut State) are skipped and listed as "Not completed (pending, reverted or declined)". Revolut Topup and Exchange rows start as Transfer; a card refund coming in starts as Refund.
+- Fee column: on euro rows a fee is added to money out and taken off money in. For a file with one signed Amount column and a Balance column, the fee is not added when the Balance shows the amount already includes it, and the Columns step says so. Compare the totals with your bank. A Gross, Fee and Net file without separate money-out and money-in columns uses Net as the amount.
+- Payee or sender column: if the shop or sender has its own column, the app uses it for the entry text and for rules.
+- Transfers between your own accounts: in one import, a money-out row and a money-in row with the same amount of 10.00 euro or more, no more than one day apart, both start as Transfer. You can change them. Card payments, rows that match a saved rule, bank-marked rows and possible duplicates are never paired; both rows must be in the same currency.
 - Bank text: card payments are named after the shop and, when the bank text gives the card date, dated on the day you paid (the bank books them a few days later). Personal codes, IBANs and card numbers in a transfer's text are left out of the entry text when the app recognises the bank's layout. Until you have a rule for a shop, the app suggests a category for money you spent from the shop type the card network reports (for example Groceries for a supermarket); you can change it.
+- Swedbank files: only transaction lines are read; opening balance, turnover and closing balance lines are skipped.
+- camt files: an entry the bank marks as a reversal that comes as money in starts as Refund, and the import says how many entries are reversals. A payment and its reversal (opposite direction, same currency and amount, and the same bank reference or the same party) cancel out and both start as Skip, unless a saved rule or an earlier import decides otherwise. A reversal of money out stays an expense. An entry that bundles several payments is split into one row per payment when the parts add up to the entry; if they do not, it stays one row and a note says so.
 - A row near a payday or a subscription may ask "Is this the ...?". Yes ties the row to that regular income or subscription.
 - For a past month that has no plan yet, the app asks once: use the current budget, or record only the actual spending.
-- Every import can be undone from Settings > Bank import (advanced). Undo removes exactly that import's entries and keeps your rules and manual entries.
+- Every import can be undone from Settings > Bank import (advanced). Undo removes that import's entries and keeps your rules and manual entries. If you changed some of the entries after the import, it says how many ("3 of 42 entries were changed after the import") and offers "Remove all" or "Keep the 3 changed".
+- An .xlsx file saved by a program that never calculated its formulas has empty cells; the app warns "This file has formulas that were never calculated. Open it in Excel and save it again."
+- A file that holds only a header line says "This file has a header but no transactions. Check the period you exported."
 
-The FiDAViSTA reader was written without access to the official specification. If a FiDAViSTA file is not recognised, use the CSV export of the same statement.
+### Banks the import reads
+
+Checked with a real export:
+
+- Citadele (.xls)
+
+Built from public descriptions of the file layout (made-up test files, no real export yet; please report what you see):
+
+- Revolut (CSV)
+- Swedbank Latvia, Estonia and Lithuania (CSV)
+- SEB Lithuania (CSV)
+- LHV (CSV)
+- Wise (CSV)
+- N26 (CSV)
+- camt.052 and camt.053 XML (camt.054 is read the same way but not tested)
+
+FiDAViSTA XML (Latvian banks): written from the element names other open readers use; no sample file was available.
+
+Other banks (for example Luminor, Citadele CSV, Paysera, SEB Latvia): no sample file was available, so pick the columns by hand. Choose the file as usual, then on the Columns step pick each column: Date, Amount (or "Money out and money in columns", or one amount column with a Direction column), Payee or sender, Description, Currency, Bank reference, Status and Fee. Set the Decimal separator and the date format if asked, and type the Bank name. The layout is remembered, so the next file from that bank needs no setup. If a file is not recognised, send an anonymised copy so it can be added.
+
+The FiDAViSTA reader was also written without access to the official specification. If a FiDAViSTA file is not recognised, use the CSV export of the same statement.
 
 ## Backup, import, and CSV
 

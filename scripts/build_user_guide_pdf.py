@@ -503,8 +503,9 @@ def build():
         [
             "Settings → <b>Bank import (advanced)</b> → <b>Import a bank statement</b>. The "
             "steps are Load, Columns, Duplicates, Categorise and Confirm.",
-            "<b>Choose file</b> (CSV, Excel .xls or .xlsx, camt.053 or FiDAViSTA XML) or <b>Paste "
-            "text</b>. The file is read on this device and nothing is uploaded.",
+            "<b>Choose file</b> (CSV, Excel .xls or .xlsx, an .xls that is really a web table or "
+            "XML, camt.052/053/054 or FiDAViSTA XML) or <b>Paste text</b>. The file is read on "
+            "this device and nothing is uploaded.",
             "Card payments are named after the shop and, when the bank text gives the card "
             "date, dated on the day you paid (the bank books them a few days later). "
             "Personal codes, IBANs and card numbers in a transfer's text are left out of the "
@@ -523,6 +524,43 @@ def build():
             "Then tap <b>Import</b>; <b>Undo this import</b> reverses it.",
         ],
     ))
+
+    story.append(KeepTogether([Paragraph("What the import does for you", s["h2"]), bullets([
+        "Rows marked pending, reverted or declined are skipped (<b>Not completed</b>).",
+        "A <b>Fee</b> column is added to money out and taken off money in on euro rows. With one "
+        "signed Amount column and a Balance column, it is not added when the Balance shows the "
+        "amount already includes it. A Gross, Fee and Net file without separate money-out and "
+        "money-in columns uses Net.",
+        "Money out and money in of the same amount (10.00 euro or more) within one day start "
+        "as <b>Transfer</b>. You can change them. Card payments, rows that match a saved rule, "
+        "bank-marked rows and possible duplicates are never paired, and both rows must be in the "
+        "same currency.",
+        "Rows sorted by your rules are in <b>Known</b>, with a line saying how many went where.",
+        "camt files: a reversal that comes as money in starts as Refund; a reversal of money out "
+        "stays an expense. A payment and its reversal (opposite direction, same currency and "
+        "amount, and the same bank reference or the same party) start as Skip, unless a saved "
+        "rule or an earlier import decides otherwise. An entry that bundles several payments is "
+        "split into one row each when the parts add up.",
+        "Swedbank files: only transaction lines are read.",
+        "Dates with a month name (17 Sep 2026) are read. Rows dated more than a year ahead or "
+        "15 years back start unticked in <b>Dated far from today</b>; tick <b>Import anyway</b> "
+        "to bring one back.",
+        "An .xlsx file whose formulas were never calculated gets a warning: open it in Excel "
+        "and save it again.",
+        "<b>Undo</b> (in Settings, or <b>Undo this import</b> after an import) asks first when "
+        "you changed some entries since: choose <b>Remove all</b> or <b>Keep the N changed</b>.",
+    ], s["bullet"])]))
+    story.append(KeepTogether([Paragraph("Which banks are read", s["h2"]), bullets([
+        "<b>Checked with a real export:</b> Citadele (.xls).",
+        "<b>Built from public descriptions of the file layout</b> (please report what you "
+        "see): Revolut, Swedbank Latvia, Estonia and Lithuania, SEB Lithuania, LHV, Wise, N26, "
+        "camt.052 and camt.053 XML (camt.054 is read the same way but not tested).",
+        "<b>FiDAViSTA XML:</b> written from the element names other open readers use; no "
+        "sample file was available.",
+        "<b>Other banks</b> (for example Luminor, Citadele CSV, Paysera): on the Columns step "
+        "pick Date, Amount and Description by hand, set the date format and Decimal separator, "
+        "and type the Bank name. The layout is remembered.",
+    ], s["bullet"])]))
 
     story.append(side_by_side(
         s, "screen-settings-backup.png", "Backup and restore",
