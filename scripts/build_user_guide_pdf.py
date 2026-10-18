@@ -326,7 +326,9 @@ def build():
             "<b>Open Month</b> further down. Tabs: Home · Month · Chart · Settings.",
         ],
         [
-            "Read Money now as the amount that should be on your card right now.",
+            "Read Money now as the amount that should be on your card right now. A transfer "
+            "between your own accounts from a bank import also changes it, but is not spending. Money now "
+            "counts an imported card payment on the day the bank booked it; spending keeps the day you paid.",
             "The amount per day is Money now divided by the days until your next payday, or until "
             "the end of the month. If nothing is left it says “Nothing left per day until …”.",
             "Prefer a fixed amount? Settings → <b>Money</b> → <b>Amount per day</b>: choose "
@@ -521,7 +523,11 @@ def build():
             "unless you tick <b>Import anyway</b>.",
             "For each row <b>What is it?</b> offers Expense, Refund, Income, Transfer or Skip. "
             "Near a payday the app asks “Is this the Salary?” and Yes ties the row to it. "
-            "Then tap <b>Import</b>; <b>Undo this import</b> reverses it.",
+            "If the statement states its closing balance, <b>Check what was read</b> shows "
+            "“Bank balance on 17 Oct 2026: €429.15”. On the last screen the app compares it with "
+            "its own figure for that day. If they differ, tap <b>Align with the bank</b> to add "
+            "one “Bank difference” entry dated on the statement’s last day, or <b>Not now</b>.",
+            "Then tap <b>Import</b>; <b>Undo this import</b> reverses it, including that entry.",
         ],
     ))
 
@@ -534,14 +540,15 @@ def build():
         "Money out and money in of the same amount (10.00 euro or more) within one day start "
         "as <b>Transfer</b>. You can change them. Card payments, rows that match a saved rule, "
         "bank-marked rows and possible duplicates are never paired, and both rows must be in the "
-        "same currency.",
+        "same currency. A transfer is not spending, but it changes Money now. Undo removes it.",
         "Rows sorted by your rules are in <b>Known</b>, with a line saying how many went where.",
         "camt files: a reversal that comes as money in starts as Refund; a reversal of money out "
         "stays an expense. A payment and its reversal (opposite direction, same currency and "
         "amount, and the same bank reference or the same party) start as Skip, unless a saved "
         "rule or an earlier import decides otherwise. An entry that bundles several payments is "
         "split into one row each when the parts add up.",
-        "Swedbank files: only transaction lines are read.",
+        "Bank balance: a “Closing balance” or “Beigu atlikums” line, a Balance column (Revolut, "
+        "Wise), Swedbank, camt and FiDAViSTA XML can state it (euro only).",
         "Dates with a month name (17 Sep 2026) are read. Rows dated more than a year ahead or "
         "15 years back start unticked in <b>Dated far from today</b>; tick <b>Import anyway</b> "
         "to bring one back.",
