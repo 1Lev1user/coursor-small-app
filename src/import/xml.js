@@ -351,6 +351,8 @@ function plural(count, one, many) {
     return `${count} ${count === 1 ? one : many}`;
 }
 
+const PAIR_NOTE = 'they cancel out and start as Skip unless a rule or an earlier import decides otherwise.';
+
 function skippedWarnings(counts) {
     const warnings = [];
     if (counts.pending > 0) {
@@ -372,8 +374,8 @@ function skippedWarnings(counts) {
     const pairs = counts.reversalPairs ?? 0;
     if (pairs > 0) {
         warnings.push(pairs === 1
-            ? '1 payment and its reversal are left out; they cancel out.'
-            : `${pairs} payments and their reversals are left out; they cancel out.`);
+            ? `1 payment and its reversal were found; ${PAIR_NOTE}`
+            : `${pairs} payments and their reversals were found; ${PAIR_NOTE}`);
     }
     return warnings;
 }

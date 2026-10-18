@@ -11,7 +11,7 @@ import {
 } from '../src/import/core.js';
 
 const NOW = new Date(2026, 9, 6, 12);
-const PAIR_WARNING = '1 payment and its reversal are left out; they cancel out.';
+const PAIR_WARNING = '1 payment and its reversal were found; they cancel out and start as Skip unless a rule or an earlier import decides otherwise.';
 const ONE_REVERSAL = '1 entry is a reversal marked by the bank. Check it.';
 
 function freshData() {
@@ -189,6 +189,28 @@ test('pairs link by a shared reference alone', () => {
         entry({ ref: 'S', acctRef: 'REF-7', direction: 'DBIT', reversal: 'true', party: 'Beta' }),
     );
     assert.deepEqual(kindsOf(result.rows), ['skip', 'skip']);
+});
+
+test('a counterparty match never takes an original that a later reversal shares a reference with', () => {
+    const result = parse(
+        entry({ ref: 'N1', acctRef: 'RVX1', direction: 'DBIT', reversal: 'true', party: 'SHOP' }),
+        entry({ ref: 'N2', acctRef: 'ORIG', direction: 'CRDT', party: 'SHOP' }),
+        entry({ ref: 'N3', acctRef: 'ORIG', direction: 'DBIT', reversal: 'true', party: 'OTHER' }),
+    );
+    assert.deepEqual(kindsOf(result.rows), ['expense', 'skip', 'skip']);
+    assert.deepEqual(result.warnings, [ONE_REVERSAL, PAIR_WARNING]);
+});
+
+test('several pairs are named in one plural sentence', () => {
+    const result = parse(
+        entry({ ref: 'A', direction: 'CRDT', party: 'One', amount: '5.00' }),
+        entry({ ref: 'B', direction: 'DBIT', reversal: 'true', party: 'One', amount: '5.00' }),
+        entry({ ref: 'C', direction: 'CRDT', party: 'Two', amount: '7.00' }),
+        entry({ ref: 'D', direction: 'DBIT', reversal: 'true', party: 'Two', amount: '7.00' }),
+    );
+    assert.deepEqual(result.warnings, [
+        '2 payments and their reversals were found; they cancel out and start as Skip unless a rule or an earlier import decides otherwise.',
+    ]);
 });
 
 test('pairs link by the counterparty alone, ignoring case and spacing', () => {

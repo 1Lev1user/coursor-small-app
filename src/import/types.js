@@ -57,36 +57,38 @@ function pairAmount(row) {
 /**
  * Reversal rows paired with the row they cancel: [reversalIndex, originalIndex] pairs.
  * The original is not a reversal itself, goes the other way, has the same currency and amount, and shares a
- * non-empty bank reference or counterparty with the reversal. Same reference first, then the nearest date,
- * then the lower row index. A row is used at most once. `eligible(index)` can exclude rows.
+ * non-empty bank reference or counterparty with the reversal. Two passes over all reversals: reference matches
+ * first, then counterparty-only matches among the rows still free. Within a pass the nearest date wins, then the
+ * lower row index. A row is used at most once. `eligible(index)` can exclude rows.
  * @param {StatementRow[]} rows
  * @param {(index: number) => boolean} [eligible]
  * @returns {Array<[number, number]>}
  */
 export function pairReversals(rows, eligible = () => true) {
-    const used = new Set();
-    const pairs = [];
+    const candidates = [];
     rows.forEach((reversal, r) => {
         if (reversal.reversal !== true || !eligible(r)) return;
         const party = pairText(reversal.counterparty);
-        let best = null;
         rows.forEach((original, o) => {
-            if (used.has(o) || o === r || original.reversal === true || !eligible(o)) return;
+            if (o === r || original.reversal === true || !eligible(o)) return;
             if (original.direction === reversal.direction || original.currency !== reversal.currency
                 || pairAmount(original) !== pairAmount(reversal)) return;
-            const sameRef = reversal.bankRef !== '' && original.bankRef === reversal.bankRef;
-            if (!sameRef && (party === '' || pairText(original.counterparty) !== party)) return;
+            const byRef = reversal.bankRef !== '' && original.bankRef === reversal.bankRef;
+            if (!byRef && (party === '' || pairText(original.counterparty) !== party)) return;
             const gap = Math.abs(pairDay(original.date) - pairDay(reversal.date)) || 0;
-            if (!best || (sameRef && !best.sameRef) || (sameRef === best.sameRef && gap < best.gap)) {
-                best = { o, sameRef, gap };
-            }
+            candidates.push({ r, o, byRef, gap });
         });
-        if (best) {
-            used.add(r);
-            used.add(best.o);
-            pairs.push([r, best.o]);
-        }
     });
+    candidates.sort((a, b) => b.byRef - a.byRef || a.gap - b.gap || a.r - b.r || a.o - b.o);
+
+    const used = new Set();
+    const pairs = [];
+    for (const { r, o } of candidates) {
+        if (used.has(r) || used.has(o)) continue;
+        used.add(r);
+        used.add(o);
+        pairs.push([r, o]);
+    }
     return pairs;
 }
 
