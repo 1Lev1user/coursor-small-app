@@ -860,12 +860,17 @@ function splitDateParts(value) {
  * decisive when one of its day/month parts is > 12. Returns null when
  * nothing in the column decides (ambiguous, the UI should ask).
  * @param {string[]} values
- * @returns {'DMY'|'MDY'|'YMD'|null}
+ * @returns {'DMY'|'MDY'|'YMD'|'TEXT'|null}
  */
 export function inferDateFormat(values) {
     const nonEmpty = (values || []).map((value) => String(value ?? '').trim()).filter((value) => value !== '');
     if (nonEmpty.length === 0) {
         return null;
+    }
+
+    const named = nonEmpty.filter((value) => parseTextDate(value) !== null).length;
+    if (named > 0) {
+        return named === nonEmpty.length ? 'TEXT' : null;
     }
 
     let sawYmd = false;
@@ -916,12 +921,76 @@ function isValidCalendarDate(year, month, day) {
     return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
+const MONTH_WORDS = {
+    1: 'jan january janvaris janvara январь января янв',
+    2: 'feb february februaris februara febr февраль февраля февр фев',
+    3: 'mar march marts marta март марта мар',
+    4: 'apr april aprilis aprila апрель апреля апр',
+    5: 'may maijs maija май мая',
+    6: 'jun june junijs junija июнь июня июн',
+    7: 'jul july julijs julija июль июля июл',
+    8: 'aug august augusts augusta август августа авг',
+    9: 'sep sept september septembris septembra сентябрь сентября сент сен',
+    10: 'oct october okt oktobris oktobra октябрь октября окт',
+    11: 'nov november novembris novembra ноябрь ноября нояб ноя',
+    12: 'dec december decembris decembra декабрь декабря дек',
+};
+
+const MONTH_BY_WORD = new Map(
+    Object.entries(MONTH_WORDS).flatMap(([month, words]) => words.split(' ').map((word) => [normalizeText(word), Number(month)])),
+);
+
+const TEXT_DATE_TIME_RE = /[ T]\d{1,2}:\d{2}(:\d{2}([.,]\d+)?)?$/;
+
+/**
+ * Reads a day, a month name (English, Latvian or Russian) and a year in any of
+ * the usual orders ('17 Sep 2026', 'Sep 17, 2026', '17-Sep-26', '17. septembris 2026').
+ * A trailing time is ignored; a 2-digit year means 20xx.
+ * @param {string} value
+ * @returns {string|null} 'YYYY-MM-DD'
+ */
+function parseTextDate(value) {
+    const words = normalizeText(String(value ?? '').replace(TEXT_DATE_TIME_RE, ''))
+        .split(/[\s.,\-/]+/)
+        .filter((word) => word !== '' && word !== 'г' && word !== 'gada');
+    if (words.length !== 3) {
+        return null;
+    }
+    const at = words.findIndex((word) => MONTH_BY_WORD.has(word));
+    if (at < 0) {
+        return null;
+    }
+    const numbers = words.filter((_, index) => index !== at);
+    if (!numbers.every((word) => /^\d+$/.test(word))) {
+        return null;
+    }
+    const month = MONTH_BY_WORD.get(words[at]);
+    let year;
+    let day;
+    if (at === 0) {
+        [day, year] = numbers;
+    } else if (at === 1) {
+        [day, year] = numbers[0].length === 4 ? [numbers[1], numbers[0]] : numbers;
+    } else {
+        [year, day] = numbers;
+    }
+    if (day.length > 2 || (year.length !== 2 && year.length !== 4)) {
+        return null;
+    }
+    if (year.length === 2) {
+        year = `20${year}`;
+    }
+    return isValidCalendarDate(year, month, day)
+        ? `${year}-${String(month).padStart(2, '0')}-${day.padStart(2, '0')}`
+        : null;
+}
+
 /**
  * Parses a single date value with a known format into 'YYYY-MM-DD'.
  * Supports separators . / -, 2-digit years (assumed 20xx), and ISO with a
- * time part ('2026-09-17 10:22').
+ * time part ('2026-09-17 10:22'). 'TEXT' reads a month name ('17 Sep 2026').
  * @param {string} value
- * @param {'DMY'|'MDY'|'YMD'} format
+ * @param {'DMY'|'MDY'|'YMD'|'TEXT'} format
  * @returns {string|null}
  */
 export function parseDateWith(value, format) {
@@ -930,10 +999,13 @@ export function parseDateWith(value, format) {
         return null;
     }
 
-    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})([ T]\d{2}:\d{2}(:\d{2})?)?$/);
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})([ T]\d{1,2}:\d{2}(:\d{2}([.,]\d+)?)?)?$/);
     if (isoMatch) {
         const [, y, mo, d] = isoMatch;
         return isValidCalendarDate(y, mo, d) ? `${y}-${mo}-${d}` : null;
+    }
+    if (format === 'TEXT') {
+        return parseTextDate(trimmed);
     }
 
     const match = trimmed.match(/^(\d{1,4})[.\-/](\d{1,2})[.\-/](\d{1,4})/);
