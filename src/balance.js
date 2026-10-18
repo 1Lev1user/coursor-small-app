@@ -81,23 +81,15 @@ export function setMoneyNow(data, enteredCents, now = new Date()) {
     return { ok: true };
 }
 
-/** Adds one ordinary dated entry for the difference between the bank and Money now. */
-export function checkAgainstBank(data, enteredCents, now = new Date()) {
-    const currentCents = moneyNow(data, now);
-    if (currentCents === null) {
-        return { ok: false, reason: 'Set up Money now first.' };
-    }
-    if (!Number.isSafeInteger(enteredCents)) {
-        return { ok: false, reason: 'Enter a valid amount.' };
-    }
-    const differenceCents = enteredCents - currentCents;
+/** Adds one ordinary "Bank difference" entry dated `date`; nothing when the difference is 0. */
+function addBankDifference(data, differenceCents, date, alignedBy) {
     if (differenceCents === 0) {
         return { ok: true, differenceCents: 0, entry: null };
     }
 
-    const date = todayISO(now);
     const monthKey = monthKeyOf(date);
     const planWasAlreadyFrozen = Object.hasOwn(data.monthPlans, monthKey);
+    const tag = alignedBy ? { alignedBy } : {};
     let entry;
     let type;
     if (differenceCents < 0) {
@@ -116,6 +108,7 @@ export function checkAgainstBank(data, enteredCents, now = new Date()) {
             bankRef: '',
             fingerprint: '',
             goalId: '',
+            ...tag,
         };
         data.expenses.push(entry);
     } else {
@@ -127,12 +120,77 @@ export function checkAgainstBank(data, enteredCents, now = new Date()) {
             note: 'Bank difference',
             date,
             sourceId: '',
+            ...tag,
         };
         data.incomes.push(entry);
     }
     freezeMonthPlan(data, monthKey);
 
     return { ok: true, differenceCents, entry, type, monthKey, planWasAlreadyFrozen };
+}
+
+/** Adds one ordinary dated entry for the difference between the bank and Money now. */
+export function checkAgainstBank(data, enteredCents, now = new Date()) {
+    const currentCents = moneyNow(data, now);
+    if (currentCents === null) {
+        return { ok: false, reason: 'Set up Money now first.' };
+    }
+    if (!Number.isSafeInteger(enteredCents)) {
+        return { ok: false, reason: 'Enter a valid amount.' };
+    }
+    return addBankDifference(data, enteredCents - currentCents, todayISO(now));
+}
+
+/**
+ * Like checkAgainstBank, but compares with the money at the end of `dateISO`
+ * (a statement's closing date) and dates the entry there. With `alignedBy`
+ * (an import id) the entry carries it, so undoing that import removes it too.
+ */
+export function alignToBank(data, enteredCents, dateISO, now = new Date(), { alignedBy = '' } = {}) {
+    const anchor = data.settings.balanceStart;
+    if (!anchor) {
+        return { ok: false, reason: 'Set up Money now first.' };
+    }
+    if (!Number.isSafeInteger(enteredCents)) {
+        return { ok: false, reason: 'Enter a valid amount.' };
+    }
+    if (monthKeyOf(dateISO) === null) {
+        return { ok: false, reason: 'Enter a valid date.' };
+    }
+    if (dateISO < anchor.date) {
+        return { ok: false, reason: 'That date is before Money now starts.' };
+    }
+    if (dateISO > todayISO(now)) {
+        return { ok: false, reason: 'That date is in the future.' };
+    }
+
+    const result = addBankDifference(data, enteredCents - balanceAt(data, dateISO), dateISO, alignedBy);
+    if (alignedBy && result.entry && !result.planWasAlreadyFrozen) {
+        const record = (data.imports ?? []).find(({ id }) => id === alignedBy);
+        if (record) {
+            record.createdPlans = [...(record.createdPlans ?? []), result.monthKey];
+        }
+    }
+    return result;
+}
+
+/** Sets Money now from a statement: `cents` is the bank balance at the end of `dateISO`. */
+export function startMoneyFromBank(data, cents, dateISO, now = new Date()) {
+    if (data.settings.balanceStart) {
+        return { ok: false, reason: 'Money now is already set.' };
+    }
+    if (!Number.isSafeInteger(cents)) {
+        return { ok: false, reason: 'Enter a valid amount.' };
+    }
+    if (monthKeyOf(dateISO) === null) {
+        return { ok: false, reason: 'Enter a valid date.' };
+    }
+    if (dateISO > todayISO(now)) {
+        return { ok: false, reason: 'That date is in the future.' };
+    }
+    data.settings.balanceStart = { cents: 0, date: dateISO };
+    data.settings.balanceStart.cents = cents - balanceAt(data, dateISO);
+    return { ok: true };
 }
 
 /** Net Savings-category spending from the anchor date to today; reported apart from Money now. */
