@@ -443,7 +443,7 @@ function camtDate(entry) {
 function camtCounterAmounts(node, bases = ['AmtDtls', 'NtryDtls/TxDtls/AmtDtls']) {
     const found = [];
     for (const base of bases) {
-        for (const kind of ['InstdAmt', 'TxAmt', 'CntrValAmt', 'AnncdPstngAmt', 'PrtryAmt']) {
+        for (const kind of ['InstdAmt', 'TxAmt', 'CntrValAmt']) {
             for (const item of pathAll(node, `${base}/${kind}/Amt`)) {
                 const amount = amountWithCurrency(item);
                 if (amount && amount.currency) {
