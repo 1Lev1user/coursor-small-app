@@ -50,8 +50,9 @@ const KIND_HINTS = {
     skip: 'This row will not be imported.',
 };
 
-const SKIP_REASONS = {
+export const SKIP_REASONS = {
     'summary row': 'Summary or balance line',
+    'zero amount': 'Amount is zero',
     'unparsable date': 'Date not recognised',
     'unparsable amount': 'Amount not recognised',
     'unknown direction': 'Direction not recognised',
@@ -611,13 +612,21 @@ function isOldExcel(bytes) {
 const UNKNOWN_FILE = 'This file does not look like a bank statement.'
     + ' Use a CSV, Excel (.xls or .xlsx), camt.053 or FiDAViSTA XML file.';
 
-const MT940_FILE = 'This looks like an MT940 statement. The app cannot read MT940 yet.'
+export const HEADER_ONLY_FILE = 'This file has a header but no transactions. Check the period you exported.';
+
+const MT940_FILE ='This looks like an MT940 statement. The app cannot read MT940 yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
 const OFX_FILE = 'This looks like an OFX/QFX statement. The app cannot read OFX/QFX yet.'
     + ' Export the same statement as CSV or camt.053 XML.';
 
 function countLines(text) {
     return text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '').length;
+}
+
+/** True when the last non-blank row of a table is its header, so there is nothing to import. */
+export function isHeaderOnly(rows) {
+    const filled = rows.filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''));
+    return filled.length > 0 && findHeaderRow(filled) === filled.length - 1;
 }
 
 export async function readStatementFile(file) {
@@ -632,6 +641,7 @@ export async function readStatementFile(file) {
         const format = isZip(bytes) ? 'xlsx' : 'xls';
         const sheet = await (format === 'xlsx' ? readXlsx(bytes) : readXls(bytes));
         if (!sheet.ok) return sheet;
+        if (isHeaderOnly(sheet.rows)) return { ok: false, reason: HEADER_ONLY_FILE };
         return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
     }
 
@@ -647,11 +657,20 @@ export async function readStatementFile(file) {
     if (format === 'html' || format === 'spreadsheetml') {
         const sheet = format === 'html' ? readHtmlTable(text) : readSpreadsheetMl(text);
         if (!sheet.ok) return sheet;
+        if (isHeaderOnly(sheet.rows)) return { ok: false, reason: HEADER_ONLY_FILE };
         return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
     }
     if (format === 'csv') {
         const { delimiter, rows } = parseDelimited(text);
+        if (isHeaderOnly(rows)) return { ok: false, reason: HEADER_ONLY_FILE };
         return { ok: true, kind: 'table', format: 'csv', rows, delimiter, encoding, lineCount: countLines(text) };
+    }
+    // A single header line is too short for detectFormat to call it CSV.
+    if (!text.trimStart().startsWith('<')) {
+        const { rows } = parseDelimited(text);
+        if (rows.length === 1 && rows[0].length >= 2 && guessColumns(rows[0], []).columns.date >= 0) {
+            return { ok: false, reason: HEADER_ONLY_FILE };
+        }
     }
     return { ok: false, reason: UNKNOWN_FILE };
 }
@@ -690,6 +709,11 @@ function loadPaste(ctx) {
     const { delimiter, rows } = parseDelimited(text);
     if (rows.length === 0 || rows.every((row) => row.length < 2)) {
         state.loadError = 'Could not find columns in this text. Copy the table from your bank, including the header row.';
+        refresh(ctx, 'imp-paste');
+        return;
+    }
+    if (isHeaderOnly(rows)) {
+        state.loadError = HEADER_ONLY_FILE;
         refresh(ctx, 'imp-paste');
         return;
     }
