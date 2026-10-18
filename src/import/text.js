@@ -376,6 +376,9 @@ const TYPE_HEADER_WORDS = ['type', 'tips', 'veids', 'тип'];
 const REVOLUT_TYPES = ['CARD PAYMENT', 'TOPUP', 'EXCHANGE', 'CARD REFUND', 'ATM'];
 // TRANSFER is not hinted: it also covers payments to other people, which are real spending.
 const KIND_HINT_BY_TYPE = { TOPUP: 'transfer', EXCHANGE: 'transfer', 'CARD REFUND': 'refund' };
+// Swedbank record type column: 20 is a transaction; 10, 82, 86 and 900 are balance and turnover lines.
+const RECORD_TYPE_HEADERS = ['ieraksta tips', 'reatuup', 'kirje tuup', 'record type'];
+const RECORD_TYPE_CODES = ['10', '20', '82', '86', '900'];
 // Status words (normalised, lower case) of rows whose money did not move; any other value imports.
 const NOT_COMPLETED = ['pending', 'reverted', 'reversed', 'declined', 'failed', 'cancelled', 'canceled', 'rejected', 'rezervets'];
 
@@ -632,6 +635,22 @@ export function guessColumns(header, allSampleRows) {
             && samples.some((value) => REVOLUT_TYPES.includes(typeKey(value)))
             && !samples.every(isDirectionValue)) {
             columns.type = i;
+            break;
+        }
+    }
+
+    // Swedbank record type: a named column whose samples are all known codes, or an unnamed one that also holds a 20.
+    const usedByRecordType = usedIndexes(columns);
+    const hasMoneyColumn = columns.amount >= 0 || columns.debit >= 0 || columns.credit >= 0;
+    for (let i = 0; i < header.length; i += 1) {
+        const named = RECORD_TYPE_HEADERS.includes(normalizedHeader[i]);
+        if (usedByRecordType.has(i) || !(named || normalizedHeader[i] === '')) {
+            continue;
+        }
+        const samples = columnSamples(sampleRows, i);
+        if (samples.length > 0 && samples.every((value) => RECORD_TYPE_CODES.includes(value))
+            && (named || (hasMoneyColumn && samples.includes('20')))) {
+            columns.recordType = i;
             break;
         }
     }
@@ -1077,6 +1096,11 @@ export function rowsToStatement(rows, headerRow, layout) {
     const statementRows = [];
     const skipped = [];
 
+    // A record type column that another field also reads is not one (a saved layout may use that column for the amount).
+    const recordTypeIndex = (columns.recordType ?? -1) >= 0
+        && !Object.entries(columns).some(([key, index]) => key !== 'recordType' && index === columns.recordType)
+        ? columns.recordType : -1;
+
     for (let i = dataStart; i < rows.length; i += 1) {
         const row = rows[i];
         const line = i + 1;
@@ -1086,6 +1110,12 @@ export function rowsToStatement(rows, headerRow, layout) {
         }
 
         if (headerRow >= 0 && isHeaderRepeat(row, rows[headerRow])) {
+            skipped.push({ line, reason: 'summary row' });
+            continue;
+        }
+
+        const recordType = cellAt(row, recordTypeIndex).trim();
+        if (recordType !== '' && recordType !== '20') {
             skipped.push({ line, reason: 'summary row' });
             continue;
         }
