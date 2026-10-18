@@ -973,8 +973,17 @@ function renderLoad(ctx) {
     return card;
 }
 
+/** The length of the longest row; a loop, because spreading 130 000 rows into Math.max overflows the stack. */
+export function widestRow(rows) {
+    let width = 0;
+    for (const row of rows) {
+        if (row.length > width) width = row.length;
+    }
+    return width;
+}
+
 function columnOptions(includeUnused) {
-    const width = Math.max(...state.table.rows.map((row) => row.length));
+    const width = widestRow(state.table.rows);
     const items = includeUnused ? [[-1, 'Not used']] : [[-1, 'Choose a column']];
     for (let index = 0; index < width; index += 1) {
         const name = String(state.table.header[index] ?? '').trim();
@@ -985,7 +994,7 @@ function columnOptions(includeUnused) {
 
 function previewTable() {
     const { rows, headerRow, header } = state.table;
-    const width = Math.max(...rows.map((row) => row.length));
+    const width = widestRow(rows);
     const data = rows.slice(headerRow + 1, headerRow + 1 + PREVIEW_ROWS);
 
     const wrap = element('div', 'imp-table-wrap');

@@ -240,7 +240,7 @@ function stripQualified(root) {
     while (pending.length > 0) {
         const node = pending.pop();
         delete node.qualified;
-        pending.push(...node.children);
+        for (const kid of node.children) pending.push(kid);
     }
 }
 
