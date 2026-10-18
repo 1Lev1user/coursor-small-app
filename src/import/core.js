@@ -553,18 +553,10 @@ function historySources(data) {
     return maps;
 }
 
-/** The source of the longest earlier-import keyword found in the row (whole words, as for rules), or null. */
+/** The source stored under the row's own keyword (its counterparty's, else its description's), or null. */
 function historySuggestion(sources, row) {
-    const text = rowText(row);
-    let best = null;
-    let bestLength = 0;
-    for (const [keyword, source] of sources[row.direction === 'in' ? 'in' : 'out']) {
-        if (keyword.length > bestLength && hasKeyword(text, keyword)) {
-            best = source;
-            bestLength = keyword.length;
-        }
-    }
-    return best;
+    const keyword = usableKeyword(extractPattern(row.counterparty)) || usableKeyword(extractPattern(row.description));
+    return keyword === '' ? null : sources[row.direction === 'in' ? 'in' : 'out'].get(keyword) ?? null;
 }
 
 /**
@@ -583,9 +575,9 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
     const reversalSkips = new Set(pairReversals(rows, (i) => !duplicates[i]?.level && !suggestions[i].rule).flat());
     const decisions = rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestions[index];
-        const found = rule ? null : historySuggestion(sources, row);
-        const mcc = rule ? null : mccSuggestion(data, row);
         const hinted = hintedKind(row);
+        const found = !rule && !hinted && !row.reversal && !reversalSkips.has(index) ? historySuggestion(sources, row) : null;
+        const mcc = rule ? null : mccSuggestion(data, row);
         eligible[index] = !rule && !hinted && !row.reversal && !reversalSkips.has(index) && !duplicates[index]?.level && !row.mcc
             && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
             && dayNumber(row.date) !== null;

@@ -197,12 +197,55 @@ test('transfers are not sources', () => {
     assert.deepEqual(one(data, out('NARVESEN 14')), PLAIN);
 });
 
-test('the longest matching keyword wins', () => {
+test('only the row\'s own keyword counts, never one found inside its text', () => {
     const data = freshData();
-    stored(data, { text: 'PAYPAL 1', date: '2026-09-20', categoryId: 'necessary', subcategoryId: 'groceries' });
-    stored(data, { text: 'PAYPAL SPOTIFY 1', date: '2026-09-01', categoryId: 'random', subcategoryId: 'random-other' });
-    assert.equal(one(data, out('PAYPAL SPOTIFY 9')).categoryId, 'random');
-    assert.equal(one(data, out('PAYPAL EBAY 9')).categoryId, 'necessary');
+    stored(data, { text: 'ORIGO', date: '2026-10-11', categoryId: 'subscriptions' });
+    stored(data, { text: 'RIMI', date: '2026-10-01', categoryId: 'necessary', subcategoryId: 'groceries' });
+    const decision = one(data, out('RIMI ORIGO', { counterparty: 'RIMI ORIGO' }));
+    assert.equal(decision.categoryId, 'necessary');
+    assert.equal(decision.subcategoryId, 'groceries');
+
+    const onlyMall = stored(freshData(), { text: 'ORIGO', categoryId: 'subscriptions' });
+    assert.deepEqual(one(onlyMall, out('RIMI ORIGO', { counterparty: 'RIMI ORIGO' })), PLAIN);
+
+    const processor = stored(freshData(), { text: 'PAYPAL 1', categoryId: 'necessary', subcategoryId: 'groceries' });
+    assert.deepEqual(one(processor, out('PAYPAL SPOTIFY 9')), PLAIN);
+    stored(processor, { text: 'PAYPAL SPOTIFY 1', categoryId: 'random', subcategoryId: 'shopping' });
+    assert.equal(one(processor, out('PAYPAL SPOTIFY 9')).categoryId, 'random');
+});
+
+test('the counterparty decides the keyword; the description is used only when it gives none', () => {
+    const data = stored(freshData(), { text: 'NARVESEN 1', categoryId: 'necessary', subcategoryId: 'groceries' });
+    stored(data, { text: 'LIDL 1', categoryId: 'random', subcategoryId: 'shopping' });
+    assert.equal(one(data, out('LIDL RIGA', { counterparty: 'NARVESEN 5' })).subcategoryId, 'groceries');
+    assert.equal(one(data, out('NARVESEN 5', { counterparty: 'SIA' })).subcategoryId, 'groceries');
+});
+
+test('a row whose own keyword is empty gets no history', () => {
+    const data = stored(freshData(), { text: 'NARVESEN 12', categoryId: 'necessary', subcategoryId: 'groceries' });
+    assert.deepEqual(one(data, out('SIA')), PLAIN);
+    assert.deepEqual(one(data, out('SIA', { counterparty: 'POS' })), PLAIN);
+});
+
+test('a hint, reversal or skip kind gets no history', () => {
+    const data = stored(freshData(), { text: 'NARVESEN 12', categoryId: 'necessary', subcategoryId: 'groceries' });
+    const hinted = one(data, out('NARVESEN 14', { kindHint: 'transfer' }));
+    assert.equal(hinted.kind, 'transfer');
+    assert.equal('suggestion' in hinted, false);
+    assert.equal(hinted.categoryId, UNCATEGORISED_ID);
+
+    const reversal = one(data, out('NARVESEN 14', { reversal: true }));
+    assert.equal('suggestion' in reversal, false);
+    assert.equal(reversal.categoryId, UNCATEGORISED_ID);
+
+    const rows = [
+        out('NARVESEN 14', { reversal: true, bankRef: 'P1' }),
+        inRow('NARVESEN 14', { reversal: true, bankRef: 'P1' }),
+    ];
+    for (const decision of defaultDecisions(data, rows)) {
+        assert.equal('suggestion' in decision, false);
+        assert.equal(decision.categoryId, UNCATEGORISED_ID);
+    }
 });
 
 test('a history row can still be paired as an own transfer', () => {
