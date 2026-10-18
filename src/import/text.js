@@ -344,7 +344,7 @@ export function findHeaderRow(rows) {
 
 const KEYWORDS = {
     date: ['datums', 'дата', 'kuupaev', 'data', 'date', 'laikas'],
-    debit: ['debit', 'debets', 'дебет', 'deebet', 'исходящ'],
+    debit: ['debit', 'debets', 'debetas', 'дебет', 'deebet', 'исходящ'],
     credit: ['credit', 'kredit', 'кредит', 'kreedit'],
     amount: ['amount', 'summa', 'сумма', 'suma', 'value'],
     direction: ['d/k', 'd/c', 'db/cr', 'debit/credit', 'debets/kredits', 'direction', 'tips', 'veids', 'zime', 'sign', 'тип', 'type'],
@@ -354,13 +354,18 @@ const KEYWORDS = {
         'transaction id', 'transaction reference', 'bank reference', 'arhiva kods', 'arhiva numurs',
         'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
         'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
+        'arhiveerimistunnus', 'archiving code', 'kande viide', 'transakcijos kodas', 'transferwise id',
     ],
     description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars', 'informacija'],
-    counterparty: ['payee', 'counterparty', 'beneficiary', 'partneris', 'nosaukums', 'sanemejs', 'maksatajs', 'получатель', 'плательщик'],
+    counterparty: ['payee', 'counterparty', 'beneficiary', 'partneris', 'nosaukums', 'sanemejs', 'maksatajs', 'получатель', 'плательщик', 'saaja', 'saaja/maksja nimi', 'partner name', 'gavejo pavadinimas', 'sender/receiver name'],
 };
 
 // An account's name or number is not the shop or person ('Konta nosaukums', 'Account name').
-const NOT_COUNTERPARTY_WORDS = ['account', 'konta', 'konts', 'iban'];
+const NOT_COUNTERPARTY_WORDS = ['account', 'konta', 'konto', 'konts', 'iban', 'kods', 'code', 'number', 'saskaita'];
+const NOT_COUNTERPARTY_TOKENS = ['nr'];
+// The details header only when no other header names them ('Payment Reference' in N26).
+const FALLBACK_DESCRIPTION_WORD = 'payment reference';
+const NOT_SIDE_WORDS = ['istaig', 'original'];
 
 const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'counterparty', 'status'];
 
@@ -524,11 +529,12 @@ function countBalanceFits(points, oldestFirst) {
  * description falls back to the longest text column with the most distinct
  * values.
  * @param {string[]} header
- * @param {string[][]} sampleRows
+ * @param {string[][]} allSampleRows rows under the header; repeats of the header line are ignored
  * @returns {{ columns: object, dateFormat: string|null, decimalSeparator: string, confidence: number }}
  */
-export function guessColumns(header, sampleRows) {
+export function guessColumns(header, allSampleRows) {
     const normalizedHeader = header.map(normalizeText);
+    const sampleRows = allSampleRows.filter((row) => !isHeaderRepeat(row, header));
     const columns = emptyColumns();
     let dateVia = null;
     let amountVia = null;
@@ -556,7 +562,12 @@ export function guessColumns(header, sampleRows) {
                 ? isStatusHeader(normalizedHeader[i])
                 : keywords.some((keyword) => normalizedHeader[i].includes(keyword));
             if (matches && category === 'counterparty'
-                && NOT_COUNTERPARTY_WORDS.some((word) => normalizedHeader[i].includes(word))) {
+                && (NOT_COUNTERPARTY_WORDS.some((word) => normalizedHeader[i].includes(word))
+                    || normalizedHeader[i].split(/[^\p{L}]+/u).some((word) => NOT_COUNTERPARTY_TOKENS.includes(word)))) {
+                continue;
+            }
+            if (matches && ['debit', 'credit', 'currency'].includes(category)
+                && NOT_SIDE_WORDS.some((word) => normalizedHeader[i].includes(word))) {
                 continue;
             }
             if (matches) {
@@ -573,6 +584,19 @@ export function guessColumns(header, sampleRows) {
                 break;
             }
         }
+    }
+
+    if (columns.description === -1) {
+        const used = usedIndexes(columns);
+        const index = normalizedHeader.findIndex((h, i) => !used.has(i) && h.includes(FALLBACK_DESCRIPTION_WORD));
+        if (index >= 0) {
+            columns.description = index;
+            descriptionVia = 'keyword';
+        }
+    }
+
+    if (normalizedHeader.includes('payer name') && normalizedHeader.includes('payee name')) {
+        delete columns.counterparty;
     }
 
     for (const key of ['debit', 'credit']) {
@@ -1019,6 +1043,12 @@ function isSummaryRow(row, descriptionIndex, hasDate) {
     return !hasDate && hasSummaryKeyword(row);
 }
 
+function isHeaderRepeat(row, header) {
+    const length = trimmedLength(header);
+    return length >= 2 && trimmedLength(row) === length
+        && header.slice(0, length).every((cell, index) => normalizeText(cell) === normalizeText(row[index]));
+}
+
 function cellAt(row, index) {
     return index >= 0 && index < row.length ? String(row[index] ?? '') : '';
 }
@@ -1052,6 +1082,11 @@ export function rowsToStatement(rows, headerRow, layout) {
         const line = i + 1;
 
         if (row.every((cell) => cell.trim() === '')) {
+            continue;
+        }
+
+        if (headerRow >= 0 && isHeaderRepeat(row, rows[headerRow])) {
+            skipped.push({ line, reason: 'summary row' });
             continue;
         }
 
@@ -1161,12 +1196,15 @@ export function rowsToStatement(rows, headerRow, layout) {
         const bankRef = cellAt(row, columns.bankRef);
         const payee = cellAt(row, columns.counterparty);
 
+        // A foreign card payment booked in EUR: show the original currency, keep the EUR amount charged.
+        const original = currency === 'EUR' && split.original ? split.original : null;
+
         statementRows.push(statementRow({
             date: split.date || date,
             amountCents: euroCents,
             direction,
-            currency,
-            originalAmountCents: amountCents,
+            currency: original ? original.currency : currency,
+            originalAmountCents: original ? original.cents : amountCents,
             description: split.description,
             counterparty: payee.trim() !== '' ? payee : split.counterparty,
             bankRef,
