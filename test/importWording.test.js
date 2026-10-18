@@ -153,6 +153,28 @@ test('an xlsx file with only a header row says it has no transactions', async ()
     assert.equal(withData.kind, 'table');
 });
 
+test('a file with data and no header is never called header-only, even if its last row is text', async () => {
+    const samples = [
+        '2026-09-17;5.00;Shop\n2026-09-18;7.00;Cafe\nTotal;Sum;Final\n',
+        '2026-09-17;5.00;Shop\nBalance;Closing;End\n',
+        '1;2;3\nDate;Amount;Desc\n',
+    ];
+    for (const sample of samples) {
+        const result = await read(sample, 's.csv');
+        assert.equal(result.ok, true, JSON.stringify(sample));
+        assert.equal(result.kind, 'table', JSON.stringify(sample));
+    }
+});
+
+test('isHeaderOnly needs a date column in the header and only text above it', () => {
+    assert.equal(isHeaderOnly([['2026-09-17', '5.00', 'Shop'], ['2026-09-18', '7.00', 'Cafe'], ['Total', 'Sum', 'Final']]), false);
+    assert.equal(isHeaderOnly([['2026-09-17', '5.00', 'Shop'], ['Balance', 'Closing', 'End']]), false);
+    assert.equal(isHeaderOnly([['1', '2', '3'], ['Date', 'Amount', 'Desc']]), false);
+    assert.equal(isHeaderOnly([['17.09.2026', 'x'], ['Date', 'Amount', 'Desc']]), false);
+    assert.equal(isHeaderOnly([['5,00', 'x'], ['Datums', 'Summa', 'Apraksts']]), false);
+    assert.equal(isHeaderOnly([['Name', 'Note'], ['Total', 'Sum', 'Final']]), false);
+});
+
 test('isHeaderOnly is true only when the last non-blank row is the header', () => {
     assert.equal(isHeaderOnly([['Date', 'Amount', 'Description']]), true);
     assert.equal(isHeaderOnly([['Date', 'Amount', 'Description'], ['', '', '']]), true);

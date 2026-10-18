@@ -12,6 +12,7 @@ import {
     findHeaderRow,
     guessColumns,
     parseDateWith,
+    parseAmountWith,
     rowsToStatement,
     stripAmountDecoration,
 } from '../import/text.js';
@@ -623,10 +624,22 @@ function countLines(text) {
     return text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== '').length;
 }
 
-/** True when the last non-blank row of a table is its header, so there is nothing to import. */
+const looksLikeValue = (cell) => {
+    const text = String(cell ?? '').trim();
+    return text !== '' && (['YMD', 'DMY', 'MDY'].some((format) => parseDateWith(text, format) !== null)
+        || parseAmountWith(text, '.') !== null || parseAmountWith(text, ',') !== null);
+};
+
+/**
+ * True when the table is a header (with a date column) as its last non-blank row,
+ * and only text above it, so there is nothing to import.
+ */
 export function isHeaderOnly(rows) {
     const filled = rows.filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''));
-    return filled.length > 0 && findHeaderRow(filled) === filled.length - 1;
+    const last = filled.length - 1;
+    return last >= 0 && findHeaderRow(filled) === last
+        && guessColumns(filled[last], []).columns.date >= 0
+        && !filled.slice(0, last).some((row) => row.some(looksLikeValue));
 }
 
 export async function readStatementFile(file) {
