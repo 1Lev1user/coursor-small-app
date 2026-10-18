@@ -18,6 +18,8 @@ import {
 import { parseCamt, parseFidavista } from '../import/xml.js';
 import { readXlsx } from '../import/xlsx.js';
 import { readXls } from '../import/xls.js';
+import { readHtmlTable } from '../import/htmlTable.js';
+import { readSpreadsheetMl } from '../import/spreadsheetml.js';
 import {
     findDuplicates,
     defaultDecisions,
@@ -32,7 +34,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const PREVIEW_ROWS = 5;
 const GUESS_SAMPLE_ROWS = 20;
 const SKIPPED_SHOWN = 20;
-const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'paste'];
+const TABULAR_FORMATS = ['csv', 'xlsx', 'xls', 'html', 'spreadsheetml', 'paste'];
 
 const KIND_LABELS = {
     expense: 'Expense',
@@ -612,6 +614,11 @@ export async function readStatementFile(file) {
         const parsed = format === 'camt' ? parseCamt(text) : parseFidavista(text);
         if (!parsed.ok) return parsed;
         return { ok: true, kind: 'statement', format, rows: parsed.rows, warnings: parsed.warnings ?? [] };
+    }
+    if (format === 'html' || format === 'spreadsheetml') {
+        const sheet = format === 'html' ? readHtmlTable(text) : readSpreadsheetMl(text);
+        if (!sheet.ok) return sheet;
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
     }
     if (format === 'csv') {
         const { delimiter, rows } = parseDelimited(text);

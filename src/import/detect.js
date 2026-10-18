@@ -51,7 +51,17 @@ function detectXml(text) {
         return 'camt';
     }
     if (name === 'ofx') return 'ofx';
+    if (name === 'workbook' && /urn:schemas-microsoft-com:office:spreadsheet/i.test(root.attrs)) {
+        return 'spreadsheetml';
+    }
     return 'unknown';
+}
+
+// An HTML page counts only when it holds a table with rows (so a plain page stays 'unknown').
+function looksHtmlTable(body) {
+    const head = body.slice(0, 4000).toLowerCase();
+    const opensLikeHtml = head.startsWith('<html') || head.startsWith('<!doctype html') || head.includes('<table');
+    return opensLikeHtml && /<table[\s>]/i.test(body) && /<tr[\s>]/i.test(body);
 }
 
 function looksMt940(body) {
@@ -102,8 +112,10 @@ export function detectFormat(text, fileName = '') {
     if (looksMt940(body)) return 'mt940';
 
     if (body.startsWith('<')) {
-        return detectXml(body);
+        const xml = detectXml(body);
+        return xml === 'unknown' && looksHtmlTable(body) ? 'html' : xml;
     }
+    if (looksHtmlTable(body)) return 'html';
     if (/\.xml$/i.test(fileName)) {
         return 'unknown';
     }
