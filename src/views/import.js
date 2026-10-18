@@ -223,6 +223,30 @@ export function rememberHint(data, decision) {
     return `Next time: ${pattern} \u2192 ${target}${suffix}`;
 }
 
+function knownLabel(data, decision) {
+    if (decision.kind === 'transfer') return 'Transfer';
+    if (decision.kind === 'skip') return 'Skip';
+    if (decision.kind === 'income') {
+        return (data.incomeCategories ?? []).find(({ id }) => id === decision.incomeCategoryId)?.name ?? 'Income';
+    }
+    const category = (data.categories ?? []).find(({ id }) => id === decision.categoryId);
+    const sub = category?.subcategories?.find(({ id }) => id === decision.subcategoryId);
+    const name = sub?.name ?? category?.name ?? 'Uncategorised';
+    return decision.kind === 'refund' ? `Refund ${name}` : name;
+}
+
+/** 'N rows sorted by your rules: Groceries 5, Transport 3' for the rows in Known; '' when there are none. */
+export function knownSummaryText(data, decisions, indexes) {
+    if (indexes.length === 0) return '';
+    const counts = new Map();
+    for (const index of indexes) {
+        const label = knownLabel(data, decisions[index]);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const parts = [...counts].sort((a, b) => b[1] - a[1]).map(([label, count]) => `${label} ${count}`);
+    return `${plural(indexes.length, 'row', 'rows')} sorted by your rules: ${parts.join(', ')}`;
+}
+
 export function bankTextOf(row) {
     return String(row.counterparty || row.description || '').replace(/\s+/g, ' ').trim();
 }
@@ -1602,7 +1626,7 @@ function renderCategorise(ctx) {
         toggle.setAttribute('aria-expanded', String(state.knownOpen));
         toggle.setAttribute('aria-controls', 'imp-known-list');
         head.append(toggle);
-        group.append(head, element('p', 'muted', `${plural(known.length, 'row was', 'rows were')} sorted by your rules.`));
+        group.append(head, element('p', 'muted', knownSummaryText(ctx.data, state.decisions, known)));
         if (state.knownOpen) {
             const list = element('ul', 'entry-list imp-list');
             list.id = 'imp-known-list';
