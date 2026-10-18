@@ -37,6 +37,38 @@ function matchText(value) {
         .trim();
 }
 
+const STOP_WORDS = new Set([
+    ...LEGAL_FORMS,
+    'POS', 'PAR', 'UN', 'AR', 'NO', 'UZ', 'MAKSAJUMS', 'MAKSĀJUMS', 'PAYMENT', 'PIRKUMS', 'CARD', 'KARTE',
+    'SIA', 'AS', 'OU', 'UAB', 'LTD', 'LLC', 'GMBH',
+].map(matchText));
+const MIN_KEYWORD_LENGTH = 3;
+
+/** The normalised keyword, or '' when it is a stop word or has under 3 characters other than spaces. */
+function usableKeyword(value) {
+    const keyword = matchText(value);
+    if (STOP_WORDS.has(keyword)) return '';
+    return keyword.replace(/ /g, '').length >= MIN_KEYWORD_LENGTH ? keyword : '';
+}
+
+/**
+ * True when keyword occurs in text (both already matchText-normalised) on word boundaries: the characters
+ * around it are not letters or digits. One exception: after a keyword that does not end in a digit, a glued
+ * reference code is allowed: up to 2 letters and then 4 or more digits ('BOLT.EU' and 'BOLT.EUR' in
+ * 'BOLT.EUR2610011807'), the shape extractPattern cuts.
+ */
+function hasKeyword(text, keyword) {
+    if (keyword === '') return false;
+    const glued = /\P{N}$/u.test(keyword);
+    for (let at = text.indexOf(keyword); at !== -1; at = text.indexOf(keyword, at + 1)) {
+        if (/[\p{L}\p{N}]$/u.test(text.slice(0, at))) continue;
+        const after = text.slice(at + keyword.length);
+        if (!/^[\p{L}\p{N}]/u.test(after)) return true;
+        if (glued && /^\p{L}{0,2}\d{4,}(?![\p{L}\p{N}])/u.test(after)) return true;
+    }
+    return false;
+}
+
 function rowText(row) {
     return matchText(`${row.counterparty ?? ''} ${row.description ?? ''}`);
 }
@@ -236,6 +268,7 @@ function keepName(token) {
  * 4 or more digits is cut ('BOLT.EUR2610011807' -> 'BOLT.EUR'). A legal form on its own gives ''.
  * Card masks, dates, times, trailing Baltic cities and country codes are dropped. IBANs, amounts glued to a currency
  * and reference codes glued to digits (TERM1234, NR1234) are dropped too, unless they are the only tokens left.
+ * A stop word (POS, PAR, SIA...) or a keyword under 3 characters gives ''.
  */
 export function extractPattern(description) {
     const cleaned = stripNoise(String(description ?? '').toUpperCase())
@@ -262,13 +295,15 @@ export function extractPattern(description) {
     if (tokens.length === 0) return '';
 
     const first = tokens[0];
+    let pattern;
     if (LEGAL_FORMS.has(first) && tokens.length > 1) {
-        return tokens.slice(1, 3).join(' ');
+        pattern = tokens.slice(1, 3).join(' ');
+    } else if (PROCESSORS.has(first) && tokens.length > 1) {
+        pattern = tokens.slice(0, 2).join(' ');
+    } else {
+        pattern = LEGAL_FORMS.has(first) ? '' : first;
     }
-    if (PROCESSORS.has(first) && tokens.length > 1) {
-        return tokens.slice(0, 2).join(' ');
-    }
-    return LEGAL_FORMS.has(first) ? '' : first;
+    return usableKeyword(pattern) === '' ? '' : pattern;
 }
 
 export function ruleKind(rule) {
@@ -293,10 +328,10 @@ export function applyRules(rules, row) {
     let best = null;
     let bestLength = 0;
     for (const rule of rules ?? []) {
-        const pattern = matchText(rule.pattern);
+        const pattern = usableKeyword(rule.pattern);
         if (
             pattern === ''
-            || !haystack.includes(pattern)
+            || !hasKeyword(haystack, pattern)
             || !ruleFitsDirection(rule, row.direction)
         ) continue;
         if (pattern.length > bestLength) {
@@ -852,12 +887,12 @@ export function applyRuleToExisting(data, ruleId) {
     if (rule.kind === 'income' && !(data.incomeCategories ?? []).some(({ id }) => id === rule.incomeCategoryId)) {
         return 0;
     }
-    const pattern = matchText(rule.pattern);
+    const pattern = usableKeyword(rule.pattern);
     if (pattern === '') return 0;
 
     let changed = 0;
     const matches = (entry) => entry.importId
-        && matchText(entry.bankText || entry.note || '').includes(pattern);
+        && hasKeyword(matchText(entry.bankText || entry.note || ''), pattern);
 
     if (rule.kind === 'expense') {
         for (const expense of data.expenses ?? []) {
