@@ -199,6 +199,8 @@ export function normaliseEntry(entry, isExpense) {
     entry.bankRef = stringOr(entry.bankRef);
     entry.bankText = stringOr(entry.bankText);
     entry.fingerprint = stringOr(entry.fingerprint);
+    // Optional mark of a correction after an import; missing or empty means not edited.
+    if (typeof entry.editedAt !== 'string') delete entry.editedAt;
     if (isExpense) {
         entry.refund = entry.refund === true;
         entry.goalId = stringOr(entry.goalId);
@@ -206,6 +208,34 @@ export function normaliseEntry(entry, isExpense) {
         entry.sourceId = stringOr(entry.sourceId);
     }
     return entry;
+}
+
+const EDIT_TRACKED_FIELDS = [
+    'categoryId', 'subcategoryId', 'incomeCategoryId', 'amountCents', 'note',
+    'date', 'currency', 'originalAmountCents', 'refund',
+];
+
+/**
+ * Sets `editedAt` on an imported entry (one with an importId) when a tracked
+ * field differs from `before`. Only fields present in `before` are compared;
+ * notes are compared trimmed, a missing note is ''. Returns true when marked.
+ */
+export function markEdited(entry, before, now = new Date()) {
+    if (typeof entry.importId !== 'string' || entry.importId === '') return false;
+    const clean = (field, value) => (field === 'note' ? (typeof value === 'string' ? value : '').trim() : value);
+    const changed = EDIT_TRACKED_FIELDS.some((field) => Object.hasOwn(before, field)
+        && clean(field, entry[field]) !== clean(field, before[field]));
+    if (changed) entry.editedAt = now.toISOString();
+    return changed;
+}
+
+/** Puts `editedAt` back to what `before` had, removing the key when it was absent. */
+export function restoreEditedAt(entry, before) {
+    if (typeof before.editedAt === 'string') {
+        entry.editedAt = before.editedAt;
+    } else {
+        delete entry.editedAt;
+    }
 }
 
 /*

@@ -26,6 +26,7 @@ import {
     extractPattern,
     buildImport,
     applyImport,
+    importEditInfo,
     undoImportAndSave,
     summarise,
 } from '../import/core.js';
@@ -447,6 +448,8 @@ function freshState() {
         applyError: '',
         result: null,
         undoneCount: null,
+        keptCount: 0,
+        confirmUndo: false,
         focusId: '',
         focusStep: false,
     };
@@ -1735,6 +1738,8 @@ function applyBuilt(ctx) {
         saved: saved !== false,
     };
     state.undoneCount = null;
+    state.keptCount = 0;
+    state.confirmUndo = false;
     if (saved !== false) ctx.toast(`Imported ${entryCountText(count)}`);
     goStep(ctx, 'done');
 }
@@ -1782,6 +1787,42 @@ function renderConfirm(ctx) {
     return card;
 }
 
+function undoFromDone(ctx, options) {
+    const undone = undoImportAndSave(ctx.data, state.result.importId, () => ctx.save(), options);
+    state.confirmUndo = false;
+    if (!undone.ok) {
+        ctx.render();
+        return;
+    }
+    state.undoneCount = undone.removed;
+    state.keptCount = undone.kept ?? 0;
+    ctx.toast(state.keptCount > 0
+        ? `Import undone, ${plural(state.keptCount, 'changed entry', 'changed entries')} kept`
+        : 'Import undone');
+    state.focusStep = true;
+    ctx.render();
+}
+
+function undoConfirmBox(ctx, { total, edited }) {
+    const noun = total === 1 ? 'entry' : 'entries';
+    const verb = edited === 1 ? 'was' : 'were';
+    const cancel = button('btn', 'Cancel', () => {
+        state.confirmUndo = false;
+        state.focusId = 'imp-undo-start';
+        ctx.render();
+    });
+    cancel.id = 'imp-undo-cancel';
+    const box = element('div', 'confirm-box');
+    box.setAttribute('role', 'group');
+    box.append(
+        element('p', 'confirm-copy', `${edited} of ${total} ${noun} ${verb} changed after the import. Remove all of them, or keep the changed ones? Rules you saved stay.`),
+        cancel,
+        button('btn btn-danger', 'Remove all', () => undoFromDone(ctx)),
+        button('btn', `Keep the ${edited} changed`, () => undoFromDone(ctx, { keepEdited: true })),
+    );
+    return box;
+}
+
 function renderDone(ctx) {
     const card = element('section', 'card stack');
     card.setAttribute('role', 'status');
@@ -1797,7 +1838,8 @@ function renderDone(ctx) {
     });
 
     if (state.undoneCount !== null) {
-        card.append(element('p', '', `${entryCountText(state.undoneCount)} removed. Rules you saved stay.`));
+        const kept = state.keptCount > 0 ? ` ${plural(state.keptCount, 'changed entry', 'changed entries')} kept.` : '';
+        card.append(element('p', '', `${entryCountText(state.undoneCount)} removed.${kept} Rules you saved stay.`));
         card.append(actions(toSettings));
         return card;
     }
@@ -1806,6 +1848,21 @@ function renderDone(ctx) {
     if (!result.saved) {
         card.append(alertText('The import is in memory but could not be saved on this device.'));
     }
+    const info = importEditInfo(ctx.data, result.importId);
+    if (state.confirmUndo && info.edited > 0) {
+        card.append(undoConfirmBox(ctx, info));
+        state.focusId = 'imp-undo-cancel';
+        return card;
+    }
+    const undo = button('btn', 'Undo this import', () => {
+        if (importEditInfo(ctx.data, result.importId).edited > 0) {
+            state.confirmUndo = true;
+            ctx.render();
+            return;
+        }
+        undoFromDone(ctx);
+    });
+    undo.id = 'imp-undo-start';
     card.append(actions(
         button('btn btn-primary', 'Go to Month', () => {
             const monthKey = monthKeyOf(result.periodTo);
@@ -1813,17 +1870,7 @@ function renderDone(ctx) {
             if (monthKey) ctx.setMonthKey(monthKey);
             ctx.goTo('month');
         }),
-        button('btn', 'Undo this import', () => {
-            const undone = undoImportAndSave(ctx.data, result.importId, () => ctx.save());
-            if (!undone.ok) {
-                ctx.render();
-                return;
-            }
-            state.undoneCount = undone.removed;
-            ctx.toast('Import undone');
-            state.focusStep = true;
-            ctx.render();
-        }),
+        undo,
         toSettings,
     ));
     return card;

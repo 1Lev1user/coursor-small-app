@@ -1,4 +1,4 @@
-import { createId, UNCATEGORISED_ID } from '../model.js';
+import { createId, markEdited, UNCATEGORISED_ID } from '../model.js';
 import { buildPlanSnapshot, freezeMonthPlan } from '../budget.js';
 import { compareMonthKeys, currentMonthKey, monthKeyOf } from '../months.js';
 import { subcategoryForMcc } from './mcc.js';
@@ -817,10 +817,12 @@ export function applyImport(data, built, planChoices = {}) {
     return { ok: true, importId: record.id, counts: { ...record.counts } };
 }
 
-function removeByIds(list, ids) {
+const isEdited = (entry) => typeof entry.editedAt === 'string' && entry.editedAt !== '';
+
+function removeByIds(list, ids, keepEdited = false) {
     let removed = 0;
     for (let index = list.length - 1; index >= 0; index -= 1) {
-        if (ids.has(list[index].id)) {
+        if (ids.has(list[index].id) && !(keepEdited && isEdited(list[index]))) {
             list.splice(index, 1);
             removed += 1;
         }
@@ -828,13 +830,32 @@ function removeByIds(list, ids) {
     return removed;
 }
 
-/** Returns the number of entries removed; 0 when unknown or already undone. */
-export function undoImport(data, importId, now = new Date()) {
+/**
+ * How many entries of an import are still present (`total`) and how many of
+ * them were changed after the import (`edited`). 0 and 0 when unknown or undone.
+ */
+export function importEditInfo(data, importId) {
+    const record = (data.imports ?? []).find(({ id }) => id === importId);
+    if (!record || record.undoneAt) return { total: 0, edited: 0 };
+    const expenseIds = new Set(record.expenseIds);
+    const incomeIds = new Set(record.incomeIds);
+    const present = [
+        ...(data.expenses ?? []).filter(({ id }) => expenseIds.has(id)),
+        ...(data.incomes ?? []).filter(({ id }) => incomeIds.has(id)),
+    ];
+    return { total: present.length, edited: present.filter(isEdited).length };
+}
+
+/**
+ * Returns the number of entries removed; 0 when unknown or already undone.
+ * With `keepEdited`, entries changed after the import stay.
+ */
+export function undoImport(data, importId, now = new Date(), { keepEdited = false } = {}) {
     const record = (data.imports ?? []).find(({ id }) => id === importId);
     if (!record || record.undoneAt) return 0;
 
-    const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds))
-        + removeByIds(data.incomes ?? [], new Set(record.incomeIds));
+    const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds), keepEdited)
+        + removeByIds(data.incomes ?? [], new Set(record.incomeIds), keepEdited);
     // Plans this import created go too, unless the month has other entries now.
     for (const monthKey of record.createdPlans ?? []) {
         const used = [...(data.expenses ?? []), ...(data.incomes ?? [])]
@@ -850,16 +871,18 @@ export function undoImport(data, importId, now = new Date()) {
 /**
  * Undoes an import and saves; if saving fails, puts every list back as it was.
  * `save` returns false on failure (like ctx.save / persist).
+ * With `keepEdited` the result also says how many changed entries were kept.
  */
-export function undoImportAndSave(data, importId, save) {
+export function undoImportAndSave(data, importId, save, options = {}) {
     const keys = ['expenses', 'incomes', 'monthPlans', 'imports'];
     const before = JSON.parse(JSON.stringify(Object.fromEntries(keys.map((key) => [key, data[key]]))));
-    const removed = undoImport(data, importId);
+    const { total } = importEditInfo(data, importId);
+    const removed = undoImport(data, importId, new Date(), options);
     if (save() === false) {
         Object.assign(data, before);
         return { ok: false, removed: 0 };
     }
-    return { ok: true, removed };
+    return options.keepEdited ? { ok: true, removed, kept: total - removed } : { ok: true, removed };
 }
 
 export function summarise(built) {
@@ -878,7 +901,7 @@ export function summarise(built) {
  * sets the category (and subcategory) and, when the rule has one, the "Show as" note.
  * Manual entries are never touched. Returns how many entries changed.
  */
-export function applyRuleToExisting(data, ruleId) {
+export function applyRuleToExisting(data, ruleId, now = new Date()) {
     const rule = (data.rules ?? []).find(({ id }) => id === ruleId);
     if (!rule) return 0;
     if (rule.kind === 'expense' && !(data.categories ?? []).some(({ id }) => id === rule.categoryId)) {
@@ -897,16 +920,20 @@ export function applyRuleToExisting(data, ruleId) {
     if (rule.kind === 'expense') {
         for (const expense of data.expenses ?? []) {
             if (!matches(expense) || expense.refund !== (rule.refund === true)) continue;
+            const before = { categoryId: expense.categoryId, subcategoryId: expense.subcategoryId, note: expense.note };
             expense.categoryId = rule.categoryId || expense.categoryId;
             expense.subcategoryId = rule.categoryId ? (rule.subcategoryId ?? '') : expense.subcategoryId;
             if (rule.note) expense.note = rule.note;
+            markEdited(expense, before, now);
             changed += 1;
         }
     } else if (rule.kind === 'income') {
         for (const income of data.incomes ?? []) {
             if (!matches(income)) continue;
+            const before = { incomeCategoryId: income.incomeCategoryId, note: income.note };
             income.incomeCategoryId = rule.incomeCategoryId || income.incomeCategoryId;
             if (rule.note) income.note = rule.note;
+            markEdited(income, before, now);
             changed += 1;
         }
     }
