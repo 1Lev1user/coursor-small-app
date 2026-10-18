@@ -33,6 +33,12 @@ function inRange(entry, fromISO, toISO) {
     return monthKeyOf(entry.date) !== null && entry.date >= fromISO && entry.date <= toISO;
 }
 
+/** Like inRange, but by the bank booking date (`bookedOn`) when the entry has a valid one: what Money now follows. */
+function bookedInRange(entry, fromISO, toISO) {
+    const day = monthKeyOf(entry.bookedOn) !== null ? entry.bookedOn : entry.date;
+    return monthKeyOf(day) !== null && day >= fromISO && day <= toISO;
+}
+
 /** '-12,50' -> -1250. Integer cents, or null when the text is not an amount. */
 export function parseBalanceInput(text) {
     if (typeof text !== 'string') {
@@ -47,21 +53,21 @@ export function parseBalanceInput(text) {
     return negative && cents !== 0 ? -cents : cents;
 }
 
-/** The money at the end of dateISO, or null before the anchor or without one. */
+/** The money at the end of dateISO (by booking date where known), or null before the anchor or without one. */
 export function balanceAt(data, dateISO) {
     const anchor = data.settings.balanceStart;
     if (!anchor || dateISO < anchor.date) {
         return null;
     }
     const earned = data.incomes
-        .filter((entry) => inRange(entry, anchor.date, dateISO))
+        .filter((entry) => bookedInRange(entry, anchor.date, dateISO))
         .reduce((sum, entry) => sum + entry.amountCents, 0);
     const spent = data.expenses
-        .filter((entry) => inRange(entry, anchor.date, dateISO))
+        .filter((entry) => bookedInRange(entry, anchor.date, dateISO))
         .reduce((sum, entry) => sum + spendCents(entry), 0);
     // Transfers between own accounts move Money now only, never spending or income.
     const moved = (data.transfers ?? [])
-        .filter((transfer) => inRange(transfer, anchor.date, dateISO))
+        .filter((transfer) => bookedInRange(transfer, anchor.date, dateISO))
         .reduce((sum, { direction, amountCents }) => sum + (direction === 'in' ? amountCents : -amountCents), 0);
     return anchor.cents + earned - spent + moved;
 }

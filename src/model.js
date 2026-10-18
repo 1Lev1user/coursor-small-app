@@ -227,6 +227,8 @@ export function normaliseEntry(entry, isExpense) {
     entry.fingerprint = stringOr(entry.fingerprint);
     // Optional mark of a correction after an import; missing or empty means not edited.
     if (typeof entry.editedAt !== 'string') delete entry.editedAt;
+    // Optional bank booking date of an imported card payment; missing or invalid means the entry's date.
+    if (monthKeyOf(entry.bookedOn) === null) delete entry.bookedOn;
     if (isExpense) {
         entry.refund = entry.refund === true;
         entry.goalId = stringOr(entry.goalId);
