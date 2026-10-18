@@ -571,7 +571,7 @@ function historySuggestion(sources, row) {
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
  * A row without a saved rule takes the category of the latest earlier import with the same shop keyword (see
- * historySources) and carries `suggestion`; otherwise money out gets the category its card MCC points to, if any.
+ * historySources) and carries `suggestion`, but only when that changes the row's choice; otherwise money out gets the category its card MCC points to, if any.
  * Nothing is remembered from either.
  * A money-out and a money-in row of the same amount a day apart, with no rule, hint or MCC, are both set to Transfer.
  * A camt reversal and the payment it cancels (see pairReversals) are both set to Skip; a reversal of money out is a Refund.
@@ -583,19 +583,26 @@ export function defaultDecisions(data, rows, duplicates = findDuplicates(data, r
     const reversalSkips = new Set(pairReversals(rows, (i) => !duplicates[i]?.level && !suggestions[i].rule).flat());
     const decisions = rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestions[index];
-        const history = rule ? null : historySuggestion(sources, row);
-        const hint = rule || history ? null : mccSuggestion(data, row);
+        const found = rule ? null : historySuggestion(sources, row);
+        const mcc = rule ? null : mccSuggestion(data, row);
         const hinted = hintedKind(row);
         eligible[index] = !rule && !hinted && !row.reversal && !reversalSkips.has(index) && !duplicates[index]?.level && !row.mcc
             && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
             && dayNumber(row.date) !== null;
-        const kind = ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
-            || history?.kind || (row.direction === 'in' ? 'income' : 'expense');
-        const choice = {
-            categoryId: rule?.categoryId || history?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
-            subcategoryId: rule?.subcategoryId ?? history?.subcategoryId ?? hint?.subcategoryId ?? '',
-            incomeCategoryId: rule?.incomeCategoryId || history?.incomeCategoryId || defaultIncomeCategoryId(data),
+        const choiceWith = (history) => {
+            const hint = history ? null : mcc;
+            return {
+                kind: ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
+                    || history?.kind || (row.direction === 'in' ? 'income' : 'expense'),
+                categoryId: rule?.categoryId || history?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
+                subcategoryId: rule?.subcategoryId ?? history?.subcategoryId ?? hint?.subcategoryId ?? '',
+                incomeCategoryId: rule?.incomeCategoryId || history?.incomeCategoryId || defaultIncomeCategoryId(data),
+            };
         };
+        const plain = choiceWith(null);
+        const withHistory = found ? choiceWith(found) : plain;
+        const history = found && Object.keys(plain).some((key) => plain[key] !== withHistory[key]) ? found : null;
+        const { kind, ...choice } = history ? withHistory : plain;
         return {
             include: !duplicates[index]?.level,
             kind,

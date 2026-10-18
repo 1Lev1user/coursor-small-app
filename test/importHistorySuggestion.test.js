@@ -219,7 +219,8 @@ test('a history row can still be paired as an own transfer', () => {
 test('a duplicate row is unticked but still carries the suggestion', () => {
     const data = stored(freshData(), { text: 'NARVESEN 12', categoryId: 'necessary', subcategoryId: 'groceries' });
     const rows = [out('NARVESEN 14')];
-    applyImport(data, buildImport(data, defaultDecisions(data, rows), { rows, now: NOW }));
+    const chosen = [{ ...defaultDecisions(data, rows)[0], categoryId: 'necessary', subcategoryId: 'groceries' }];
+    applyImport(data, buildImport(data, chosen, { rows, now: NOW }));
     const again = defaultDecisions(data, rows)[0];
     assert.equal(again.include, false);
     assert.equal(again.suggestion.source, 'history');
@@ -233,10 +234,10 @@ test('suggestionLabel shows only while the choice equals the suggestion', () => 
         assert.equal(suggestionLabel({ ...decision, ...change }), '', JSON.stringify(change));
     }
 
-    const income = stored(freshData(), { type: 'income', text: 'ACME PAYROLL 1', incomeCategoryId: 'income-other' });
+    const income = stored(freshData(), { type: 'income', text: 'ACME PAYROLL 1', incomeCategoryId: 'salary' });
     const paid = one(income, inRow('ACME PAYROLL 9'));
     assert.equal(suggestionLabel(paid), LABEL);
-    assert.equal(suggestionLabel({ ...paid, incomeCategoryId: 'salary' }), '');
+    assert.equal(suggestionLabel({ ...paid, incomeCategoryId: 'income-other' }), '');
 
     assert.equal(suggestionLabel(PLAIN), '');
     assert.equal(suggestionLabel({ ...PLAIN, ruleId: 'r1' }), '');
@@ -252,4 +253,18 @@ test('scale: thousands of stored entries and rows stay fast', () => {
     const decisions = defaultDecisions(data, rows);
     assert.ok(Date.now() - started < 5000);
     assert.ok(decisions.some((decision) => decision.suggestion));
+});
+
+test('a history entry that changes nothing gives no suggestion', () => {
+    const other = stored(freshData(), { type: 'income', text: 'ACME PAYROLL 1', incomeCategoryId: 'income-other' });
+    assert.deepEqual(one(other, inRow('ACME PAYROLL 9')), { ...PLAIN, kind: 'income' });
+
+    const row = out('RIMI 123 RIGA', { mcc: '5411' });
+    const same = stored(freshData(), { text: 'RIMI 77', categoryId: 'necessary', subcategoryId: 'groceries' });
+    assert.deepEqual(one(same, row), one(freshData(), row));
+    assert.equal('suggestion' in one(same, row), false);
+    assert.equal(one(same, row).subcategoryId, 'groceries');
+
+    const differs = stored(freshData(), { text: 'RIMI 77', categoryId: 'necessary', subcategoryId: 'health' });
+    assert.equal(one(differs, row).suggestion.subcategoryId, 'health');
 });
