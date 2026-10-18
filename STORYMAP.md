@@ -43,6 +43,8 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S3.11 | Owner | Reviews money | Reads every screen from 320 px to desktop width, faded rows included | Readable | P2 | planned |
 | S3.12 | Owner | Reviews money | Uses one clear family of buttons, firm fields and calm type in light and dark | The app feels finished and is easy to read | P1 | planned |
 | S3.13 | Owner | Reviews money | Sees what changed after an action through short motion, none under Reduce Motion | Changes are noticed | P2 | planned |
+| S3.14 | Owner | Reviews money | Sees how much money is likely left at the end of the month, from known regular payments and usual daily spending | Plans the rest of the month | P2 | backlog |
+| S3.15 | Owner | Reviews money | Gets two or three plain facts after an import (a category above its usual level, the largest one-off payment) | Notices changes in habits | P2 | backlog |
 | S4.1 | Owner | Imports bank statement | Imports CSV, pasted text, .xlsx, camt XML or FiDAViSTA XML | Entries without typing | P1 | exists |
 | S4.2 | Owner | Imports bank statement | Reviews duplicates and row kinds, remembers rules | No double entries | P1 | exists |
 | S4.3 | Owner | Imports bank statement | Chooses a plan once for a past month without a plan | Past months stay correct | P1 | exists |
@@ -53,6 +55,10 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S4.8 | Owner | Imports bank statement | Balance lines, pending or reversed rows, fees and batch entries are not counted as ordinary money | Only real money is imported | P1 | planned |
 | S4.9 | Owner | Imports bank statement | A new payment is not hidden as an already-imported duplicate | No missing payments | P1 | planned |
 | S4.10 | Owner | Imports bank statement | After an import, Money now matches the bank's balance; transfers between own accounts move Money now but not the budget | The app shows the real money on the card | P0 | planned |
+| S4.11 | Owner | Imports bank statement | A shop's category is suggested from earlier imports even without "Remember", marked as a suggestion | Fewer clicks from the first imports | P1 | planned |
+| S4.12 | Owner | Imports bank statement | A saved rule does not silently sort a row whose amount is far outside the shop's usual range | Unusual payments are seen | P1 | planned |
+| S4.13 | Owner | Imports bank statement | The city and country of a card payment are kept with the entry | Trips can be found later | P2 | planned |
+| S4.14 | Owner | Imports bank statement | One category can be given to all rows of the same trip at once | Trips are sorted in one step | P2 | backlog |
 | S5.1 | Owner | Plans and saves | Sets savings goals with target and optional deadline | Saving has a target | P2 | exists |
 | S5.2 | Owner | Plans and saves | Adds money to a goal (recorded as Savings expense) | Progress visible | P2 | exists |
 | S6.1 | Owner | Backs up and updates | Exports and imports a JSON backup | Data survives device loss | P1 | exists |
@@ -69,6 +75,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 
 - Slice 4 (done, release 3.1.0): bank import for every researched bank, cards C-064 to C-069, C-095 to C-112.
 - Slice 5 (planned, release 3.1.1): S4.10, cards C-113 to C-117. Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
+- Slice 6 (planned, release 3.2): S4.11 to S4.13, cards C-118 to C-120 (owner choice 2026-10-18 after reviewing an external "Adaptive Financial Engine" prompt: items 1-3 now). Backlog: C-121 (S4.14 trip), C-122 (S3.14 month-end forecast), C-123 (S3.15 facts after an import), only with 3+ months of history.
 
 ## Rules
 - Every card references one step ID.
