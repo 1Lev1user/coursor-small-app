@@ -46,3 +46,5 @@ RETRO slice 1: 3 cards, all haiku, 3/3 first pass, 0 escalations, 0 blocked. Iss
 2026-10-18 | 4 | C-104 done (PR #107; planner sonnet; card amended (carry warnings); worker sonnet 1 attempt; reviewer sonnet PASS with guessColumns call log main vs branch) | npm test 1315/1315 on merged tree | - | C-112
 2026-10-18 | 4 | C-112 done (PR #108; planner sonnet; worker sonnet 1 attempt; reviewer sonnet PASS, all 15 formats recomputed by hand, TZ-independent) | npm test 1330/1330 | - | C-106
 2026-10-18 | 4 | C-106 done (PR #109; planner sonnet; worker sonnet 2 attempts: review FAIL on 7 over-claims, fixed; orchestrator read final diff and PDF page render) | npm test pass | - | C-107
+2026-10-18 | 4 | C-107 done (PR #110; planner haiku; worker haiku 1 attempt; reviewer sonnet PASS) | npm test 1330/1330 on main | - | release
+2026-10-18 | 4 | Release 3.1.0 published: v1 9d23680 (Pages deploy success); UI smoke 14 formats + owner .xls OK; 3.0->3.1 update and offline OK; guide PDF 9 pages | - | - | owner: GitHub Release, board, branches

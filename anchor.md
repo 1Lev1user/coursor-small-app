@@ -46,6 +46,13 @@ Current state: npm test 1029/1029 on main 4d1352c; check:kit OK.
 Owner actions open: create GitHub Release v3.0.0 (the cloud session may not create releases; PDF and notes handed over), move cards C-087 to C-094 and C-091 to Done on the board and C-095, C-096 to Backlog (no GraphQL here), delete merged card branches (ref delete refused by the proxy), check the Manual items of the PRs on the iPhone.
 Next step: owner's Manual checks; C-064 to C-067, C-069, C-095, C-096 later.
 
+CHECKPOINT 5 - 2026-10-18
+Goal: 3.1 with a bank import that works for every bank the research found, published.
+Steps done: slice 4 cards C-064 to C-069, C-095 to C-112 built through planner, worker and reviewer agents (PRs #88 to #110), all merged; review failures fixed in the same PRs (C-066, C-100, C-103, C-106, C-108, C-111). v1 published as 9d23680 "Release 3.1.0" (Pages deploy success). Format matrix test covers 15 formats from bytes to buildImport; all 14 made-up format files and the owner's Citadele .xls import through the UI in Chromium without errors. 3.0 to 3.1 update: Update bar, data kept, schema 3, offline start works.
+Current state: npm test 1330/1330 on main 62c26a7; check:kit OK.
+Owner actions open: create GitHub Release v3.1.0 (PDF and notes handed over), move slice-4 cards to Done on the board, delete merged card branches, check the Manual items on the iPhone, test real exports of the formats marked "built from public descriptions".
+Next step: real anonymised exports from other banks; follow-ups listed in the release hand-over.
+
 ## Open questions
 - Guide scripts dependencies undocumented (pypdf, reportlab, playwright).
 - `npm run serve` calls `python`.
