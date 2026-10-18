@@ -158,6 +158,16 @@ export function copyChoice(target, source) {
     return target;
 }
 
+/** 'From earlier imports' while the row still holds exactly the category suggested from earlier imports. */
+export function suggestionLabel(decision) {
+    const suggestion = decision?.suggestion;
+    if (suggestion?.source !== 'history' || decision.kind !== suggestion.kind) return '';
+    const same = suggestion.kind === 'income'
+        ? decision.incomeCategoryId === suggestion.incomeCategoryId
+        : decision.categoryId === suggestion.categoryId && decision.subcategoryId === suggestion.subcategoryId;
+    return same ? 'From earlier imports' : '';
+}
+
 function categoryPath(data, categoryId, subcategoryId) {
     const category = (data.categories ?? []).find(({ id }) => id === categoryId);
     const sub = category?.subcategories?.find(({ id }) => id === subcategoryId);
@@ -1463,6 +1473,8 @@ function renderDecisionRow(ctx, index) {
     const head = element('div', 'entry-row');
     const text = element('div', 'entry-description');
     text.append(element('p', 'entry-name imp-desc', describeRow(row)), element('p', 'muted', row.date));
+    const suggested = suggestionLabel(decision);
+    if (suggested !== '') text.append(element('p', 'muted imp-hint', suggested));
     if (row.currency !== 'EUR' && Number.isInteger(row.amountCents)) {
         text.append(element('p', 'muted', `Paid ${formatMoney(row.originalAmountCents, row.currency)}`));
     }

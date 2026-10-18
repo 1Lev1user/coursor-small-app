@@ -510,35 +510,99 @@ function ownTransferPairs(rows, eligible) {
     return paired;
 }
 
+/** True when the stored entry still points at a real category (and subcategory), never Uncategorised. */
+function usableExpenseTarget(data, entry) {
+    if (entry.categoryId === UNCATEGORISED_ID) return false;
+    const category = (data.categories ?? []).find(({ id }) => id === entry.categoryId);
+    const subcategoryId = entry.subcategoryId ?? '';
+    return Boolean(category) && (subcategoryId === '' || (category.subcategories ?? []).some(({ id }) => id === subcategoryId));
+}
+
+/**
+ * Where earlier imports put each shop keyword, built once per defaultDecisions call: { out, in } maps from keyword
+ * to { kind, categoryId, subcategoryId, incomeCategoryId }. Only entries with an importId and a bankText count;
+ * the keyword is cut from the first segment of the bankText, like a rule. Money out learns from plain expenses,
+ * money in from refunds and incomes. The latest date wins, a later list position wins a tie.
+ */
+function historySources(data) {
+    const maps = { out: new Map(), in: new Map() };
+    const latest = new Map();
+    const add = (entry, side, source) => {
+        if (!entry.importId || typeof entry.bankText !== 'string') return;
+        const keyword = usableKeyword(extractPattern(entry.bankText.split(' \u00b7 ')[0]));
+        if (keyword === '') return;
+        const key = `${side}\u0000${keyword}`;
+        const date = String(entry.date ?? '');
+        if (latest.has(key) && latest.get(key) > date) return;
+        latest.set(key, date);
+        maps[side].set(keyword, source);
+    };
+    for (const entry of data.expenses ?? []) {
+        if (!usableExpenseTarget(data, entry)) continue;
+        add(entry, entry.refund === true ? 'in' : 'out', {
+            kind: entry.refund === true ? 'refund' : 'expense',
+            categoryId: entry.categoryId,
+            subcategoryId: entry.subcategoryId ?? '',
+            incomeCategoryId: '',
+        });
+    }
+    for (const entry of data.incomes ?? []) {
+        if (!(data.incomeCategories ?? []).some(({ id }) => id === entry.incomeCategoryId)) continue;
+        add(entry, 'in', { kind: 'income', categoryId: '', subcategoryId: '', incomeCategoryId: entry.incomeCategoryId });
+    }
+    return maps;
+}
+
+/** The source stored under the row's own keyword (its counterparty's, else its description's), or null. */
+function historySuggestion(sources, row) {
+    const keyword = usableKeyword(extractPattern(row.counterparty)) || usableKeyword(extractPattern(row.description));
+    return keyword === '' ? null : sources[row.direction === 'in' ? 'in' : 'out'].get(keyword) ?? null;
+}
+
 /**
  * Pre-filled decisions for the wizard: rules applied, rows that look like a saved entry start unticked.
  * Money in that only matches a shop expense rule is suggested as a refund in that category.
- * Money out without a saved rule gets the category its card MCC points to, if any; nothing is remembered from it.
+ * A row without a saved rule takes the category of the latest earlier import with the same shop keyword (see
+ * historySources) and carries `suggestion`, but only when that changes the row's choice; otherwise money out gets the category its card MCC points to, if any.
+ * Nothing is remembered from either.
  * A money-out and a money-in row of the same amount a day apart, with no rule, hint or MCC, are both set to Transfer.
  * A camt reversal and the payment it cancels (see pairReversals) are both set to Skip; a reversal of money out is a Refund.
  */
 export function defaultDecisions(data, rows, duplicates = findDuplicates(data, rows)) {
     const eligible = [];
     const suggestions = rows.map((row) => suggestedRule(data.rules, row));
+    const sources = historySources(data);
     const reversalSkips = new Set(pairReversals(rows, (i) => !duplicates[i]?.level && !suggestions[i].rule).flat());
     const decisions = rows.map((row, index) => {
         const { rule, kind: ruleKindName } = suggestions[index];
-        const hint = rule ? null : mccSuggestion(data, row);
         const hinted = hintedKind(row);
+        const found = !rule && !hinted && !row.reversal && !reversalSkips.has(index) ? historySuggestion(sources, row) : null;
+        const mcc = rule ? null : mccSuggestion(data, row);
         eligible[index] = !rule && !hinted && !row.reversal && !reversalSkips.has(index) && !duplicates[index]?.level && !row.mcc
             && Number.isInteger(row.amountCents) && row.amountCents >= OWN_TRANSFER_MIN_CENTS
             && dayNumber(row.date) !== null;
-        const kind = ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
-            || (row.direction === 'in' ? 'income' : 'expense');
+        const choiceWith = (history) => {
+            const hint = history ? null : mcc;
+            return {
+                kind: ruleKindName || (reversalSkips.has(index) ? 'skip' : '') || reversalKind(row) || hinted
+                    || history?.kind || (row.direction === 'in' ? 'income' : 'expense'),
+                categoryId: rule?.categoryId || history?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
+                subcategoryId: rule?.subcategoryId ?? history?.subcategoryId ?? hint?.subcategoryId ?? '',
+                incomeCategoryId: rule?.incomeCategoryId || history?.incomeCategoryId || defaultIncomeCategoryId(data),
+            };
+        };
+        const plain = choiceWith(null);
+        const withHistory = found ? choiceWith(found) : plain;
+        const history = found && Object.keys(plain).some((key) => plain[key] !== withHistory[key]) ? found : null;
+        const { kind, ...choice } = history ? withHistory : plain;
         return {
             include: !duplicates[index]?.level,
             kind,
-            categoryId: rule?.categoryId || hint?.categoryId || UNCATEGORISED_ID,
-            subcategoryId: rule?.subcategoryId ?? hint?.subcategoryId ?? '',
-            incomeCategoryId: rule?.incomeCategoryId || defaultIncomeCategoryId(data),
+            ...choice,
             remember: false,
             ruleId: rule?.id ?? '',
             showAs: rule?.note ?? '',
+            ...(history ? { suggestion: { source: 'history', kind: history.kind, ...choice } } : {}),
         };
     });
     for (const index of ownTransferPairs(rows, eligible)) decisions[index].kind = 'transfer';
