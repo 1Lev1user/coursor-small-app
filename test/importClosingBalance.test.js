@@ -452,3 +452,37 @@ test('closingBalanceText', () => {
     assert.equal(closingBalanceText({ cents: 42915, date: '2026-10-17' }), 'Bank balance on 17 Oct 2026: €429.15');
     assert.equal(closingBalanceText({ cents: -86006, date: '2026-09-30' }), 'Bank balance on 30 Sep 2026: -€860.06');
 });
+
+// ---------------------------------------------------------------------------
+// A header row outside the rows, and the balance chain for files without a date order
+// ---------------------------------------------------------------------------
+
+test('a header row outside the rows reads nothing and adds no value', () => {
+    const layout = { columns: { date: 0, amount: 1 }, decimalSeparator: '.', dateFormat: 'DMY' };
+    assert.deepEqual(rowsToStatement([], 0, layout), { rows: [], skipped: [] });
+    assert.deepEqual(rowsToStatement([['a']], 3, layout), { rows: [], skipped: [] });
+});
+
+const oneDay = (...rows) => fromCsv(lines(
+    'Date,Description,Amount,Currency,Balance',
+    ...rows.map(([description, amount, balance]) => `2026-09-14,${description},${amount},EUR,${balance}`),
+));
+
+test('single-day Balance file, newest first (the chain says so): the first row', () => {
+    const result = oneDay(['Test Shop', '-1.00', '9.00'], ['Test Salary', '10.00', '10.00']);
+    assert.deepEqual(result.closingBalance, { cents: 900, date: '2026-09-14' });
+});
+
+test('single-day Balance file, oldest first (the chain says so): the last row', () => {
+    const result = oneDay(['Test Salary', '10.00', '10.00'], ['Test Shop', '-1.00', '9.00']);
+    assert.deepEqual(result.closingBalance, { cents: 900, date: '2026-09-14' });
+    // Two rows that fit both orders do not decide anything.
+    noValue(oneDay(['Test Shop', '-1.00', '9.00'], ['Test Salary', '1.00', '10.00']));
+});
+
+test('single-day Balance file the chain cannot decide gives no value from the column', () => {
+    noValue(oneDay(['Test Shop', '-5.00', '9.00'], ['Test Salary', '5.00', '10.00']));
+    noValue(oneDay(['Test Shop', '-1.00', '50.00'], ['Test Salary', '3.00', '10.00']));
+    // One row on the latest day needs no order.
+    assert.deepEqual(oneDay(['Test Shop', '-1.00', '9.00']).closingBalance, { cents: 900, date: '2026-09-14' });
+});

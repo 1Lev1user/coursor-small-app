@@ -1301,7 +1301,7 @@ export function rowsToStatement(rows, headerRow, layout) {
         ? columns.recordType : -1;
 
     // The Balance column is not in `columns`: find it by its header, as checkFeeAgainstBalance does.
-    const balanceIndex = headerRow >= 0
+    const balanceIndex = headerRow >= 0 && headerRow < rows.length
         ? findExactColumn(rows[headerRow].map(normalizeText), BALANCE_HEADERS, usedIndexes(columns), rows.slice(dataStart, dataStart + GUESS_SAMPLE_ROWS))
         : -1;
     const balances = [];
@@ -1397,6 +1397,7 @@ export function rowsToStatement(rows, headerRow, layout) {
         }
 
         if (layout.reverse === true) direction = direction === 'in' ? 'out' : 'in';
+        const plainCents = direction === 'in' ? amountCents : -amountCents; // before a fee
 
         let currency = 'EUR';
         if (columns.currency >= 0) {
@@ -1433,7 +1434,9 @@ export function rowsToStatement(rows, headerRow, layout) {
         if (date > latestDate) latestDate = date;
         if (balanceIndex >= 0 && currency === 'EUR') {
             const balance = parseAmountWith(cellAt(row, balanceIndex), decimalSeparator);
-            if (balance !== null) balances.push({ date, cents: balance });
+            if (balance !== null) {
+                balances.push({ date, cents: balance, moves: [plainCents, direction === 'in' ? amountCents : -amountCents] });
+            }
         }
 
         const split = splitBankDetails(cellAt(row, columns.description), date);
@@ -1481,16 +1484,41 @@ function labelledClosing(rows, headerRow, layout, latestDate) {
 }
 
 /**
- * The Balance on the latest date. The file order tells which row ends that day: oldest first (or one date
- * only) the last row of the day, newest first the first.
+ * The Balance on the latest date. When the first and last rows are on different dates they tell the file order:
+ * oldest first the last row of that day, newest first the first. Otherwise the order comes from the balance
+ * chain (see balanceChainOrder); when that does not decide, there is no value rather than a guess.
  */
 function latestBalance(points) {
     if (points.length === 0) return null;
-    const newestFirst = points[0].date > points[points.length - 1].date;
     const latest = points.reduce((max, point) => (point.date > max ? point.date : max), '');
     const onLatest = points.filter((point) => point.date === latest);
-    const { date, cents } = newestFirst ? onLatest[0] : onLatest[onLatest.length - 1];
+    const first = points[0];
+    const last = points[points.length - 1];
+    let order = 'oldest';
+    if (onLatest.length > 1) {
+        order = first.date === last.date ? balanceChainOrder(points) : (first.date > last.date ? 'newest' : 'oldest');
+    }
+    if (order === null) return null;
+    const { date, cents } = order === 'newest' ? onLatest[0] : onLatest[onLatest.length - 1];
     return { cents, date };
+}
+
+/**
+ * 'oldest' or 'newest' from neighbouring Balance points: the newer row's balance is the older row's balance
+ * plus the newer row's own money in (or minus its money out), with or without the fee. null when no pair
+ * fits, or pairs fit both ways.
+ */
+function balanceChainOrder(points) {
+    let oldest = 0;
+    let newest = 0;
+    for (let i = 0; i + 1 < points.length; i += 1) {
+        const [a, b] = [points[i], points[i + 1]];
+        if (b.moves.includes(b.cents - a.cents)) oldest += 1;
+        if (a.moves.includes(a.cents - b.cents)) newest += 1;
+    }
+    if (oldest > 0 && newest === 0) return 'oldest';
+    if (newest > 0 && oldest === 0) return 'newest';
+    return null;
 }
 
 /**
