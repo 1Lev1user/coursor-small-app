@@ -17,13 +17,70 @@ function hasBom(bytes, bom) {
     return true;
 }
 
+const SNIFF_LIMIT = 4096;
+const NUL_SHARE = 0.3;
+const MIN_CYRILLIC = 20;
+// Cyrillic letters needed per Baltic letter: Russian text reads as about 2 Latvian letters
+// per 1 in 1257 (measured 1.85-2.1), a Latvian file as about 1.
+const CYRILLIC_PER_BALTIC = 1.5;
+const CYRILLIC_LETTER = /[\u0400-\u04ff]/g;
+const LATIN_LETTER = /[A-Za-z]/g;
+const BALTIC_LETTER = /[āčēģīķļņšūžĀČĒĢĪĶĻŅŠŪŽ]/g;
+
+// UTF-16 text without a BOM is mostly ASCII, so every other byte is 0x00.
+function sniffUtf16WithoutBom(bytes) {
+    const sample = bytes.subarray(0, SNIFF_LIMIT);
+    if (sample.length < 2) {
+        return null;
+    }
+    let oddZeros = 0;
+    let evenZeros = 0;
+    for (let i = 0; i < sample.length; i += 1) {
+        if (sample[i] === 0) {
+            if (i % 2 === 1) {
+                oddZeros += 1;
+            } else {
+                evenZeros += 1;
+            }
+        }
+    }
+    const le = oddZeros / Math.floor(sample.length / 2);
+    const be = evenZeros / Math.ceil(sample.length / 2);
+    if (le >= NUL_SHARE && le >= be) {
+        return 'utf-16le';
+    }
+    return be >= NUL_SHARE ? 'utf-16be' : null;
+}
+
+function countMatches(text, pattern) {
+    return (text.match(pattern) ?? []).length;
+}
+
+// Both legacy codepages are single-byte. Pick 1251 only when its reading is
+// mostly Cyrillic and clearly beats the Baltic letters of the 1257 reading, so
+// a Latvian file with one foreign letter (Café, Strauß) stays windows-1257.
+function looksLikeWindows1251(bytes) {
+    try {
+        const sample = bytes.subarray(0, SNIFF_LIMIT);
+        const as1251 = new TextDecoder('windows-1251').decode(sample);
+        const cyrillic = countMatches(as1251, CYRILLIC_LETTER);
+        const latin = countMatches(as1251, LATIN_LETTER);
+        const baltic = countMatches(new TextDecoder('windows-1257').decode(sample), BALTIC_LETTER);
+        return cyrillic >= MIN_CYRILLIC && cyrillic >= latin && cyrillic >= CYRILLIC_PER_BALTIC * baltic;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Decodes raw file bytes into text, working out the encoding.
- * Strips a BOM (UTF-8 or UTF-16) when present. Tries strict UTF-8 first,
- * then falls back to windows-1257 (Baltic) for legacy bank exports, and
- * to windows-1252 if this runtime has no windows-1257 label at all.
+ * Strips a BOM (UTF-8 or UTF-16) when present. Without a BOM, UTF-16 is
+ * recognised by the share of 0x00 bytes. Then tries strict UTF-8, then
+ * windows-1251 (Russian) when the bytes read as Cyrillic, else windows-1257
+ * (Baltic) for legacy bank exports, and windows-1252 if this runtime has no
+ * windows-1257 label at all.
  * @param {Uint8Array} bytes
- * @returns {{ text: string, encoding: 'utf-8'|'utf-16le'|'utf-16be'|'windows-1257'|'windows-1252' }}
+ * @returns {{ text: string, encoding: 'utf-8'|'utf-16le'|'utf-16be'|'windows-1251'|'windows-1257'|'windows-1252' }}
  */
 export function decodeBytes(bytes) {
     if (hasBom(bytes, BOM_UTF16LE)) {
@@ -35,10 +92,19 @@ export function decodeBytes(bytes) {
 
     const body = hasBom(bytes, BOM_UTF8) ? bytes.subarray(3) : bytes;
 
+    const utf16 = sniffUtf16WithoutBom(body);
+    if (utf16) {
+        return { text: new TextDecoder(utf16).decode(body), encoding: utf16 };
+    }
+
     try {
         return { text: new TextDecoder('utf-8', { fatal: true }).decode(body), encoding: 'utf-8' };
     } catch {
-        // not valid UTF-8, fall through to the Baltic legacy codepage
+        // not valid UTF-8, fall through to the legacy codepages
+    }
+
+    if (looksLikeWindows1251(body)) {
+        return { text: new TextDecoder('windows-1251').decode(body), encoding: 'windows-1251' };
     }
 
     try {
