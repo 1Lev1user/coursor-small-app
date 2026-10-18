@@ -85,6 +85,18 @@ test('every month name in the three languages maps to one month', () => {
     }
 });
 
+test('every Russian short form is read in lower, upper and title case', () => {
+    const short = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const extra = { сент: 9, нояб: 11, февр: 2 };
+    const cases = [...short.map((word, index) => [word, index + 1]), ...Object.entries(extra)];
+    for (const [word, month] of cases) {
+        const title = word[0].toUpperCase() + word.slice(1);
+        for (const form of [word, word.toUpperCase(), title]) {
+            assert.equal(text(`5 ${form} 2026`), `2026-${String(month).padStart(2, '0')}-05`, form);
+        }
+    }
+});
+
 test('text dates that are not dates return null', () => {
     for (const value of ['31 Sep 2026', '17 Foo 2026', '17 Sep', 'Sep 2026', '17 Sep 2026 extra', '17.09.2026', '', '17 Sep 20266']) {
         assert.equal(text(value), null, value);

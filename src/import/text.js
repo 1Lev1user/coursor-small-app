@@ -924,7 +924,7 @@ function isValidCalendarDate(year, month, day) {
 const MONTH_WORDS = {
     1: 'jan january janvaris janvara январь января янв',
     2: 'feb february februaris februara febr февраль февраля февр фев',
-    3: 'mar march marts marta март марта',
+    3: 'mar march marts marta март марта мар',
     4: 'apr april aprilis aprila апрель апреля апр',
     5: 'may maijs maija май мая',
     6: 'jun june junijs junija июнь июня июн',
