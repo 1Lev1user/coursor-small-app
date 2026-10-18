@@ -853,6 +853,15 @@ function removeByIds(list, ids, keepEdited = false) {
     return removed;
 }
 
+/** Removes the "Bank difference" entries the done screen aligned for this import; not counted. */
+function removeAligned(list, importId) {
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+        if (importId !== '' && list[index].alignedBy === importId) {
+            list.splice(index, 1);
+        }
+    }
+}
+
 /**
  * How many entries of an import are still present (`total`) and how many of
  * them were changed after the import (`edited`). 0 and 0 when unknown or undone.
@@ -879,6 +888,8 @@ export function undoImport(data, importId, now = new Date(), { keepEdited = fals
 
     const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds), keepEdited)
         + removeByIds(data.incomes ?? [], new Set(record.incomeIds), keepEdited);
+    removeAligned(data.expenses ?? [], importId);
+    removeAligned(data.incomes ?? [], importId);
     // Plans this import created go too, unless the month has other entries now.
     for (const monthKey of record.createdPlans ?? []) {
         const used = [...(data.expenses ?? []), ...(data.incomes ?? [])]

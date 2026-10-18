@@ -1,6 +1,7 @@
 import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
-import { fullDate, monthKeyOf, monthLabel, todayISO } from '../months.js';
+import { fullDate, monthKeyOf, monthLabel, shortDate, todayISO } from '../months.js';
+import { balanceAt, alignToBank, startMoneyFromBank } from '../balance.js';
 import { createId } from '../model.js';
 import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
 import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
@@ -489,6 +490,9 @@ function freshState() {
         undoneCount: null,
         keptCount: 0,
         confirmUndo: false,
+        bankChoice: '',
+        bankDiffCents: 0,
+        bankError: '',
         focusId: '',
         focusStep: false,
     };
@@ -1855,9 +1859,13 @@ function applyBuilt(ctx) {
         count,
         periodTo: built.importRecord.periodTo,
         saved: saved !== false,
+        closingBalance: state.closingBalance,
     };
     state.undoneCount = null;
     state.keptCount = 0;
+    state.bankChoice = '';
+    state.bankDiffCents = 0;
+    state.bankError = '';
     state.confirmUndo = false;
     if (saved !== false) ctx.toast(`Imported ${entryCountText(count)}`);
     goStep(ctx, 'done');
@@ -1942,6 +1950,108 @@ function undoConfirmBox(ctx, { total, edited }) {
     return box;
 }
 
+/** Runs a change to the data and saves it; `rollback` undoes it and the screen re-renders when saving fails. */
+function saveBankChange(ctx, change, rollback, toastText) {
+    const result = change();
+    if (!result.ok) {
+        state.bankError = result.reason;
+        ctx.render();
+        return;
+    }
+    state.bankError = '';
+    state.focusId = 'imp-bank-result';
+    // ctx.save() renders before it returns, so the choice must be set already.
+    if (ctx.save() === false) {
+        rollback();
+        state.bankChoice = '';
+        state.focusId = '';
+        ctx.render();
+        return;
+    }
+    ctx.toast(toastText(result));
+}
+
+/** The statement's closing balance against the app's money that day; null when nothing to show. */
+function renderBankBlock(ctx) {
+    const { result } = state;
+    const closing = result.closingBalance;
+    if (!closing || state.bankChoice === 'declined') return null;
+
+    const { cents, date } = closing;
+    const bank = formatEuro(cents);
+    const day = shortDate(date);
+    const anchor = ctx.data.settings.balanceStart;
+    const block = element('div', 'stack');
+    const resultNote = (text) => {
+        const note = element('p', 'muted', text);
+        note.id = 'imp-bank-result';
+        note.tabIndex = -1;
+        return note;
+    };
+    const notNow = button('btn', 'Not now', () => {
+        state.bankChoice = 'declined';
+        state.bankError = '';
+        state.focusId = 'imp-undo-start';
+        ctx.render();
+    });
+    const buttons = (label, onClick) => {
+        block.append(actions(button('btn btn-primary', label, onClick), notNow));
+        if (state.bankError !== '') block.append(alertText(state.bankError));
+    };
+
+    if (state.bankChoice === 'started') {
+        block.append(resultNote(`Money now starts from the statement balance on ${day}.`));
+    } else if (date > todayISO(new Date())) {
+        block.append(element('p', '', `Bank balance on ${day}: ${bank}.`));
+    } else if (!anchor) {
+        block.append(element('p', '', `Use ${bank} from the statement as your money on ${day}?`));
+        buttons('Use it', () => {
+            saveBankChange(
+                ctx,
+                () => {
+                    const started = startMoneyFromBank(ctx.data, cents, date, new Date());
+                    if (started.ok) state.bankChoice = 'started';
+                    return started;
+                },
+                () => { ctx.data.settings.balanceStart = null; },
+                () => 'Money now set from the statement',
+            );
+        });
+    } else if (date < anchor.date) {
+        block.append(element('p', '', `Bank balance on ${day}: ${bank}. Money now starts on ${shortDate(anchor.date)}, so this statement is not compared.`));
+    } else {
+        const mine = balanceAt(ctx.data, date);
+        block.append(element('p', '', `Bank balance on ${day}: ${bank}. My Expenses on that day: ${formatEuro(mine)}.`));
+        if (state.bankChoice === 'aligned') {
+            block.append(
+                element('p', '', 'Matches the bank.'),
+                resultNote(`Added a ${formatEuro(Math.abs(state.bankDiffCents))} bank difference on ${day}.`),
+            );
+        } else if (mine === cents) {
+            block.append(element('p', '', 'Matches the bank.'));
+        } else {
+            buttons('Align with the bank', () => {
+                const keys = ['expenses', 'incomes', 'monthPlans', 'imports'];
+                const before = JSON.parse(JSON.stringify(Object.fromEntries(keys.map((key) => [key, ctx.data[key]]))));
+                saveBankChange(
+                    ctx,
+                    () => {
+                        const aligned = alignToBank(ctx.data, cents, date, new Date(), { alignedBy: result.importId });
+                        if (aligned.ok) {
+                            state.bankChoice = 'aligned';
+                            state.bankDiffCents = aligned.differenceCents;
+                        }
+                        return aligned;
+                    },
+                    () => Object.assign(ctx.data, before),
+                    (aligned) => `Added a ${formatEuro(Math.abs(aligned.differenceCents))} bank difference on ${day}`,
+                );
+            });
+        }
+    }
+    return block;
+}
+
 function renderDone(ctx) {
     const card = element('section', 'card stack');
     card.setAttribute('role', 'status');
@@ -1973,6 +2083,8 @@ function renderDone(ctx) {
         state.focusId = 'imp-undo-cancel';
         return card;
     }
+    const bankBlock = renderBankBlock(ctx);
+    if (bankBlock) card.append(bankBlock);
     const undo = button('btn', 'Undo this import', () => {
         if (importEditInfo(ctx.data, result.importId).edited > 0) {
             state.confirmUndo = true;
