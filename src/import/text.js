@@ -1,5 +1,6 @@
 import { statementRow } from './types.js';
 import { splitBankDetails } from './details.js';
+import { excelSerialToDate } from './xlsx.js';
 
 const BOM_UTF8 = [0xef, 0xbb, 0xbf];
 const BOM_UTF16LE = [0xff, 0xfe];
@@ -855,17 +856,28 @@ function splitDateParts(value) {
     return match ? [match[1], match[2], match[3]] : null;
 }
 
+const SERIAL_MIN = 20000;
+const SERIAL_MAX = 80000;
+
+function isSerialDay(value) {
+    return /^\d{5}$/.test(value) && Number(value) >= SERIAL_MIN && Number(value) <= SERIAL_MAX;
+}
+
 /**
  * Looks at the whole column to decide DMY vs MDY vs YMD. A value is only
  * decisive when one of its day/month parts is > 12. Returns null when
  * nothing in the column decides (ambiguous, the UI should ask).
+ * 'SERIAL' means every value is an Excel day number (a date stored as a plain number).
  * @param {string[]} values
- * @returns {'DMY'|'MDY'|'YMD'|'TEXT'|null}
+ * @returns {'DMY'|'MDY'|'YMD'|'TEXT'|'SERIAL'|null}
  */
 export function inferDateFormat(values) {
     const nonEmpty = (values || []).map((value) => String(value ?? '').trim()).filter((value) => value !== '');
     if (nonEmpty.length === 0) {
         return null;
+    }
+    if (nonEmpty.every(isSerialDay)) {
+        return 'SERIAL';
     }
 
     const named = nonEmpty.filter((value) => parseTextDate(value) !== null).length;
@@ -988,15 +1000,19 @@ function parseTextDate(value) {
 /**
  * Parses a single date value with a known format into 'YYYY-MM-DD'.
  * Supports separators . / -, 2-digit years (assumed 20xx), and ISO with a
- * time part ('2026-09-17 10:22'). 'TEXT' reads a month name ('17 Sep 2026').
+ * time part ('2026-09-17 10:22'). 'TEXT' reads a month name ('17 Sep 2026');
+ * 'SERIAL' reads an Excel day number ('46296').
  * @param {string} value
- * @param {'DMY'|'MDY'|'YMD'|'TEXT'} format
+ * @param {'DMY'|'MDY'|'YMD'|'TEXT'|'SERIAL'} format
  * @returns {string|null}
  */
 export function parseDateWith(value, format) {
     const trimmed = String(value ?? '').trim();
     if (trimmed === '') {
         return null;
+    }
+    if (format === 'SERIAL') {
+        return isSerialDay(trimmed) ? excelSerialToDate(Number(trimmed)) : null;
     }
 
     const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})([ T]\d{1,2}:\d{2}(:\d{2}([.,]\d+)?)?)?$/);

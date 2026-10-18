@@ -685,7 +685,7 @@ export async function readStatementFile(file) {
         const sheet = await (format === 'xlsx' ? readXlsx(bytes) : readXls(bytes));
         if (!sheet.ok) return sheet;
         if (isHeaderOnly(sheet.rows)) return { ok: false, reason: HEADER_ONLY_FILE };
-        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '' };
+        return { ok: true, kind: 'table', format, rows: sheet.rows, delimiter: '', encoding: '', warnings: sheet.warnings ?? [] };
     }
 
     const { text, encoding } = decodeBytes(bytes);
@@ -805,6 +805,7 @@ function startTable(ctx, result) {
         headerRow,
         header,
         delimiter: result.delimiter ?? '',
+        warnings: result.warnings ?? [],
         signature,
     };
     state.layout = {
@@ -838,7 +839,7 @@ function startTable(ctx, result) {
         const parsed = parseTable();
         if (parsed.rows.length > 0) {
             state.savedLayoutName = saved.name;
-            enterReview(ctx, parsed.rows, parsed.skipped, []);
+            enterReview(ctx, parsed.rows, parsed.skipped, state.table.warnings);
             return;
         }
     }
@@ -1272,7 +1273,7 @@ function renderColumns(ctx) {
         const again = parseTable();
         if (again.rows.length === 0) return;
         state.savedLayoutName = '';
-        enterReview(ctx, again.rows, again.skipped, []);
+        enterReview(ctx, again.rows, again.skipped, state.table.warnings);
     });
     next.disabled = parsed.rows.length === 0;
     card.append(actions(
