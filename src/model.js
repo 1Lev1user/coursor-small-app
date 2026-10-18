@@ -186,6 +186,32 @@ export function normaliseIncomeSource(raw) {
     };
 }
 
+/** A clean imported transfer between own accounts, or null when it cannot count. */
+export function normaliseTransfer(raw) {
+    if (
+        !isObject(raw)
+        || typeof raw.id !== 'string'
+        || raw.id === ''
+        || (raw.direction !== 'in' && raw.direction !== 'out')
+        || !Number.isInteger(raw.amountCents)
+        || raw.amountCents <= 0
+        || monthKeyOf(raw.date) === null
+    ) {
+        return null;
+    }
+    return {
+        id: raw.id,
+        direction: raw.direction,
+        amountCents: raw.amountCents,
+        date: raw.date,
+        note: stringOr(raw.note),
+        importId: stringOr(raw.importId),
+        bankRef: stringOr(raw.bankRef),
+        bankText: stringOr(raw.bankText),
+        fingerprint: stringOr(raw.fingerprint),
+    };
+}
+
 /** Fills the v2 fields of one expense or income; `isExpense` adds refund and goalId, an income gets sourceId. */
 export function normaliseEntry(entry, isExpense) {
     entry.currency = isCurrencyCode(entry.currency) ? entry.currency : 'EUR';
@@ -385,6 +411,15 @@ export function normalise(raw) {
         data.incomeSources = Array.isArray(data.incomeSources)
             ? data.incomeSources.map(normaliseIncomeSource).filter((source) => source !== null)
             : [];
+        // Optional list without a schema bump (absent means none); transfers of an import undone in 3.1 go.
+        if (Object.hasOwn(data, 'transfers')) {
+            const undoneImports = new Set(data.imports.filter((record) => record?.undoneAt).map(({ id }) => id));
+            data.transfers = Array.isArray(data.transfers)
+                ? data.transfers
+                    .map(normaliseTransfer)
+                    .filter((transfer) => transfer !== null && !undoneImports.has(transfer.importId))
+                : [];
+        }
         for (const subscription of data.subscriptions) {
             subscription.skippedMonths = monthKeyList(subscription.skippedMonths);
         }
