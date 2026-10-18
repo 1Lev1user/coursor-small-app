@@ -294,6 +294,11 @@ test('Original Currency is not the currency column, and a repeated header among 
     assert.equal(guess.columns.amount, 1);
 });
 
+test('Payment reference is the description only when no other header names the details', () => {
+    assert.equal(guessHeader('Date', 'Payment reference', 'Details', 'Amount').description, 2);
+    assert.equal(guessHeader('Date', 'Payment reference', 'Amount').description, 1);
+});
+
 // --- foreign card payments (details.js `original`) ---
 
 const SWEDBANK_FX = 'PIRKUMS 400000******0000 2026.09.02 12.34 24.90 CHF VALŪTAS KURSS 1.0712 KONVERTĀCIJAS MAKSA 0.52 EUR (123456) SHOP PARAUGS';

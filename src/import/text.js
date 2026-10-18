@@ -356,13 +356,15 @@ const KEYWORDS = {
         'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
         'arhiveerimistunnus', 'archiving code', 'kande viide', 'transakcijos kodas', 'transferwise id',
     ],
-    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars', 'informacija', 'payment reference'],
+    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars', 'informacija'],
     counterparty: ['payee', 'counterparty', 'beneficiary', 'partneris', 'nosaukums', 'sanemejs', 'maksatajs', 'получатель', 'плательщик', 'saaja', 'saaja/maksja nimi', 'partner name', 'gavejo pavadinimas', 'sender/receiver name'],
 };
 
 // An account's name or number is not the shop or person ('Konta nosaukums', 'Account name').
 const NOT_COUNTERPARTY_WORDS = ['account', 'konta', 'konto', 'konts', 'iban', 'kods', 'code', 'number', 'saskaita'];
 const NOT_COUNTERPARTY_TOKENS = ['nr'];
+// The details header only when no other header names them ('Payment Reference' in N26).
+const FALLBACK_DESCRIPTION_WORD = 'payment reference';
 const NOT_SIDE_WORDS = ['istaig', 'original'];
 
 const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'counterparty', 'status'];
@@ -581,6 +583,15 @@ export function guessColumns(header, allSampleRows) {
                 }
                 break;
             }
+        }
+    }
+
+    if (columns.description === -1) {
+        const used = usedIndexes(columns);
+        const index = normalizedHeader.findIndex((h, i) => !used.has(i) && h.includes(FALLBACK_DESCRIPTION_WORD));
+        if (index >= 0) {
+            columns.description = index;
+            descriptionVia = 'keyword';
         }
     }
 
