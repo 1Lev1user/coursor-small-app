@@ -524,10 +524,11 @@ def build():
             "For each row <b>What is it?</b> offers Expense, Refund, Income, Transfer or Skip. "
             "Near a payday the app asks “Is this the Salary?” and Yes ties the row to it. "
             "If the statement states its closing balance, <b>Check what was read</b> shows "
-            "“Bank balance on 17 Oct 2026: €429.15”. On the last screen the app compares it with "
-            "its own figure for that day. If they differ, tap <b>Align with the bank</b> to add "
-            "one “Bank difference” entry dated on the statement’s last day, or <b>Not now</b>.",
-            "Then tap <b>Import</b>; <b>Undo this import</b> reverses it, including that entry.",
+            "“Bank balance on 17 Oct 2026: €429.15”.",
+            "Then tap <b>Import</b>. The last screen compares that balance with the app's own figure; "
+            "if they differ, tap <b>Align with the bank</b> to add one “Bank difference” entry dated "
+            "on the statement’s last day, or <b>Not now</b>. "
+            "<b>Undo this import</b> reverses it, including that entry.",
         ],
     ))
 
