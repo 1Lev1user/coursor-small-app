@@ -1,3 +1,5 @@
+import { monthKeyOf } from '../months.js';
+
 /**
  * @typedef {object} StatementRow
  * @property {string} date YYYY-MM-DD
@@ -10,7 +12,16 @@
  * @property {string} bankRef
  * @property {string} [mcc] four-digit merchant category code of a card payment; absent otherwise
  * @property {'transfer'|'refund'} [kindHint] what the bank's own transaction type suggests; absent otherwise
+ * @property {string} [bookedOn] YYYY-MM-DD the bank booked a card payment, when it differs from `date` (the purchase day); absent otherwise
  * @property {true} [reversal] the bank marks this entry as a reversal (camt only); absent otherwise
+ */
+
+/**
+ * The money the bank says is on the account at the end of the statement. Optional on a reader result:
+ * the key is absent when the file has no EUR balance.
+ * @typedef {object} ClosingBalance
+ * @property {number} cents signed EUR cents (a negative balance is below zero)
+ * @property {string} date YYYY-MM-DD
  */
 
 export const FORMATS = ['fidavista', 'camt', 'csv', 'xlsx', 'xls', 'paste'];
@@ -37,6 +48,7 @@ export function statementRow(fields) {
         bankRef: String(fields.bankRef ?? '').trim(),
         ...(/^\d{4}$/.test(fields.mcc ?? '') ? { mcc: fields.mcc } : {}),
         ...(fields.kindHint === 'transfer' || fields.kindHint === 'refund' ? { kindHint: fields.kindHint } : {}),
+        ...(monthKeyOf(fields.bookedOn) !== null && fields.bookedOn !== fields.date ? { bookedOn: fields.bookedOn } : {}),
         ...(fields.reversal === true ? { reversal: true } : {}),
     };
 }
@@ -92,8 +104,11 @@ export function pairReversals(rows, eligible = () => true) {
     return pairs;
 }
 
-export function parserOk(format, rows, warnings = []) {
-    return { ok: true, format, rows, warnings };
+/** @param {ClosingBalance|null} [closingBalance] added to the result only when it is valid */
+export function parserOk(format, rows, warnings = [], closingBalance = null) {
+    const valid = closingBalance !== null && Number.isSafeInteger(closingBalance.cents)
+        && /^\d{4}-\d{2}-\d{2}$/.test(closingBalance.date);
+    return { ok: true, format, rows, warnings, ...(valid ? { closingBalance } : {}) };
 }
 
 export function parserFail(reason) {

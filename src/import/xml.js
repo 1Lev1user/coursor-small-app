@@ -608,6 +608,20 @@ function camtEntry(entry, fallbackCurrency, counts) {
     });
 }
 
+/** The EUR closing balance (Bal with Tp/CdOrPrtry/Cd CLBD) of a statement, signed by CdtDbtInd, or null. */
+function camtClosingBalance(statement, accountCurrency) {
+    let found = null;
+    for (const bal of children(statement, 'Bal')) {
+        if (textAt(bal, 'Tp/CdOrPrtry/Cd').toUpperCase() !== 'CLBD') continue;
+        const amount = amountWithCurrency(child(bal, 'Amt'));
+        const indicator = textAt(bal, 'CdtDbtInd').toUpperCase();
+        const date = isoDate(firstText(bal, ['Dt/Dt', 'Dt/DtTm']));
+        if (!amount || (amount.currency || accountCurrency) !== 'EUR' || !date || !['CRDT', 'DBIT'].includes(indicator)) continue;
+        found = { cents: indicator === 'DBIT' ? -Math.abs(amount.cents) : Math.abs(amount.cents), date };
+    }
+    return found;
+}
+
 /**
  * Parses an ISO 20022 camt.053 statement or camt.052 account report.
  * @param {string} text
@@ -625,9 +639,11 @@ export function parseCamt(text) {
     const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0, batchUnsplit: 0, partDirection: 0, reversal: 0, reversalPairs: 0 };
     const rows = [];
     let entryCount = 0;
+    let closing = null;
 
     for (const statement of statements) {
         const accountCurrency = (textAt(statement, 'Acct/Ccy') || 'EUR').toUpperCase();
+        closing = camtClosingBalance(statement, accountCurrency) ?? closing;
         for (const entry of children(statement, 'Ntry')) {
             entryCount += 1;
             const result = camtEntry(entry, accountCurrency, counts);
@@ -642,7 +658,7 @@ export function parseCamt(text) {
     }
     counts.reversalPairs = pairReversals(rows).length;
     counts.reversal = rows.filter(({ reversal }) => reversal === true).length - counts.reversalPairs;
-    return parserOk('camt', rows, skippedWarnings(counts));
+    return parserOk('camt', rows, skippedWarnings(counts), closing);
 }
 
 // ---------------------------------------------------------------------------
@@ -664,6 +680,7 @@ export function parseCamt(text) {
 //   Counterparty amount: CPartySet/Ccy with CPartySet/Amt (original currency when not
 //     the account currency)
 //   Bank reference: BankRef, then DocNo, then ExtId
+//   Closing balance: CcyStmt/CloseBal of the EUR CcyStmt; date Statement/Period/EndDate
 //   Type code (not used for import decisions): TypeCode
 
 const FIDAVISTA_ENTRY_NAMES = ['TrxSet', 'Trx', 'Transaction'];
@@ -761,6 +778,21 @@ function fidavistaEntry({ node, currency: statementCurrency }, counts) {
     });
 }
 
+/** CloseBal of the last EUR CcyStmt; the date is the statement's Period/EndDate, else the latest row date. */
+function fidavistaClosingBalance(root, rows) {
+    const statements = descendants(root, 'Statement');
+    let found = null;
+    for (const statement of statements.length > 0 ? statements : [root]) {
+        for (const ccy of descendants(statement, 'CcyStmt')) {
+            const cents = decimalToCents(textAt(ccy, 'CloseBal'));
+            if (textAt(ccy, 'Ccy').toUpperCase() !== 'EUR' || cents === null) continue;
+            const date = isoDate(textAt(statement, 'Period/EndDate')) || rows.map((row) => row.date).sort().pop();
+            found = { cents, date };
+        }
+    }
+    return found;
+}
+
 /**
  * Parses a FiDAViSTA statement (Latvian banks association XML).
  * @param {string} text
@@ -781,5 +813,5 @@ export function parseFidavista(text) {
 
     const counts = { pending: 0, noDate: 0, noAmount: 0, noDirection: 0 };
     const rows = entries.map((entry) => fidavistaEntry(entry, counts)).filter(Boolean);
-    return parserOk('fidavista', rows, skippedWarnings(counts));
+    return parserOk('fidavista', rows, skippedWarnings(counts), fidavistaClosingBalance(root, rows));
 }

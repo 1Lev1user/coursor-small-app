@@ -138,7 +138,6 @@ function importItem(ctx, record) {
     item.append(row);
 
     if (!record.undoneAt) {
-        const entries = (record.expenseIds?.length ?? 0) + (record.incomeIds?.length ?? 0);
         if (local.confirmUndoId === record.id) {
             const { total, edited } = importEditInfo(ctx.data, record.id);
             const undo = (options) => {
@@ -165,7 +164,7 @@ function importItem(ctx, record) {
                     { label: `Keep the ${edited} changed`, onClick: () => undo({ keepEdited: true }) },
                 )
                 : confirmBox(
-                    `Remove the ${plural(entries, 'entry', 'entries')} added by this import? Rules you saved stay.`,
+                    `Remove the ${plural(total, 'entry', 'entries')} added by this import? Rules you saved stay.`,
                     'Undo import',
                     () => undo(),
                     cancel,

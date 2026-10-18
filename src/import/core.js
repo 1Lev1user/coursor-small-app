@@ -620,8 +620,30 @@ function emptyCounts() {
 }
 
 /**
+ * Indexes of the EUR legs of currency exchanges. Each included transfer row without a EUR
+ * amount (the foreign leg) cancels at most one included EUR transfer row: same date, opposite
+ * direction, nearest in file order, the earlier one on a tie. Other transfer rows are stored.
+ */
+function exchangeLegIndexes(rows, decisions) {
+    const isTransfer = (index) => decisions?.[index]?.include === true && decisions[index].kind === 'transfer';
+    const legs = new Set();
+    rows.forEach((row, index) => {
+        if (!isTransfer(index) || Number.isInteger(row.amountCents)) return;
+        let pair = -1;
+        rows.forEach((other, at) => {
+            if (legs.has(at) || !isTransfer(at) || !Number.isInteger(other.amountCents)
+                || other.date !== row.date || other.direction === row.direction) return;
+            if (pair === -1 || Math.abs(at - index) < Math.abs(pair - index)) pair = at;
+        });
+        if (pair !== -1) legs.add(pair);
+    });
+    return legs;
+}
+
+/**
  * meta: { rows, format, fileName, duplicates?, now? }.
- * Returns { ok, errors, importRecord, expenses, incomes, rules, planChoices, totals }.
+ * Returns { ok, errors, importRecord, expenses, incomes, transfers, rules, planChoices, totals }.
+ * A transfer row with a EUR amount and a valid date becomes a transfer (Money now only).
  * planChoices lists past month keys without a frozen plan; applyImport needs a choice for each.
  */
 export function buildImport(data, decisions, meta) {
@@ -634,6 +656,8 @@ export function buildImport(data, decisions, meta) {
     const errors = [];
     const expenses = [];
     const incomes = [];
+    const transfers = [];
+    const exchangeLegs = exchangeLegIndexes(rows, decisions);
     const rulesByPattern = new Map();
     const ignored = [];
     let totalOutCents = 0;
@@ -666,6 +690,25 @@ export function buildImport(data, decisions, meta) {
                 bankRef: row.bankRef ?? '',
                 fingerprint: fingerprints[index],
             });
+            if (
+                decision.kind === 'transfer'
+                && Number.isInteger(row.amountCents)
+                && row.amountCents > 0
+                && monthKeyOf(row.date) !== null
+                && !exchangeLegs.has(index)
+            ) {
+                transfers.push({
+                    id: createId('trf'),
+                    direction: row.direction,
+                    amountCents: row.amountCents,
+                    date: row.bookedOn || row.date,
+                    note: noteFor(row, decision),
+                    importId,
+                    bankRef: row.bankRef ?? '',
+                    bankText: bankTextOf(row),
+                    fingerprint: fingerprints[index],
+                });
+            }
             return;
         }
 
@@ -682,6 +725,7 @@ export function buildImport(data, decisions, meta) {
             bankRef: row.bankRef ?? '',
             bankText: bankTextOf(row),
             fingerprint: fingerprints[index],
+            ...(row.bookedOn ? { bookedOn: row.bookedOn } : {}),
         };
 
         if (decision.kind === 'income') {
@@ -731,6 +775,7 @@ export function buildImport(data, decisions, meta) {
         periodTo: dates[dates.length - 1] ?? '',
         expenseIds: expenses.map(({ id }) => id),
         incomeIds: incomes.map(({ id }) => id),
+        transferIds: transfers.map(({ id }) => id),
         ignored,
         undoneAt: '',
     };
@@ -741,6 +786,7 @@ export function buildImport(data, decisions, meta) {
         importRecord,
         expenses,
         incomes,
+        transfers,
         rules: [...rulesByPattern.values()],
         planChoices: pastMonthsWithoutPlan(
             data,
@@ -824,6 +870,10 @@ export function applyImport(data, built, planChoices = {}) {
     }
     for (const entry of built.expenses) data.expenses.push({ ...entry });
     for (const entry of built.incomes) data.incomes.push({ ...entry });
+    if ((built.transfers ?? []).length > 0) {
+        data.transfers ??= [];
+        for (const transfer of built.transfers) data.transfers.push({ ...transfer });
+    }
     for (const rule of cleanedRules) {
         upsertRule(data, rule);
     }
@@ -833,6 +883,7 @@ export function applyImport(data, built, planChoices = {}) {
         counts: { ...built.importRecord.counts },
         expenseIds: [...built.importRecord.expenseIds],
         incomeIds: [...built.importRecord.incomeIds],
+        transferIds: [...built.importRecord.transferIds ?? []],
         createdPlans: planWrites.map(([monthKey]) => monthKey),
     };
     data.imports.push(record);
@@ -853,6 +904,15 @@ function removeByIds(list, ids, keepEdited = false) {
     return removed;
 }
 
+/** Removes the "Bank difference" entries the done screen aligned for this import; not counted. */
+function removeAligned(list, importId) {
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+        if (importId !== '' && list[index].alignedBy === importId) {
+            list.splice(index, 1);
+        }
+    }
+}
+
 /**
  * How many entries of an import are still present (`total`) and how many of
  * them were changed after the import (`edited`). 0 and 0 when unknown or undone.
@@ -862,9 +922,11 @@ export function importEditInfo(data, importId) {
     if (!record || record.undoneAt) return { total: 0, edited: 0 };
     const expenseIds = new Set(record.expenseIds);
     const incomeIds = new Set(record.incomeIds);
+    const transferIds = new Set(record.transferIds ?? []);
     const present = [
         ...(data.expenses ?? []).filter(({ id }) => expenseIds.has(id)),
         ...(data.incomes ?? []).filter(({ id }) => incomeIds.has(id)),
+        ...(data.transfers ?? []).filter(({ id }) => transferIds.has(id)),
     ];
     return { total: present.length, edited: present.filter(isEdited).length };
 }
@@ -878,7 +940,10 @@ export function undoImport(data, importId, now = new Date(), { keepEdited = fals
     if (!record || record.undoneAt) return 0;
 
     const removed = removeByIds(data.expenses ?? [], new Set(record.expenseIds), keepEdited)
-        + removeByIds(data.incomes ?? [], new Set(record.incomeIds), keepEdited);
+        + removeByIds(data.incomes ?? [], new Set(record.incomeIds), keepEdited)
+        + removeByIds(data.transfers ?? [], new Set(record.transferIds ?? []), keepEdited);
+    removeAligned(data.expenses ?? [], importId);
+    removeAligned(data.incomes ?? [], importId);
     // Plans this import created go too, unless the month has other entries now.
     for (const monthKey of record.createdPlans ?? []) {
         const used = [...(data.expenses ?? []), ...(data.incomes ?? [])]
@@ -897,7 +962,7 @@ export function undoImport(data, importId, now = new Date(), { keepEdited = fals
  * With `keepEdited` the result also says how many changed entries were kept.
  */
 export function undoImportAndSave(data, importId, save, options = {}) {
-    const keys = ['expenses', 'incomes', 'monthPlans', 'imports'];
+    const keys = ['expenses', 'incomes', 'monthPlans', 'imports', 'transfers'].filter((key) => Object.hasOwn(data, key));
     const before = JSON.parse(JSON.stringify(Object.fromEntries(keys.map((key) => [key, data[key]]))));
     const { total } = importEditInfo(data, importId);
     const removed = undoImport(data, importId, new Date(), options);

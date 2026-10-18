@@ -1226,6 +1226,48 @@ function cellAt(row, index) {
     return index >= 0 && index < row.length ? String(row[index] ?? '') : '';
 }
 
+/** Lines that state the closing balance of a statement, in the form normalizeText gives them. */
+const CLOSING_LABELS = [
+    'Beigu atlikums', 'Closing balance', 'Ending balance', 'Конечный остаток', 'Lõppsaldo', 'Galutinis likutis',
+].map(normalizeText);
+
+/** Words in front of the end date of a statement period ('līdz 2026-10-17', 'to 17.10.2026'). */
+const PERIOD_END_WORDS = ['līdz', 'to', 'until', 'kuni', 'iki', 'bis', 'по'].map(normalizeText);
+const PERIOD_END_RE = new RegExp(`(?:^|\\s)(?:${PERIOD_END_WORDS.join('|')})\\s+(\\d{1,4}[./-]\\d{1,2}[./-]\\d{1,4})`);
+
+// Rows under the header that guessColumns reads; the same number as startTable in src/views/import.js.
+const GUESS_SAMPLE_ROWS = 20;
+
+/** The last line with a closing-balance label: the first amount after the label, EUR only. Record type 86 lines belong to swedbankClosing. */
+function findLabelledBalance(rows, decimalSeparator, columns) {
+    let found = null;
+    for (const row of rows) {
+        const at = row.findIndex((cell) => CLOSING_LABELS.includes(normalizeText(cell).replace(/\s*:$/, '').replace(/\s+/g, ' ')));
+        if (at < 0 || cellAt(row, columns.recordType).trim() === '86') continue;
+        const currency = cellAt(row, columns.currency).trim().toUpperCase();
+        if (/^[A-Z]{3}$/.test(currency) && currency !== 'EUR') continue;
+        for (const cell of row.slice(at + 1)) {
+            const cents = cell.trim() === '' ? null : parseAmountWith(cell, decimalSeparator);
+            if (cents !== null) {
+                found = cents;
+                break;
+            }
+        }
+    }
+    return found;
+}
+
+/** The end of the period named above the header ('līdz 2026-10-17'): an ISO date, or one in the layout's date format. */
+function findPeriodEnd(rows, headerRow, dateFormat) {
+    for (const row of rows.slice(0, Math.max(headerRow, 0))) {
+        const match = PERIOD_END_RE.exec(normalizeText(row.filter((cell) => cell.trim() !== '').join(' ')));
+        if (!match) continue;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(match[1]) ? parseDateWith(match[1], 'YMD') : parseDateWith(match[1], dateFormat);
+        if (date) return date;
+    }
+    return null;
+}
+
 /**
  * Turns raw delimited rows into normalised statement rows, using a saved
  * or guessed column layout. Direction comes from the amount's sign, a D/C
@@ -1236,10 +1278,13 @@ function cellAt(row, index) {
  * layout.reverse === true flips every row's direction (a bank that shows spending as positive).
  * layout.columns.fee: the fee of a EUR row is added to money out and taken off money in (a fee above
  * the money in turns it into money out of the difference; an equal fee skips the row as zero amount).
+ * The closing balance of the statement is added as closingBalance { cents, date } when the file states one in
+ * EUR: a Swedbank record 86 line, else a labelled line ('Beigu atlikums: 429.15'), else the Balance column on
+ * the latest row. The key is absent otherwise; rows and skipped never change because of it.
  * @param {string[][]} rows
  * @param {number} headerRow
  * @param {object} layout
- * @returns {{ rows: object[], skipped: { line: number, reason: string }[] }}
+ * @returns {{ rows: object[], skipped: { line: number, reason: string }[], closingBalance?: { cents: number, date: string } }}
  */
 export function rowsToStatement(rows, headerRow, layout) {
     const columns = layout.columns || {};
@@ -1254,6 +1299,14 @@ export function rowsToStatement(rows, headerRow, layout) {
     const recordTypeIndex = (columns.recordType ?? -1) >= 0
         && !Object.entries(columns).some(([key, index]) => key !== 'recordType' && index === columns.recordType)
         ? columns.recordType : -1;
+
+    // The Balance column is not in `columns`: find it by its header, as checkFeeAgainstBalance does.
+    const balanceIndex = headerRow >= 0 && headerRow < rows.length
+        ? findExactColumn(rows[headerRow].map(normalizeText), BALANCE_HEADERS, usedIndexes(columns), rows.slice(dataStart, dataStart + GUESS_SAMPLE_ROWS))
+        : -1;
+    const balances = [];
+    let recordBalance = null;
+    let latestDate = '';
 
     for (let i = dataStart; i < rows.length; i += 1) {
         const row = rows[i];
@@ -1270,6 +1323,7 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         const recordType = cellAt(row, recordTypeIndex).trim();
         if (recordType !== '' && recordType !== '20') {
+            if (recordType === '86') recordBalance = swedbankClosing(row, columns, decimalSeparator, dateFormat) ?? recordBalance;
             skipped.push({ line, reason: 'summary row' });
             continue;
         }
@@ -1343,6 +1397,7 @@ export function rowsToStatement(rows, headerRow, layout) {
         }
 
         if (layout.reverse === true) direction = direction === 'in' ? 'out' : 'in';
+        const plainCents = direction === 'in' ? amountCents : -amountCents; // before a fee
 
         let currency = 'EUR';
         if (columns.currency >= 0) {
@@ -1376,6 +1431,14 @@ export function rowsToStatement(rows, headerRow, layout) {
             euroCents = eur !== null && eur !== 0 ? Math.abs(eur) : null;
         }
 
+        if (date > latestDate) latestDate = date;
+        if (balanceIndex >= 0 && currency === 'EUR') {
+            const balance = parseAmountWith(cellAt(row, balanceIndex), decimalSeparator);
+            if (balance !== null) {
+                balances.push({ date, cents: balance, moves: [plainCents, direction === 'in' ? amountCents : -amountCents] });
+            }
+        }
+
         const split = splitBankDetails(cellAt(row, columns.description), date);
         const bankRef = cellAt(row, columns.bankRef);
         const payee = cellAt(row, columns.counterparty);
@@ -1394,10 +1457,69 @@ export function rowsToStatement(rows, headerRow, layout) {
             bankRef,
             mcc: split.mcc,
             kindHint: KIND_HINT_BY_TYPE[typeKey(cellAt(row, columns.type))],
+            bookedOn: date,
         }));
     }
 
-    return { rows: statementRows, skipped };
+    const closingBalance = recordBalance
+        ?? labelledClosing(rows, headerRow, layout, latestDate)
+        ?? latestBalance(balances);
+    return { rows: statementRows, skipped, ...(closingBalance ? { closingBalance } : {}) };
+}
+
+/** Swedbank record 86 (closing balance): D is below zero, K above; a minus sign in the amount counts as it is. EUR only. */
+function swedbankClosing(row, columns, decimalSeparator, dateFormat) {
+    const currency = cellAt(row, columns.currency).trim().toUpperCase();
+    const amount = parseAmountWith(cellAt(row, columns.amount), decimalSeparator);
+    const date = parseDateWith(cellAt(row, columns.date), dateFormat);
+    if ((currency !== '' && currency !== 'EUR') || amount === null || !date) return null;
+    const below = amount < 0 || directionOfValue(cellAt(row, columns.direction)) === 'out';
+    return { cents: below ? -Math.abs(amount) : amount, date };
+}
+
+/** A labelled line ('Beigu atlikums: 429.15'): dated by the period end above the header, else by the latest row. */
+function labelledClosing(rows, headerRow, layout, latestDate) {
+    const cents = findLabelledBalance(rows, layout.decimalSeparator || '.', layout.columns || {});
+    const date = findPeriodEnd(rows, headerRow, layout.dateFormat) ?? (latestDate || null);
+    return cents !== null && date ? { cents, date } : null;
+}
+
+/**
+ * The Balance on the latest date. When the first and last rows are on different dates they tell the file order:
+ * oldest first the last row of that day, newest first the first. Otherwise the order comes from the balance
+ * chain (see balanceChainOrder); when that does not decide, there is no value rather than a guess.
+ */
+function latestBalance(points) {
+    if (points.length === 0) return null;
+    const latest = points.reduce((max, point) => (point.date > max ? point.date : max), '');
+    const onLatest = points.filter((point) => point.date === latest);
+    const first = points[0];
+    const last = points[points.length - 1];
+    let order = 'oldest';
+    if (onLatest.length > 1) {
+        order = first.date === last.date ? balanceChainOrder(points) : (first.date > last.date ? 'newest' : 'oldest');
+    }
+    if (order === null) return null;
+    const { date, cents } = order === 'newest' ? onLatest[0] : onLatest[onLatest.length - 1];
+    return { cents, date };
+}
+
+/**
+ * 'oldest' or 'newest' from neighbouring Balance points: the newer row's balance is the older row's balance
+ * plus the newer row's own money in (or minus its money out), with or without the fee. null when no pair
+ * fits, or pairs fit both ways.
+ */
+function balanceChainOrder(points) {
+    let oldest = 0;
+    let newest = 0;
+    for (let i = 0; i + 1 < points.length; i += 1) {
+        const [a, b] = [points[i], points[i + 1]];
+        if (b.moves.includes(b.cents - a.cents)) oldest += 1;
+        if (a.moves.includes(a.cents - b.cents)) newest += 1;
+    }
+    if (oldest > 0 && newest === 0) return 'oldest';
+    if (newest > 0 && oldest === 0) return 'newest';
+    return null;
 }
 
 /**
