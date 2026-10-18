@@ -620,18 +620,24 @@ function emptyCounts() {
 }
 
 /**
- * "direction|date" of each included transfer row without a EUR amount: the foreign leg of a
- * currency exchange. The EUR leg in the other direction on that date is then not stored either.
+ * Indexes of the EUR legs of currency exchanges. Each included transfer row without a EUR
+ * amount (the foreign leg) cancels at most one included EUR transfer row: same date, opposite
+ * direction, nearest in file order, the earlier one on a tie. Other transfer rows are stored.
  */
-function exchangeLegKeys(rows, decisions) {
-    const keys = new Set();
+function exchangeLegIndexes(rows, decisions) {
+    const isTransfer = (index) => decisions?.[index]?.include === true && decisions[index].kind === 'transfer';
+    const legs = new Set();
     rows.forEach((row, index) => {
-        const decision = decisions?.[index];
-        if (decision?.include === true && decision.kind === 'transfer' && !Number.isInteger(row.amountCents)) {
-            keys.add(`${row.direction === 'in' ? 'out' : 'in'}|${row.date}`);
-        }
+        if (!isTransfer(index) || Number.isInteger(row.amountCents)) return;
+        let pair = -1;
+        rows.forEach((other, at) => {
+            if (legs.has(at) || !isTransfer(at) || !Number.isInteger(other.amountCents)
+                || other.date !== row.date || other.direction === row.direction) return;
+            if (pair === -1 || Math.abs(at - index) < Math.abs(pair - index)) pair = at;
+        });
+        if (pair !== -1) legs.add(pair);
     });
-    return keys;
+    return legs;
 }
 
 /**
@@ -651,7 +657,7 @@ export function buildImport(data, decisions, meta) {
     const expenses = [];
     const incomes = [];
     const transfers = [];
-    const exchangeLegs = exchangeLegKeys(rows, decisions);
+    const exchangeLegs = exchangeLegIndexes(rows, decisions);
     const rulesByPattern = new Map();
     const ignored = [];
     let totalOutCents = 0;
@@ -689,7 +695,7 @@ export function buildImport(data, decisions, meta) {
                 && Number.isInteger(row.amountCents)
                 && row.amountCents > 0
                 && monthKeyOf(row.date) !== null
-                && !exchangeLegs.has(`${row.direction}|${row.date}`)
+                && !exchangeLegs.has(index)
             ) {
                 transfers.push({
                     id: createId('trf'),

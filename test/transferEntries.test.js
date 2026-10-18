@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { defaultData, normalise, SCHEMA_VERSION } from '../src/model.js';
 import { statementRow } from '../src/import/types.js';
 import {
@@ -307,4 +308,74 @@ test('alignToBank after an import with a transfer only corrects the remaining di
     const off = alignToBank(data, 217000, '2026-10-12', NOW, { alignedBy: result.importId });
     assert.equal(off.differenceCents, -500);
     assert.equal(balanceAt(data, '2026-10-12'), 217000);
+});
+
+// Review probes: every row is decided as transfer, all on 2026-10-10.
+function storedOf(rows) {
+    const data = freshData();
+    const { result } = importRows(data, rows, rows.map(() => TRANSFER));
+    assert.equal(result.ok, true);
+    return data;
+}
+
+const pairs = (data) => data.transfers.map(({ amountCents, direction }) => [amountCents, direction]);
+
+test('an exchange cancels one EUR leg only: a second EUR out on that date is stored', () => {
+    const data = storedOf([
+        row('2026-10-10', 10000, 'out', 'Exchanged to USD'),
+        row('2026-10-10', null, 'in', 'Exchanged from EUR', { currency: 'USD', originalAmountCents: 10800 }),
+        row('2026-10-10', 20000, 'out', 'To savings'),
+    ]);
+    // Both EUR outs are one row away from the USD in; the earlier one is the pair.
+    assert.deepEqual(pairs(data), [[20000, 'out']]);
+    assert.equal(moneyNow(data, NOW), 80000);
+});
+
+test('an exchange pairs with the nearest opposite EUR leg, the earlier one on a tie', () => {
+    const data = storedOf([
+        row('2026-10-10', 10000, 'in', 'Top-Up'),
+        row('2026-10-10', null, 'out', 'Exchanged to EUR', { currency: 'USD', originalAmountCents: 4700 }),
+        row('2026-10-10', 4300, 'in', 'Exchanged from USD'),
+    ]);
+    // The USD out sits between the two EUR ins (index distance 1 each): the tie goes to
+    // the earlier row, so the 10000 top-up is the pair and the 4300 is stored.
+    assert.deepEqual(pairs(data), [[4300, 'in']]);
+    assert.equal(moneyNow(data, NOW), 104300);
+
+    const nearer = storedOf([
+        row('2026-10-10', 10000, 'in', 'Top-Up'),
+        row('2026-10-10', 500, 'out', 'To savings'),
+        row('2026-10-10', 4300, 'in', 'Exchanged from USD'),
+        row('2026-10-10', null, 'out', 'Exchanged to EUR', { currency: 'USD', originalAmountCents: 4700 }),
+    ]);
+    // Here the 4300 in is nearest to the USD out (distance 1 against 3), so the top-up is stored.
+    assert.deepEqual(pairs(nearer), [[10000, 'in'], [500, 'out']]);
+});
+
+test('two foreign legs cancel EUR rows only one to one, each its own opposite', () => {
+    const data = storedOf([
+        row('2026-10-10', null, 'out', 'Exchanged to GBP', { currency: 'USD', originalAmountCents: 5000 }),
+        row('2026-10-10', null, 'in', 'Exchanged from USD', { currency: 'GBP', originalAmountCents: 3900 }),
+        row('2026-10-10', 20000, 'out', 'To savings'),
+    ]);
+    // The card rule applied exactly: the USD out finds no EUR in on that date and cancels
+    // nothing; the GBP in is opposite to the EUR out and is the nearest (the only) one, so
+    // it cancels it. Nothing is stored (no list is created) and Money now stays at the start.
+    assert.equal(Object.hasOwn(data, 'transfers'), false);
+    assert.equal(moneyNow(data, NOW), ANCHOR.cents);
+
+    const twoEuroOuts = storedOf([
+        row('2026-10-10', null, 'out', 'Exchanged to GBP', { currency: 'USD', originalAmountCents: 5000 }),
+        row('2026-10-10', null, 'in', 'Exchanged from USD', { currency: 'GBP', originalAmountCents: 3900 }),
+        row('2026-10-10', 20000, 'out', 'To savings'),
+        row('2026-10-10', 7000, 'out', 'To Revolut'),
+    ]);
+    // The one foreign in cancels one EUR out (the nearest, 20000); the 7000 is stored.
+    assert.deepEqual(pairs(twoEuroOuts), [[7000, 'out']]);
+});
+
+test('Settings undo confirmation counts the same entries as importEditInfo, transfers included', () => {
+    const source = readFileSync(new URL('../src/views/settings/importSettings.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /record\.expenseIds\?\.length \?\? 0\) \+ \(record\.incomeIds/);
+    assert.match(source, /Remove the \$\{plural\(total, 'entry', 'entries'\)\} added by this import\?/);
 });
