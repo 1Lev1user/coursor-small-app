@@ -20,9 +20,12 @@ function hasBom(bytes, bom) {
 const SNIFF_LIMIT = 4096;
 const NUL_SHARE = 0.3;
 const MIN_CYRILLIC = 20;
+// Cyrillic letters needed per Baltic letter: Russian text reads as about 2 Latvian letters
+// per 1 in 1257 (measured 1.85-2.1), a Latvian file as about 1.
+const CYRILLIC_PER_BALTIC = 1.5;
 const CYRILLIC_LETTER = /[\u0400-\u04ff]/g;
-// Latvian, Lithuanian and Estonian letters that windows-1257 puts in the high bytes.
-const BALTIC_LETTER = /[āčēģīķļņšūžąęėįųōõäöüĀČĒĢĪĶĻŅŠŪŽĄĘĖĮŲŌÕÄÖÜ]/g;
+const LATIN_LETTER = /[A-Za-z]/g;
+const BALTIC_LETTER = /[āčēģīķļņšūžĀČĒĢĪĶĻŅŠŪŽ]/g;
 
 // UTF-16 text without a BOM is mostly ASCII, so every other byte is 0x00.
 function sniffUtf16WithoutBom(bytes) {
@@ -53,13 +56,17 @@ function countMatches(text, pattern) {
     return (text.match(pattern) ?? []).length;
 }
 
-// Both legacy codepages are single-byte: the one that reads as real letters wins.
+// Both legacy codepages are single-byte. Pick 1251 only when its reading is
+// mostly Cyrillic and clearly beats the Baltic letters of the 1257 reading, so
+// a Latvian file with one foreign letter (Café, Strauß) stays windows-1257.
 function looksLikeWindows1251(bytes) {
     try {
         const sample = bytes.subarray(0, SNIFF_LIMIT);
-        const cyrillic = countMatches(new TextDecoder('windows-1251').decode(sample), CYRILLIC_LETTER);
+        const as1251 = new TextDecoder('windows-1251').decode(sample);
+        const cyrillic = countMatches(as1251, CYRILLIC_LETTER);
+        const latin = countMatches(as1251, LATIN_LETTER);
         const baltic = countMatches(new TextDecoder('windows-1257').decode(sample), BALTIC_LETTER);
-        return cyrillic >= MIN_CYRILLIC && cyrillic > baltic;
+        return cyrillic >= MIN_CYRILLIC && cyrillic >= latin && cyrillic >= CYRILLIC_PER_BALTIC * baltic;
     } catch {
         return false;
     }

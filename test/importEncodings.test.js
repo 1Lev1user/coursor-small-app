@@ -119,6 +119,43 @@ test('a windows-1257 file with a few Latin high letters stays windows-1257', () 
     assert.equal(result.encoding, 'windows-1257');
 });
 
+test('a Latvian windows-1257 file with one foreign letter stays windows-1257', () => {
+    const body = LATVIAN.split('\n').slice(1, 4).join('\n');
+    for (const extra of ['Café', 'Strauß', '€ 5', 'Ó', 'Æ', 'ŗ']) {
+        const text = `Datums;Apraksts;Summa\n${body}\n${body}\n01.10.2026;${extra};-3,50\n`;
+        const result = decodeBytes(encode('windows-1257', text));
+        assert.equal(result.text, text, extra);
+        assert.equal(result.encoding, 'windows-1257', extra);
+    }
+});
+
+test('a diacritic-heavy Latvian windows-1257 file with one foreign letter stays windows-1257', () => {
+    const text = `${'ēšķīļģāūžņčē '.repeat(6)}\n01.10.2026;Café;-3,50\n`;
+    const result = decodeBytes(encode('windows-1257', text));
+    assert.equal(result.text, text);
+    assert.equal(result.encoding, 'windows-1257');
+});
+
+test('a mostly ASCII Western file with many accents is not read as windows-1251', () => {
+    const text = 'Date;Description;Amount\n'
+        + '01.10.2026;Café René, crème brûlée, señor Muñoz, Søren Ørsted, élève;-3,50\n'.repeat(5);
+    const result = decodeBytes(encode('windows-1252', text));
+    assert.equal(result.encoding, 'windows-1257');
+});
+
+test('a Russian windows-1251 file with Latin words is still detected', () => {
+    const text = [
+        'Дата;Описание;Сумма;Валюта',
+        '01.10.2026;Оплата в магазине SIA Maxima;-12,40;EUR',
+        '02.10.2026;Перевод на карту, получатель Иванов;-30,00;EUR',
+        '03.10.2026;Зарплата за месяц;1200,00;EUR',
+        '',
+    ].join('\n');
+    const result = decodeBytes(encode('windows-1251', text));
+    assert.equal(result.text, text);
+    assert.equal(result.encoding, 'windows-1251');
+});
+
 test('pure ASCII stays utf-8', () => {
     const result = decodeBytes(new TextEncoder().encode(LATIN));
     assert.equal(result.text, LATIN);
