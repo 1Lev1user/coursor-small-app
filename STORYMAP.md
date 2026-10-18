@@ -74,7 +74,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 - Slice 3 (planned, release 3.0): money model C-029 to C-039, Settings and usability C-040 to C-054, bank import C-055 to C-069, input fields C-070, visual design and motion C-071 to C-077. Owner decisions: research/3.0/decisions-3.0.md; execution plan: research/3.0/plan-3.0.md.
 
 - Slice 4 (done, release 3.1.0): bank import for every researched bank, cards C-064 to C-069, C-095 to C-112.
-- Slice 5 (planned, release 3.1.1): S4.10, cards C-113 to C-117. Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
+- Slice 5 (planned, release 3.1.1): S4.10, cards C-113 to C-117 and C-124 (booking date for Money now, found on the owner's statement). Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
 - Slice 6 (planned, release 3.2): S4.11 to S4.13, cards C-118 to C-120 (owner choice 2026-10-18 after reviewing an external "Adaptive Financial Engine" prompt: items 1-3 now). Backlog: C-121 (S4.14 trip), C-122 (S3.14 month-end forecast), C-123 (S3.15 facts after an import), only with 3+ months of history.
 
 ## Rules
