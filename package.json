@@ -1,6 +1,6 @@
 {
     "name": "my-expenses",
-    "version": "3.1.0",
+    "version": "3.1.1",
     "description": "Local-only EUR expense and income tracker (PWA)",
     "private": true,
     "license": "UNLICENSED",
