@@ -355,10 +355,14 @@ const KEYWORDS = {
         'dokumenta nr', 'dokumenta numurs', 'doc no', 'id транзакции', 'номер документа',
         'trans. nr', 'trans nr', 'transakcijas nr', 'transakcijas numurs', 'darijuma nr', 'номер транзакции',
     ],
-    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars'],
+    description: ['description', 'details', 'detalas', 'apraksts', 'назначение', 'описание', 'selgitus', 'paskirtis', 'narrative', 'memo', 'purpose', 'komentars', 'informacija'],
+    counterparty: ['payee', 'counterparty', 'beneficiary', 'partneris', 'nosaukums', 'sanemejs', 'maksatajs', 'получатель', 'плательщик'],
 };
 
-const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'status'];
+// An account's name or number is not the shop or person ('Konta nosaukums', 'Account name').
+const NOT_COUNTERPARTY_WORDS = ['account', 'konta', 'konts', 'iban'];
+
+const CATEGORY_ORDER = ['date', 'debit', 'credit', 'amount', 'direction', 'currency', 'bankRef', 'description', 'counterparty', 'status'];
 
 // Exact words after normalisation: 'Statement details' must not match.
 const STATUS_HEADERS = ['status', 'state', 'statuss', 'statusas', 'olek', 'состояние', 'статус'];
@@ -551,6 +555,10 @@ export function guessColumns(header, sampleRows) {
             const matches = category === 'status'
                 ? isStatusHeader(normalizedHeader[i])
                 : keywords.some((keyword) => normalizedHeader[i].includes(keyword));
+            if (matches && category === 'counterparty'
+                && NOT_COUNTERPARTY_WORDS.some((word) => normalizedHeader[i].includes(word))) {
+                continue;
+            }
             if (matches) {
                 columns[category] = i;
                 if (category === 'date') {
@@ -1151,6 +1159,7 @@ export function rowsToStatement(rows, headerRow, layout) {
 
         const split = splitBankDetails(cellAt(row, columns.description), date);
         const bankRef = cellAt(row, columns.bankRef);
+        const payee = cellAt(row, columns.counterparty);
 
         statementRows.push(statementRow({
             date: split.date || date,
@@ -1159,7 +1168,7 @@ export function rowsToStatement(rows, headerRow, layout) {
             currency,
             originalAmountCents: amountCents,
             description: split.description,
-            counterparty: split.counterparty,
+            counterparty: payee.trim() !== '' ? payee : split.counterparty,
             bankRef,
             mcc: split.mcc,
             kindHint: KIND_HINT_BY_TYPE[typeKey(cellAt(row, columns.type))],

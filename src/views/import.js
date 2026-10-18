@@ -87,10 +87,12 @@ function samplesAt(sampleRows, index) {
 /**
  * A saved layout overrides the guess key by key; a guessed key the layout lacks (such as status) stays.
  * The fee is the exception: a guessed fee would silently change the amounts of a layout confirmed without it.
+ * So is the payee: it is part of the row fingerprint, and a guessed one would break matching with earlier imports.
  */
 export function mergeSavedColumns(guessedColumns, savedColumns) {
     const merged = { ...guessedColumns, ...savedColumns };
     if (savedColumns.fee === undefined && guessedColumns.fee !== undefined) merged.fee = -1;
+    if (savedColumns.counterparty === undefined && guessedColumns.counterparty !== undefined) merged.counterparty = -1;
     return merged;
 }
 
@@ -699,7 +701,7 @@ function startTable(ctx, result) {
     const header = headerRow >= 0 ? rows[headerRow] : [];
     const sample = rows.slice(headerRow + 1, headerRow + 1 + GUESS_SAMPLE_ROWS);
     const guess = guessColumns(header, sample);
-    const columns = { fee: -1, status: -1, ...guess.columns, eurAmount: -1 };
+    const columns = { fee: -1, status: -1, counterparty: -1, ...guess.columns, eurAmount: -1 };
     state.feeCheck = guess.feeCheck ?? null;
     const signature = headerSignature(header);
 
@@ -1070,6 +1072,7 @@ function renderColumns(ctx) {
         grid.append(columnSelect(ctx, 'amount', 'Amount', false));
     }
     grid.append(
+        columnSelect(ctx, 'counterparty', 'Payee or sender (optional)', true, 'The shop or person. Used for the entry text and for rules.'),
         columnSelect(ctx, 'description', 'Description', true),
         columnSelect(ctx, 'currency', 'Currency (optional)', true),
     );
