@@ -503,8 +503,9 @@ def build():
         [
             "Settings → <b>Bank import (advanced)</b> → <b>Import a bank statement</b>. The "
             "steps are Load, Columns, Duplicates, Categorise and Confirm.",
-            "<b>Choose file</b> (CSV, Excel .xls or .xlsx, camt.053 or FiDAViSTA XML) or <b>Paste "
-            "text</b>. The file is read on this device and nothing is uploaded.",
+            "<b>Choose file</b> (CSV, Excel .xls or .xlsx, an .xls that is really a web table or "
+            "XML, camt.052/053/054 or FiDAViSTA XML) or <b>Paste text</b>. The file is read on "
+            "this device and nothing is uploaded.",
             "Card payments are named after the shop and, when the bank text gives the card "
             "date, dated on the day you paid (the bank books them a few days later). "
             "Personal codes, IBANs and card numbers in a transfer's text are left out of the "
@@ -523,6 +524,40 @@ def build():
             "Then tap <b>Import</b>; <b>Undo this import</b> reverses it.",
         ],
     ))
+
+    story.append(KeepTogether([Paragraph("What the import does for you", s["h2"]), bullets([
+        "Rows marked pending, reverted or declined are skipped (<b>Not completed</b>). "
+        "Revolut Topup and Exchange start as Transfer.",
+        "A <b>Fee</b> column is added to money out and taken off money in, unless the Balance "
+        "column shows that the amount already includes it.",
+        "A <b>Payee or sender</b> column keeps the shop name for the entry text and for rules.",
+        "Money out and money in of the same amount (10.00 euro or more) within one day start "
+        "as <b>Transfer</b>. You can change them.",
+        "Rules match whole words. Rows sorted by your rules are in <b>Known</b>, with a line "
+        "saying how many went where.",
+        "camt files: a reversal that comes as money in starts as Refund; a payment and its "
+        "reversal start as Skip; an entry that bundles several payments is split into one row "
+        "each when the parts add up.",
+        "Swedbank files: only transaction lines are read, not balance or turnover lines.",
+        "Dates with a month name (17 Sep 2026) and Excel day numbers are read. Rows dated more "
+        "than a year ahead or 15 years back start unticked in <b>Dated far from today</b>; "
+        "tick <b>Import anyway</b> to bring one back.",
+        "An Excel file whose formulas were never calculated gets a warning: open it in Excel "
+        "and save it again.",
+        "<b>Undo this import</b> says how many entries you changed since; choose "
+        "<b>Remove all</b> or, for example, <b>Keep the 3 changed</b>.",
+    ], s["bullet"])]))
+    story.append(KeepTogether([Paragraph("Which banks are read", s["h2"]), bullets([
+        "<b>Checked with a real export:</b> Citadele (.xls).",
+        "<b>Built from public descriptions of the file layout</b> (please report what you "
+        "see): Revolut, Swedbank Latvia, Estonia and Lithuania, SEB Lithuania, LHV, Wise, N26, "
+        "camt.052 and camt.053 XML (camt.054 is read the same way but not tested), FiDAViSTA "
+        "XML.",
+        "<b>Other banks</b> (for example Luminor, Citadele CSV, Paysera): choose the file, then "
+        "on the Columns step pick Date, Amount, Payee or sender and Description by hand, set "
+        "the date format and Decimal separator, and type the Bank name. The layout is "
+        "remembered for next time.",
+    ], s["bullet"])]))
 
     story.append(side_by_side(
         s, "screen-settings-backup.png", "Backup and restore",
