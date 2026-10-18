@@ -48,7 +48,7 @@ const KIND_LABELS = {
 };
 
 const KIND_HINTS = {
-    transfer: 'Money between your own accounts. Not counted.',
+    transfer: 'Money between your own accounts. Changes Money now, not your spending.',
     skip: 'This row will not be imported.',
 };
 
@@ -1852,7 +1852,7 @@ function applyBuilt(ctx) {
             layout: state.layout,
         }));
     }
-    const count = built.expenses.length + built.incomes.length;
+    const count = built.expenses.length + built.incomes.length + (built.transfers?.length ?? 0);
     const saved = ctx.save();
     state.result = {
         importId: result.importId,
@@ -1880,7 +1880,7 @@ function renderConfirm(ctx) {
         ['Expenses', String(sum.expenses)],
         ['Refunds', String(sum.refunds)],
         ['Incomes', String(sum.incomes)],
-        ['Transfers (not counted)', String(sum.transfers)],
+        ['Transfers (Money now only)', String(sum.transfers)],
         ['Skipped', String(sum.skipped)],
         ['Left out as duplicates or possible duplicates', String(sum.duplicates)],
         ['Total out', formatEuro(sum.totalOutCents)],
@@ -1900,7 +1900,7 @@ function renderConfirm(ctx) {
 
     if (state.applyError !== '') card.append(alertText(state.applyError, 'imp-apply-error'));
 
-    const count = built.expenses.length + built.incomes.length;
+    const count = built.expenses.length + built.incomes.length + (built.transfers?.length ?? 0);
     const apply = button('btn btn-primary', `Import ${entryCountText(count)}`, () => applyBuilt(ctx));
     apply.disabled = count === 0 && built.rules.length === 0;
     if (count === 0) {

@@ -59,7 +59,11 @@ export function balanceAt(data, dateISO) {
     const spent = data.expenses
         .filter((entry) => inRange(entry, anchor.date, dateISO))
         .reduce((sum, entry) => sum + spendCents(entry), 0);
-    return anchor.cents + earned - spent;
+    // Transfers between own accounts move Money now only, never spending or income.
+    const moved = (data.transfers ?? [])
+        .filter((transfer) => inRange(transfer, anchor.date, dateISO))
+        .reduce((sum, { direction, amountCents }) => sum + (direction === 'in' ? amountCents : -amountCents), 0);
+    return anchor.cents + earned - spent + moved;
 }
 
 export function moneyNow(data, now = new Date()) {
