@@ -1,6 +1,6 @@
 import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
-import { monthKeyOf, monthLabel, todayISO } from '../months.js';
+import { fullDate, monthKeyOf, monthLabel, todayISO } from '../months.js';
 import { createId } from '../model.js';
 import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
 import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
@@ -344,8 +344,13 @@ export function outOfRangeIndexes(rows, now = null) {
     return late;
 }
 
+/** The line of the check panel that states the bank's own balance. */
+export function closingBalanceText({ cents, date }) {
+    return `Bank balance on ${fullDate(date)}: ${formatEuro(cents)}`;
+}
+
 /** What was actually read, for a person to compare with the bank's own figures. */
-export function checkSummary(rows, skipped, { fileLines = null, tableRows = null, now = null } = {}) {
+export function checkSummary(rows, skipped, { fileLines = null, tableRows = null, now = null, closingBalance = null } = {}) {
     let totalInCents = 0;
     let totalOutCents = 0;
     let foreignCount = 0;
@@ -372,6 +377,7 @@ export function checkSummary(rows, skipped, { fileLines = null, tableRows = null
         lineMismatch: mismatch ? { fileLines, tableRows } : null,
         futureCount,
         pastCount: late.length - futureCount,
+        closingBalance,
     };
 }
 
@@ -467,6 +473,7 @@ function freshState() {
         rows: [],
         skipped: [],
         warnings: [],
+        closingBalance: null,
         rowsKey: '',
         duplicates: [],
         decisions: [],
@@ -695,7 +702,10 @@ export async function readStatementFile(file) {
     if (format === 'camt' || format === 'fidavista') {
         const parsed = format === 'camt' ? parseCamt(text) : parseFidavista(text);
         if (!parsed.ok) return parsed;
-        return { ok: true, kind: 'statement', format, rows: parsed.rows, warnings: parsed.warnings ?? [] };
+        return {
+            ok: true, kind: 'statement', format, rows: parsed.rows, warnings: parsed.warnings ?? [],
+            ...(parsed.closingBalance ? { closingBalance: parsed.closingBalance } : {}),
+        };
     }
     if (format === 'html' || format === 'spreadsheetml') {
         const sheet = format === 'html' ? readHtmlTable(text) : readSpreadsheetMl(text);
@@ -778,7 +788,7 @@ function acceptLoaded(ctx, result) {
             refresh(ctx, 'imp-file');
             return;
         }
-        enterReview(ctx, result.rows, [], result.warnings);
+        enterReview(ctx, result.rows, [], result.warnings, result.closingBalance ?? null);
         return;
     }
     startTable(ctx, result);
@@ -839,7 +849,7 @@ function startTable(ctx, result) {
         const parsed = parseTable();
         if (parsed.rows.length > 0) {
             state.savedLayoutName = saved.name;
-            enterReview(ctx, parsed.rows, parsed.skipped, state.table.warnings);
+            enterReview(ctx, parsed.rows, parsed.skipped, state.table.warnings, parsed.closingBalance);
             return;
         }
     }
@@ -880,14 +890,16 @@ function layoutProblem() {
 }
 
 function parseTable() {
-    if (layoutProblem() !== '') return { rows: [], skipped: [] };
+    if (layoutProblem() !== '') return { rows: [], skipped: [], closingBalance: null };
     const result = rowsToStatement(state.table.rows, state.table.headerRow, parseLayout());
-    return { rows: result.rows, skipped: result.skipped };
+    return { rows: result.rows, skipped: result.skipped, closingBalance: result.closingBalance ?? null };
 }
 
-function enterReview(ctx, rows, skipped, warnings) {
+function enterReview(ctx, rows, skipped, warnings, closingBalance = null) {
     state.skipped = skipped;
     state.warnings = warnings;
+    // Outside the rowsKey check below: the same rows can come with a new balance.
+    state.closingBalance = closingBalance;
     const key = JSON.stringify(rows);
     if (key !== state.rowsKey) {
         state.rowsKey = key;
@@ -1115,6 +1127,7 @@ function renderCheckPanel(summary, placement) {
     panel.append(totals);
 
     panel.append(element('p', 'imp-panel-counts', `Rows read: ${summary.read}, skipped: ${summary.skippedCount}`));
+    if (summary.closingBalance) panel.append(element('p', 'imp-panel-counts', closingBalanceText(summary.closingBalance)));
     if (summary.foreignCount > 0) {
         panel.append(element(
             'p',
@@ -1247,6 +1260,7 @@ function renderColumns(ctx) {
             fileLines: state.fileLines,
             tableRows: state.table.parsedRows,
             now: new Date(),
+            closingBalance: parsed.closingBalance,
         });
         card.append(renderCheckPanel(summary, 'columns'));
     }
@@ -1273,7 +1287,7 @@ function renderColumns(ctx) {
         const again = parseTable();
         if (again.rows.length === 0) return;
         state.savedLayoutName = '';
-        enterReview(ctx, again.rows, again.skipped, state.table.warnings);
+        enterReview(ctx, again.rows, again.skipped, state.table.warnings, again.closingBalance);
     });
     next.disabled = parsed.rows.length === 0;
     card.append(actions(
@@ -1316,6 +1330,7 @@ function renderDuplicates(ctx) {
             fileLines: state.fileLines,
             tableRows: state.table?.parsedRows ?? null,
             now: new Date(),
+            closingBalance: state.closingBalance,
         });
         card.append(renderCheckPanel(summary, placement));
     }
