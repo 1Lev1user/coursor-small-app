@@ -52,6 +52,7 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 | S4.7 | Owner | Imports bank statement | Sees a check of what was read (sample rows, totals in and out, line count) before continuing | Errors are caught by eye | P0 | planned |
 | S4.8 | Owner | Imports bank statement | Balance lines, pending or reversed rows, fees and batch entries are not counted as ordinary money | Only real money is imported | P1 | planned |
 | S4.9 | Owner | Imports bank statement | A new payment is not hidden as an already-imported duplicate | No missing payments | P1 | planned |
+| S4.10 | Owner | Imports bank statement | After an import, Money now matches the bank's balance; transfers between own accounts move Money now but not the budget | The app shows the real money on the card | P0 | planned |
 | S5.1 | Owner | Plans and saves | Sets savings goals with target and optional deadline | Saving has a target | P2 | exists |
 | S5.2 | Owner | Plans and saves | Adds money to a goal (recorded as Savings expense) | Progress visible | P2 | exists |
 | S6.1 | Owner | Backs up and updates | Exports and imports a JSON backup | Data survives device loss | P1 | exists |
@@ -65,6 +66,9 @@ Steps marked "exists" describe current behaviour from README.md. Slice 1 steps a
 - Slice 1 (done): S4.4 and S3.5, cards C-001 to C-003. Import stays trustworthy: import tests are date-independent and the past-month plan rule and CSV quoting are guarded by tests.
 - Slice 2 (release 2.1.0 postponed, merged into 3.0): cards C-004 to C-028; open: C-006, C-010, C-013, C-014, C-026.
 - Slice 3 (planned, release 3.0): money model C-029 to C-039, Settings and usability C-040 to C-054, bank import C-055 to C-069, input fields C-070, visual design and motion C-071 to C-077. Owner decisions: research/3.0/decisions-3.0.md; execution plan: research/3.0/plan-3.0.md.
+
+- Slice 4 (done, release 3.1.0): bank import for every researched bank, cards C-064 to C-069, C-095 to C-112.
+- Slice 5 (planned, release 3.1.1): S4.10, cards C-113 to C-117. Owner answers 2026-10-18: show the bank balance after an import with an Align button (one Bank difference entry); offer the statement balance as Money now when not set up; transfers between own accounts count in Money now, not in budgets; release 3.1.1 to the site.
 
 ## Rules
 - Every card references one step ID.
