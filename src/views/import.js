@@ -1,6 +1,6 @@
 import { formatEuro, parseAmount } from '../money.js';
 import { SALARY_INCOME_ID } from '../budget.js';
-import { monthKeyOf, monthLabel } from '../months.js';
+import { monthKeyOf, monthLabel, todayISO } from '../months.js';
 import { createId } from '../model.js';
 import { nameAppearsIn, isLoggedThisMonth } from '../subscriptions.js';
 import { usesNewCounting, suggestIncomeSource } from '../incomeSources.js';
@@ -323,8 +323,29 @@ export function dateQuestion(sample) {
     return `Is ${sample} the ${ordinal(dd)} of ${MONTH_NAMES[dm - 1]} or ${MONTH_NAMES[mm - 1]} ${ordinal(md)}?`;
 }
 
+export const DATE_FORMAT_OPTIONS = [
+    ['', 'Choose'],
+    ['DMY', 'Day first (day.month.year)'],
+    ['MDY', 'Month first (month.day.year)'],
+    ['YMD', 'Year first (year.month.day)'],
+    ['TEXT', 'Day and month name (17 Sep 2026)'],
+];
+
+/** Indexes of rows dated more than 1 year after today or more than 15 years before it; none without `now`. */
+export function outOfRangeIndexes(rows, now = null) {
+    const late = new Set();
+    if (!now) return late;
+    const [year, month, day] = todayISO(now).split('-').map(Number);
+    const latest = new Date(Date.UTC(year, month - 1, day + 365)).toISOString().slice(0, 10);
+    const earliest = new Date(Date.UTC(year - 15, month - 1, day)).toISOString().slice(0, 10);
+    rows.forEach((row, index) => {
+        if (row.date > latest || row.date < earliest) late.add(index);
+    });
+    return late;
+}
+
 /** What was actually read, for a person to compare with the bank's own figures. */
-export function checkSummary(rows, skipped, { fileLines = null, tableRows = null } = {}) {
+export function checkSummary(rows, skipped, { fileLines = null, tableRows = null, now = null } = {}) {
     let totalInCents = 0;
     let totalOutCents = 0;
     let foreignCount = 0;
@@ -336,6 +357,8 @@ export function checkSummary(rows, skipped, { fileLines = null, tableRows = null
         if (row.direction === 'in') totalInCents += row.amountCents;
         else totalOutCents += row.amountCents;
     }
+    const late = [...outOfRangeIndexes(rows, now)];
+    const futureCount = late.filter((index) => rows[index].date > todayISO(now)).length;
     const mismatch = Number.isFinite(fileLines) && Number.isFinite(tableRows) && fileLines !== tableRows;
     return {
         read: rows.length,
@@ -347,6 +370,8 @@ export function checkSummary(rows, skipped, { fileLines = null, tableRows = null
         sample: rows.length > 4 ? [...rows.slice(0, 3), rows[rows.length - 1]] : rows,
         mostlyIn: rows.length >= 5 && inCount * 10 >= rows.length * 9,
         lineMismatch: mismatch ? { fileLines, tableRows } : null,
+        futureCount,
+        pastCount: late.length - futureCount,
     };
 }
 
@@ -369,6 +394,11 @@ export function checkWarnings(summary, placement) {
     if (summary.lineMismatch) {
         const { fileLines, tableRows } = summary.lineMismatch;
         warnings.push(`The file has ${fileLines} lines but ${tableRows} rows were read. Some lines may have been joined together; look for a stray quote mark.`);
+    }
+    for (const [count, where] of [[summary.futureCount, 'a year ahead'], [summary.pastCount, '15 years back']]) {
+        if (count > 0) {
+            warnings.push(`${plural(count, 'row is', 'rows are')} dated more than ${where}. ${count === 1 ? 'It is not imported unless you tick it.' : 'They are not imported unless you tick them.'}`);
+        }
     }
     return warnings;
 }
@@ -862,9 +892,11 @@ function enterReview(ctx, rows, skipped, warnings) {
         state.rowsKey = key;
         state.rows = rows;
         state.duplicates = findDuplicates(ctx.data, rows);
+        const late = outOfRangeIndexes(rows, new Date());
         state.decisions = defaultDecisions(ctx.data, rows, state.duplicates)
             .map((decision, index) => ({
                 ...decision,
+                include: decision.include && !late.has(index),
                 pattern: patternFor(rows[index]),
                 ...suggestSalary(ctx.data, rows[index], decision),
             }));
@@ -1182,7 +1214,7 @@ function renderColumns(ctx) {
 
     if (state.askDate) {
         const dateSelect = selectOf(
-            [['', 'Choose'], ['DMY', 'Day first (day.month.year)'], ['MDY', 'Month first (month.day.year)'], ['YMD', 'Year first (year.month.day)']],
+            DATE_FORMAT_OPTIONS,
             state.layout.dateFormat ?? '',
             (value) => {
                 state.layout.dateFormat = value === '' ? null : value;
@@ -1213,6 +1245,7 @@ function renderColumns(ctx) {
         const summary = checkSummary(parsed.rows, parsed.skipped, {
             fileLines: state.fileLines,
             tableRows: state.table.parsedRows,
+            now: new Date(),
         });
         card.append(renderCheckPanel(summary, 'columns'));
     }
@@ -1281,6 +1314,7 @@ function renderDuplicates(ctx) {
         const summary = checkSummary(state.rows, state.skipped, {
             fileLines: state.fileLines,
             tableRows: state.table?.parsedRows ?? null,
+            now: new Date(),
         });
         card.append(renderCheckPanel(summary, placement));
     }
@@ -1354,6 +1388,29 @@ function renderDuplicates(ctx) {
             group.append(list);
             card.append(group);
         }
+    }
+
+    const far = [...outOfRangeIndexes(state.rows, new Date())].filter((index) => !state.duplicates[index].level);
+    if (far.length > 0) {
+        const group = element('section', 'stack imp-group');
+        group.append(
+            element('h3', 'category-name', `Dated far from today (${far.length})`),
+            element('p', 'muted', 'More than a year ahead or more than 15 years back. Not imported unless you tick them.'),
+        );
+        const list = element('ul', 'entry-list imp-list');
+        for (const index of far) {
+            const row = state.rows[index];
+            const item = element('li', 'entry-item stack imp-dup');
+            item.append(
+                entrySummary('In the file', row.date, amountText(row), describeRow(row)),
+                checkRow(`imp-dup-${index}`, 'Import anyway', state.decisions[index].include === true, (checked) => {
+                    state.decisions[index].include = checked;
+                }),
+            );
+            list.append(item);
+        }
+        group.append(list);
+        card.append(group);
     }
 
     card.append(actions(
